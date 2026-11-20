@@ -128,3 +128,25 @@ perform `pivot_root`, add writable guest mounts, or launch a process. It must
 not be called from the host's ordinary mount namespace; the caller must first
 complete namespace mapping and private-mount setup. Rootfs mounting can still
 be denied by kernel, container, seccomp, or LSM policy.
+
+
+## Rootfs entry with pivot_root
+
+The Linux runtime exposes enter_rootfs_with_pivot(rootfs_mount_target) as a
+child-only root transition. It requires the caller to have completed UID/GID
+mapping, entered a private mount namespace, and mounted the validated rootfs
+read-only. The rootfs must contain a real /tmp directory; symlinks and
+missing directories are rejected.
+
+To avoid modifying the imported image, NELRoot mounts a small nosuid,nodev
+tmpfs over guest /tmp, creates a temporary .nelroot-oldroot directory
+there, changes into the new root, calls pivot_root, changes directory to /,
+and lazily detaches the old root. The tmpfs remains as the guest's writable
+/tmp; the imported rootfs remains read-only.
+
+This function does not create namespaces, perform UID/GID mapping, mount the
+rootfs, create /proc or /dev, launch a command, or supervise PID 1. It
+must only run in the isolated child. If an error occurs after pivot_root
+succeeds, the child must be terminated; it must not continue as though setup
+were complete. Kernel or container policy may deny tmpfs mounting or
+pivot_root, and NELRoot returns those errors without falling back to chroot.
