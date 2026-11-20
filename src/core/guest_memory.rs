@@ -168,6 +168,29 @@ impl GuestMemory {
         Ok(())
     }
 
+    /// Fetch instruction bytes only from a region marked executable.
+    /// Execute-only mappings can be fetched without granting guest read access.
+    pub fn fetch_execute(&self, address: u64, max_length: usize) -> Result<Vec<u8>, &'static str> {
+        if max_length == 0 { return Err("instruction fetch must not be empty"); }
+        let region = self.regions.iter().find(|region| {
+            address >= region.metadata.start
+                && address < region.metadata.end
+                && region.metadata.permissions.execute
+        }).ok_or("instruction address is not executable")?;
+        let offset = usize::try_from(address - region.metadata.start)
+            .map_err(|_| "instruction offset does not fit host address space")?;
+        let available = region.bytes.len().saturating_sub(offset);
+        let length = available.min(max_length);
+        if length == 0 { return Err("instruction fetch is outside backed bytes"); }
+        Ok(region.bytes[offset..offset + length].to_vec())
+    }
+
+    /// Populate bytes in an executable region for deterministic interpreter tests.
+    #[cfg(test)]
+    pub(crate) fn initialize_for_test(&mut self, address: u64, bytes: &[u8]) -> Result<(), &'static str> {
+        self.initialize(address, bytes)
+    }
+
     /// Check whether a guest range is marked executable.
     ///
     /// This only validates metadata; it does not fetch or execute instructions.
