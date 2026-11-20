@@ -29,7 +29,7 @@ Each image entry must contain:
 - `url`: HTTPS URL to a gzip-compressed tar rootfs archive.
 - `sha256`: exactly 64 hexadecimal characters.
 
-The index must be no larger than 4 MiB. Duplicate `name` + `architecture` pairs are rejected. Unsupported schema versions, insecure URLs and malformed entries are rejected.
+The index must be no larger than 4 MiB. Duplicate `name` + `architecture` pairs are rejected. Unsupported schema versions, insecure URLs and malformed entries are rejected. Registry and archive requests also reject redirects that downgrade from HTTPS to HTTP and stop redirect chains after ten hops.
 
 ## Client commands
 
