@@ -543,7 +543,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 "The native chroot backend requires a Linux host."
                             } else if !runtime::has_required_privileges() {
                                 concat!(
-                                    "Effective UID 0 and CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID are required; ",
+                                    "Effective UID 0 plus effective CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID are required; ",
                                     "ordinary unprivileged PRoot sessions cannot start it."
                                 )
                             } else {
@@ -576,7 +576,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
                     } else {
-                        ui::warn("Native chroot execution needs a Linux host and effective root.");
+                        ui::warn("Native chroot needs Linux plus effective root/chroot/setuid/setgid capabilities.");
                     }
                     ui::warn(
                 "This backend is not a security sandbox or an independent syscall emulator.",
@@ -591,7 +591,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             keep_root,
             command,
         } => {
-            let program = &command[0];
+            let program = command.first().ok_or("missing guest executable")?;
             let arguments = &command[1..];
             ui::banner("Native Linux runtime");
             ui::key("Image", &image);
