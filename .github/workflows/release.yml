@@ -107,6 +107,27 @@ jobs:
             VERSION="${VERSION#v}"
           fi
           bash packaging/build-deb.sh "$VERSION" "${{ matrix.target }}" "target/${{ matrix.target }}/release/nelroot" dist
+          DEB_FILE="$(find dist -maxdepth 1 -name "nelroot_${VERSION}_*.deb" -print -quit)"
+          test -n "$DEB_FILE"
+          mv "$DEB_FILE" "dist/nelroot-${{ matrix.name }}.deb"
+      - name: Install RPM build tools
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+      - name: Build RPM package
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then
+            VERSION="${{ inputs.release_tag }}"
+            VERSION="${VERSION#v}"
+          fi
+          bash packaging/build-rpm.sh "$VERSION" "${{ matrix.target }}" "target/${{ matrix.target }}/release/nelroot" dist
+          RPM_FILE="$(find dist -maxdepth 1 -name "nelroot-${VERSION}-*.rpm" -print -quit)"
+          test -n "$RPM_FILE"
+          mv "$RPM_FILE" "dist/nelroot-${{ matrix.name }}.rpm"
       - name: Package Windows archive
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -133,7 +154,7 @@ jobs:
               digest = hashlib.sha256(archive.read_bytes()).hexdigest()
               checksum_name = (
                   f"nelroot-${{ matrix.name }}.sha256"
-                  if archive.name.endswith(".tar.gz") or archive.suffix == ".zip"
+                  if archive.name == "nelroot-${{ matrix.name }}.tar.gz" or archive.suffix == ".zip"
                   else f"{archive.name}.sha256"
               )
               (dist / checksum_name).write_text(f"{digest}  {archive.name}\n")
