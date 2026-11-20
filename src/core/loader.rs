@@ -38,7 +38,7 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
     if info.file_type == ET_EXEC && load_bias != 0 {
         return Err("ET_EXEC images require a zero load bias".into());
     }
-    if !load_bias.is_multiple_of(PAGE_SIZE) {
+    if load_bias % PAGE_SIZE != 0 {
         return Err("load bias must be aligned to 4096 bytes".into());
     }
 
