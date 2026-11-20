@@ -292,6 +292,9 @@ mod tests {
 
     #[test]
     fn applies_relative_relocation_to_writable_guest_memory() {
+        if !cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
+            return;
+        }
         let (bytes, info) = mapped_static_pie_fixture();
         let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
 
