@@ -93,7 +93,7 @@ impl X86_64Interpreter {
             .map_err(|_| CpuError::FetchFault)?;
         let first = *bytes.first().ok_or(CpuError::TruncatedInstruction)?;
 
-        let mut next_rip = self.registers.rip;
+        let mut next_rip = None;
         let mut outcome = StepOutcome::Continued;
         let length = match first {
             0x90 => 1, // NOP
@@ -138,13 +138,13 @@ impl X86_64Interpreter {
             0xeb => {
                 if bytes.len() < 2 { return Err(CpuError::TruncatedInstruction); }
                 let displacement = bytes[1] as i8 as i64;
-                next_rip = self.relative_target(self.registers.rip, 2, displacement)?;
+                next_rip = Some(self.relative_target(self.registers.rip, 2, displacement)?);
                 2
             }
             0xe9 => {
                 if bytes.len() < 5 { return Err(CpuError::TruncatedInstruction); }
                 let displacement = i32::from_le_bytes(bytes[1..5].try_into().unwrap()) as i64;
-                next_rip = self.relative_target(self.registers.rip, 5, displacement)?;
+                next_rip = Some(self.relative_target(self.registers.rip, 5, displacement)?);
                 5
             }
             0x74 | 0x75 => {
@@ -152,11 +152,11 @@ impl X86_64Interpreter {
                 let zero = self.registers.rflags & (1 << 6) != 0;
                 let take = if first == 0x74 { zero } else { !zero };
                 if take {
-                    next_rip = self.relative_target(
+                    next_rip = Some(self.relative_target(
                         self.registers.rip, 2, bytes[1] as i8 as i64
-                    )?;
+                    )?);
                 } else {
-                    next_rip = self.registers.rip.checked_add(2).ok_or(CpuError::FetchFault)?;
+                    next_rip = Some(self.registers.rip.checked_add(2).ok_or(CpuError::FetchFault)?);
                 }
                 2
             }
@@ -179,11 +179,9 @@ impl X86_64Interpreter {
             opcode => return Err(CpuError::UnsupportedInstruction { opcode }),
         };
 
-        self.registers.rip = if next_rip != self.registers.rip {
-            next_rip
-        } else {
+        self.registers.rip = next_rip.unwrap_or(
             self.registers.rip.checked_add(length as u64).ok_or(CpuError::FetchFault)?
-        };
+        );
         self.instructions_executed = self.instructions_executed.saturating_add(1);
 
         if let GuestProcessState::Exited { code } = context.process {
@@ -361,7 +359,7 @@ mod tests {
         let code = [0x48,0xb8,1,0,0,0,0,0,0,0, 0x48,0x83,0xc0,0xff, 0x74,0x01, 0x90, 0x90];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
-        assert_eq!(cpu.run(&mut context, &SyscallDispatcher, 8).unwrap(),
+        assert_eq!(cpu.run(&mut context, &SyscallDispatcher, 4).unwrap(),
             CpuStopReason::StepLimitReached);
         assert_eq!(cpu.registers.rax, 0);
         assert_eq!(cpu.registers.rip, 0x1012);
