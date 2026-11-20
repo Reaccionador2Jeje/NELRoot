@@ -54,21 +54,32 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
             return Err("PT_LOAD offset and virtual address are incongruent".into());
         }
 
-        let start = header.virtual_address.checked_add(load_bias)
+        let start = header
+            .virtual_address
+            .checked_add(load_bias)
             .ok_or("PT_LOAD address plus load bias overflows")?;
-        let end_unaligned = start.checked_add(header.memory_size)
+        let end_unaligned = start
+            .checked_add(header.memory_size)
             .ok_or("PT_LOAD memory range overflows")?;
         let virtual_start = start / PAGE_SIZE * PAGE_SIZE;
-        let virtual_end = end_unaligned.checked_add(PAGE_SIZE - 1)
-            .ok_or("PT_LOAD page range overflows")? / PAGE_SIZE * PAGE_SIZE;
+        let virtual_end = end_unaligned
+            .checked_add(PAGE_SIZE - 1)
+            .ok_or("PT_LOAD page range overflows")?
+            / PAGE_SIZE
+            * PAGE_SIZE;
 
         let readable = header.flags & 4 != 0;
         let writable = header.flags & 2 != 0;
         let executable = header.flags & 1 != 0;
         if writable && executable {
-            return Err("writable and executable PT_LOAD segments are rejected by the default W^X policy".into());
+            return Err(
+                "writable and executable PT_LOAD segments are rejected by the default W^X policy"
+                    .into(),
+            );
         }
-        let segment_end = header.virtual_address.checked_add(header.memory_size)
+        let segment_end = header
+            .virtual_address
+            .checked_add(header.memory_size)
             .ok_or("PT_LOAD virtual address range overflows")?;
         if executable && info.entry_point >= header.virtual_address
             && info.entry_point < segment_end
@@ -94,7 +105,9 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
         return Err("ELF entry point is not inside an executable PT_LOAD segment".into());
     }
 
-    let entry_point = info.entry_point.checked_add(load_bias)
+    let entry_point = info
+        .entry_point
+        .checked_add(load_bias)
         .ok_or("ELF entry point plus load bias overflows")?;
     Ok(LoadPlan {
         architecture: info.architecture,
