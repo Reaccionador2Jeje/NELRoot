@@ -340,16 +340,64 @@ impl MappedElf {
         self.base_address() + self.entry_offset
     }
 
+    /// Read a byte range only when every covered page has PF_R permission.
+    pub fn read_bytes(&self, offset: usize, length: usize) -> Result<Vec<u8>, &'static str> {
+        let end = offset
+            .checked_add(length)
+            .ok_or("mapped ELF read range overflows")?;
+        if end > self.length {
+            return Err("mapped ELF read range is outside the reservation");
+        }
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+        let first_page = offset / self.page_size;
+        let last_page = (end - 1) / self.page_size;
+        if self.page_permissions[first_page..=last_page]
+            .iter()
+            .any(|permissions| permissions.0 & 1 == 0)
+        {
+            return Err("mapped ELF read range includes a non-readable page");
+        }
+        // SAFETY: the checked range is inside the owned mapping and all pages
+        // covering it have PF_R permissions.
+        let source = unsafe { std::slice::from_raw_parts(self.base.as_ptr().add(offset), length) };
+        Ok(source.to_vec())
+    }
+
+    /// Write a byte range only when every covered page has PF_W permission.
+    pub fn write_bytes(&mut self, offset: usize, bytes: &[u8]) -> Result<(), &'static str> {
+        let end = offset
+            .checked_add(bytes.len())
+            .ok_or("mapped ELF write range overflows")?;
+        if end > self.length {
+            return Err("mapped ELF write range is outside the reservation");
+        }
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let first_page = offset / self.page_size;
+        let last_page = (end - 1) / self.page_size;
+        if self.page_permissions[first_page..=last_page]
+            .iter()
+            .any(|permissions| permissions.0 & 2 == 0)
+        {
+            return Err("mapped ELF write range includes a non-writable page");
+        }
+        // SAFETY: the checked destination range is inside the owned mapping,
+        // every covered page has PF_W, and the input cannot alias this mapping.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                self.base.as_ptr().add(offset),
+                bytes.len(),
+            );
+        }
+        Ok(())
+    }
+
     pub fn read_byte(&self, offset: usize) -> Result<u8, &'static str> {
-        if offset >= self.length {
-            return Err("mapped ELF offset is outside the reservation");
-        }
-        let page = offset / self.page_size;
-        if self.page_permissions[page].0 & 1 == 0 {
-            return Err("mapped ELF page is not readable");
-        }
-        // SAFETY: offset is in bounds and its page has PF_R permission.
-        Ok(unsafe { self.base.as_ptr().add(offset).read() })
+        self.read_bytes(offset, 1).map(|bytes| bytes[0])
     }
 
     pub fn min_virtual_address(&self) -> u64 {
@@ -446,6 +494,29 @@ mod tests {
         info.program_headers[0].alignment = 4096;
         info.program_headers[0].offset = 1;
         assert!(MappedElf::map_bytes(&bytes, &info).is_err());
+    }
+
+    #[test]
+    fn reads_checked_byte_ranges() {
+        let (bytes, info) = static_pie();
+        let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+        assert_eq!(mapped.read_bytes(0, 4).unwrap(), b"\\x7fELF");
+        assert!(mapped.read_bytes(mapped.length(), 1).is_err());
+        assert!(mapped.read_bytes(usize::MAX, 2).is_err());
+        assert!(mapped.read_bytes(0, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn writes_only_to_writable_guest_pages() {
+        let (bytes, mut info) = static_pie();
+        info.program_headers[0].flags = PF_R | PF_W;
+        let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+        mapped.write_bytes(0, b"DATA").unwrap();
+        assert_eq!(mapped.read_bytes(0, 4).unwrap(), b"DATA");
+
+        let (bytes, info) = static_pie();
+        let mut read_only = MappedElf::map_bytes(&bytes, &info).unwrap();
+        assert!(read_only.write_bytes(0, b"NOPE").is_err());
     }
 
     #[test]
