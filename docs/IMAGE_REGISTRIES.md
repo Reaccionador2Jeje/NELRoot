@@ -79,8 +79,21 @@ SHA-256, checks that manifest metadata agrees with the catalog, then downloads
 the rootfs over HTTPS. The archive is limited to 512 MiB and must match both
 the manifest's exact byte size and SHA-256 before safe tar extraction and local
 registration. Update is restricted to NELRoot-managed images; externally
-registered directories are not replaced. The CLI does not yet publish images
-or manage Hub credentials.
+registered directories are not replaced. Publish an image using a schema-v1 manifest and its matching local archive.
+The publishing token is read from the environment and is never accepted as a
+command-line argument:
+
+    export NELROOT_HUB_PUBLISH_TOKEN='your-long-publishing-token'
+    nelroot image hub-publish ./alpine-manifest.json ./alpine-rootfs.tar.gz --hub https://hub.example.org
+    unset NELROOT_HUB_PUBLISH_TOKEN
+
+Before uploading, the client validates the manifest, verifies the archive's
+exact size and SHA-256, and enforces the 512 MiB artifact limit. The server
+stores the archive by digest and publishes an immutable manifest/catalog entry.
+A published image ID cannot be reused.
+
+The CLI does not yet provide account management, scoped credentials or
+credential rotation.
 
 ## Existing archive-index registry
 
