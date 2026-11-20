@@ -302,6 +302,133 @@ pub fn import_archive(
     result
 }
 
+/// Replace a NELRoot-managed image with a newly verified rootfs archive.
+///
+/// Externally registered directories are deliberately not replaceable: NELRoot
+/// must never move or delete a user's directory during an image update.
+pub fn update_image_from_archive(
+    name: &str,
+    archive_path: &Path,
+    architecture: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if !valid_name(name) {
+        return Err("image name must contain 1-64 ASCII letters, numbers, '-' or '_'".into());
+    }
+    if !valid_architecture(architecture) {
+        return Err("architecture must be a non-empty identifier such as aarch64 or x86_64".into());
+    }
+
+    let mut catalog = load_catalog()?;
+    let existing = catalog
+        .images
+        .iter()
+        .find(|image| image.name == name)
+        .ok_or_else(|| format!("image '{name}' is not registered"))?;
+    let destination = image_store_dir().join(name);
+    let metadata = fs::symlink_metadata(&destination)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("only real NELRoot-managed image directories can be updated".into());
+    }
+    let existing_source = existing
+        .source
+        .as_deref()
+        .ok_or("registered image has no root filesystem path")?
+        .to_owned();
+    if Path::new(&existing_source).canonicalize()? != destination.canonicalize()? {
+        return Err(
+            "this image points to an external directory; unregister it manually before replacing it"
+                .into(),
+        );
+    }
+
+    let store = image_store_dir();
+    fs::create_dir_all(&store)?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let staging = store.join(format!(".{name}.update-staging-{}-{nonce}", std::process::id()));
+    let new_rootfs = store.join(format!(".{name}.update-rootfs-{}-{nonce}", std::process::id()));
+    let backup = store.join(format!(".{name}.backup-{}-{nonce}", std::process::id()));
+    fs::create_dir(&staging)?;
+
+    let mut backup_created = false;
+    let result = (|| -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let input = File::open(archive_path)?;
+        let decoder = flate2::read::GzDecoder::new(input);
+        let mut archive = tar::Archive::new(decoder);
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            if !entry.unpack_in(&staging)? {
+                return Err("archive contains unsafe paths; extraction was refused".into());
+            }
+        }
+
+        let root = if looks_like_rootfs(&staging) {
+            staging.clone()
+        } else {
+            let mut candidates = fs::read_dir(&staging)?
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| looks_like_rootfs(path));
+            let candidate = candidates
+                .next()
+                .ok_or("archive does not contain a recognizable Linux root filesystem")?;
+            if candidates.next().is_some() {
+                return Err("archive contains multiple possible root filesystems".into());
+            }
+            candidate
+        };
+
+        fs::rename(&root, &new_rootfs)?;
+        if staging.exists() {
+            fs::remove_dir_all(&staging)?;
+        }
+        validate_rootfs(&new_rootfs)?;
+
+        fs::rename(&destination, &backup)?;
+        backup_created = true;
+        if let Err(error) = fs::rename(&new_rootfs, &destination) {
+            let _ = fs::rename(&backup, &destination);
+            backup_created = false;
+            return Err(error.into());
+        }
+
+        let canonical = validate_rootfs(&destination)?;
+        let updated = catalog
+            .images
+            .iter_mut()
+            .find(|image| image.name == name)
+            .ok_or("image catalog changed during update")?;
+        updated.architecture = architecture.to_owned();
+        updated.format = "directory".to_owned();
+        updated.source = Some(canonical.to_string_lossy().into_owned());
+
+        if let Err(error) = save_catalog(&catalog) {
+            let _ = fs::remove_dir_all(&destination);
+            let _ = fs::rename(&backup, &destination);
+            backup_created = false;
+            return Err(error);
+        }
+
+        let _ = fs::remove_dir_all(&backup);
+        backup_created = false;
+        Ok(canonical)
+    })();
+
+    if result.is_err() {
+        if staging.exists() {
+            let _ = fs::remove_dir_all(&staging);
+        }
+        if new_rootfs.exists() {
+            let _ = fs::remove_dir_all(&new_rootfs);
+        }
+        if backup_created && backup.exists() && !destination.exists() {
+            let _ = fs::rename(&backup, &destination);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
