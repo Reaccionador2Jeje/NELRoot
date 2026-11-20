@@ -400,8 +400,9 @@ mod tests {
 
     #[test]
     fn call_and_ret_use_guest_stack() {
-        // call +2; nop; ret
-        let code = [0xe8,0x02,0,0,0, 0x90, 0xc3];
+        // call +1; nop; ret
+        // CALL displacement is relative to the next instruction, so +1 targets RET at 0x1006.
+        let code = [0xe8,0x01,0,0,0, 0x90, 0xc3];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         cpu.step(&mut context, &SyscallDispatcher).unwrap();
