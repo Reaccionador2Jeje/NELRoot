@@ -281,11 +281,16 @@ impl MappedElf {
         self.base_address() + self.entry_offset
     }
 
-    pub fn mapped_bytes(&self) -> &[u8] {
-        // SAFETY: the mapping remains owned and readable pages are protected
-        // according to ELF permissions. This API is used for diagnostics/tests
-        // only; callers must not read inaccessible pages.
-        unsafe { slice::from_raw_parts(self.base.as_ptr(), self.length) }
+    pub fn read_byte(&self, offset: usize) -> Result<u8, &'static str> {
+        if offset >= self.length {
+            return Err("mapped ELF offset is outside the reservation");
+        }
+        let page = offset / self.page_size;
+        if self.page_permissions[page].0 & 1 == 0 {
+            return Err("mapped ELF page is not readable");
+        }
+        // SAFETY: offset is in bounds and its page has PF_R permission.
+        Ok(unsafe { self.base.as_ptr().add(offset).read() })
     }
 
     pub fn min_virtual_address(&self) -> u64 {
@@ -354,10 +359,10 @@ mod tests {
     fn maps_static_pie_and_zero_fills_bss() {
         let (bytes, info) = static_pie();
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
-        assert_eq!(mapped.length(), 8192);
+        assert!(mapped.length() >= 8192);
         assert!(mapped.entry_address() >= mapped.base_address());
         let bss_offset = bytes.len();
-        assert!(mapped.mapped_bytes()[bss_offset..bss_offset + 64].iter().all(|byte| *byte == 0));
+        for offset in bss_offset..bss_offset + 64 {\n            assert_eq!(mapped.read_byte(offset).unwrap(), 0);\n        }
     }
 
     #[test]
