@@ -307,6 +307,31 @@ mod tests {
     }
 
     #[test]
+    fn rejects_entire_table_before_any_write_when_later_relocation_is_invalid() {
+        if !cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
+            return;
+        }
+        let (mut bytes, info) = mapped_static_pie_fixture();
+        bytes[0x118..0x120].copy_from_slice(&48_u64.to_le_bytes());
+
+        let second_entry = 0x218;
+        bytes[second_entry..second_entry + 8].copy_from_slice(&0x2008_u64.to_le_bytes());
+        bytes[second_entry + 8..second_entry + 16]
+            .copy_from_slice(&0_u64.to_le_bytes());
+        bytes[second_entry + 16..second_entry + 24]
+            .copy_from_slice(&0x5678_i64.to_le_bytes());
+
+        let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+        assert!(apply_relative_relocations(&mut mapped, &info).is_err());
+
+        let target_offset = mapped.virtual_address_offset(0x2000, 8).unwrap();
+        let original = u64::from_le_bytes(
+            mapped.read_bytes(target_offset, 8).unwrap().try_into().unwrap(),
+        );
+        assert_eq!(original, 0);
+    }
+
+    #[test]
     fn parses_complete_rela_dynamic_table() {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&dynamic_entry(DT_RELA, 0x3000));
