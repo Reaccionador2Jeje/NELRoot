@@ -566,7 +566,7 @@ mod tests {
         info.program_headers[0].flags = PF_X;
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
         let copied = mapped.copy_virtual_bytes(0, 4).unwrap();
-        assert_eq!(copied, b"\\x7fELF");
+        assert_eq!(copied, b"\x7fELF");
         assert!(mapped.read_bytes(0, 4).is_err());
     }
 
