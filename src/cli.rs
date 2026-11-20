@@ -287,7 +287,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::state("Independent ELF executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
-            ui::state("Syscall layer", false, "not implemented");
+                    ui::state("CPU execution loop", false, "not implemented");
             ui::state("CPU emulator", false, "not implemented");
             ui::warn("Host interfaces do not imply guest Linux compatibility.");
         }
@@ -593,6 +593,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             },
                             {
+                            {"name": "guest_memory_backing", "status": "model_available_not_execution"},
+                            {"name": "guest_syscall_abi", "status": "model_available_not_connected"},
                                 "name": "elf_relative_relocator",
                                 "status": if cfg!(all(
                                     target_os = "linux",
@@ -613,7 +615,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             },
                             {"name": "native_executor", "status": "not_implemented"},
                             {"name": "elf_loader", "status": "not_implemented"},
-                            {"name": "syscall_layer", "status": "not_implemented"},
+                            {"name": "syscall_layer", "status": "model_available_not_connected"},
                             {"name": "cpu_emulator", "status": "not_implemented"}
                         ],
                         "guest_execution": {
@@ -646,6 +648,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Image catalog", true, "local metadata");
                     ui::state("Registry client", true, "HTTPS + SHA-256");
                     ui::state("Event logging", true, "local event log");
+                    ui::state("Guest memory", true, "bounded byte-backed model");
+                    ui::state("Guest syscall ABI", true, "x86_64 write/exit model; not connected to execution");
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
                     ui::state(
@@ -661,7 +665,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::heading("Under development");
                     ui::state("Independent ELF executor", false, "not implemented");
                     ui::state("ELF memory loader", false, "not implemented");
-                    ui::state("Syscall layer", false, "not implemented");
+                    ui::state("CPU execution loop", false, "not implemented");
                     ui::state("CPU emulator", false, "not implemented");
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
