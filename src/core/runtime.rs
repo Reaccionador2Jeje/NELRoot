@@ -166,7 +166,7 @@ pub struct UserNamespaceMapping {
 
 #[cfg(target_os = "linux")]
 fn format_id_map(host_id: u32) -> String {
-    format!("0 {host_id} 1\\n")
+    format!("0 {host_id} 1\n")
 }
 
 /// Configure a paused child that has already entered a new user namespace.
@@ -194,7 +194,7 @@ pub fn configure_user_namespace_mappings(
 
     // The kernel requires setgroups to be disabled before an unprivileged
     // process writes gid_map. Fail closed if this operation is unavailable.
-    std::fs::write(proc_child.join("setgroups"), "deny\\n")?;
+    std::fs::write(proc_child.join("setgroups"), "deny\n")?;
     std::fs::write(proc_child.join("uid_map"), format_id_map(mapping.host_uid))?;
     std::fs::write(proc_child.join("gid_map"), format_id_map(mapping.host_gid))?;
 
@@ -203,7 +203,7 @@ pub fn configure_user_namespace_mappings(
 
 #[cfg(test)]
 fn format_id_map_for_test(host_id: u32) -> String {
-    format!("0 {host_id} 1\\n")
+    format!("0 {host_id} 1\n")
 }
 
 /// Whether this build contains the native Linux chroot process backend.
@@ -434,8 +434,8 @@ mod tests {
 
     #[test]
     fn user_namespace_id_map_format_is_single_id_and_newline_terminated() {
-        assert_eq!(format_id_map_for_test(1000), "0 1000 1\\n");
-        assert_eq!(format_id_map_for_test(0), "0 0 1\\n");
+        assert_eq!(format_id_map_for_test(1000), "0 1000 1\n");
+        assert_eq!(format_id_map_for_test(0), "0 0 1\n");
     }
 
     #[test]
