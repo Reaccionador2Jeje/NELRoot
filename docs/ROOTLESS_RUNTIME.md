@@ -26,7 +26,6 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 - [ ] Create and configure user namespace mappings with strict parent/child synchronization.
 - [ ] Create private mount namespace and make propagation private.
 - [x] Add an owned child-process supervisor with polling, wait, exit-status propagation and best-effort cleanup (process primitive only; no namespaces or guest root setup).
-- [ ] Create and configure user namespace mappings with strict parent/child synchronization.
 - [ ] Enter the validated rootfs and start a supervised child process.
 - [ ] Add PID namespace supervision and signal/exit propagation.
 - [ ] Add optional read-only `/proc`, minimal `/dev`, and other guest mounts only after mount isolation is proven.
