@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use nelroot::core::{config, elf, host, images, logging, registry, runtime};
+use nelroot::core::{config, elf, host, hub, images, logging, registry, runtime};
 #[cfg(target_os = "linux")]
 use nelroot::core::{memory, relocation};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -110,6 +110,26 @@ enum ConfigCommands {
 
 #[derive(Debug, Subcommand)]
 enum ImageCommands {
+    /// Validate a first-party NELRoot Hub image manifest JSON file.
+    HubManifestValidate {
+        /// Path to the manifest JSON file.
+        path: std::path::PathBuf,
+    },
+    /// Validate a first-party NELRoot Hub catalog JSON file.
+    HubCatalogValidate {
+        /// Path to the catalog JSON file.
+        path: std::path::PathBuf,
+    },
+    /// Search a local copy of the first-party NELRoot Hub catalog.
+    HubCatalogSearch {
+        /// Path to the catalog JSON file.
+        path: std::path::PathBuf,
+        /// Search term matched against image metadata and tags.
+        query: String,
+        /// Optional guest architecture filter.
+        #[arg(long)]
+        architecture: Option<String>,
+    },
     /// Search public Docker Hub repositories.
     HubSearch {
         /// Search text.
@@ -427,6 +447,43 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
+            ImageCommands::HubManifestValidate { path } => {
+                let manifest = hub::load_manifest(&path)?;
+                ui::banner("NELRoot Hub manifest");
+                ui::good("Manifest schema and metadata are valid.");
+                ui::key("Image ID", &manifest.image.id);
+                ui::key("Name", &manifest.image.name);
+                ui::key("Version", &manifest.image.version);
+                ui::key("Distribution", format!("{} {}", manifest.image.distribution, manifest.image.release));
+                ui::key("Architecture", &manifest.image.architecture);
+                ui::key("Rootfs format", &manifest.image.rootfs.format);
+                ui::key("Rootfs size", manifest.image.rootfs.size_bytes);
+                ui::key("SHA-256", &manifest.image.rootfs.sha256);
+                ui::key("Download URL", &manifest.image.rootfs.download_url);
+            }
+            ImageCommands::HubCatalogValidate { path } => {
+                let catalog = hub::load_catalog(&path)?;
+                ui::banner("NELRoot Hub catalog");
+                ui::good(&format!("Catalog is valid: {} image entries.", catalog.images.len()));
+                ui::key("Schema version", catalog.schema_version);
+                ui::key("Generated at", &catalog.generated_at);
+            }
+            ImageCommands::HubCatalogSearch { path, query, architecture } => {
+                let catalog = hub::load_catalog(&path)?;
+                let matches = hub::search_catalog(&catalog, &query, architecture.as_deref())?;
+                ui::banner(&format!("NELRoot Hub catalog: {query}"));
+                if matches.is_empty() {
+                    ui::warn("No first-party Hub images matched the query.");
+                } else {
+                    for image in matches {
+                        ui::key(
+                            &image.id,
+                            format!("{} {} · {} · {} · {}", image.name, image.version, image.distribution, image.architecture, image.description),
+                        );
+                    }
+                }
+                ui::muted("Local catalog search only; remote Hub transport is a later milestone.");
+            }
             ImageCommands::HubSearch { query, limit } => {
                 let matches = registry::docker_hub_search(&query, limit)?;
                 ui::banner(&format!("Docker Hub repositories: {query}"));
