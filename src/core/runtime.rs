@@ -562,7 +562,7 @@ pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
     if unsafe {
         libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
             (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-            c"mode=1777,size=16m".as_ptr())
+            c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>())
     } != 0 {
         return Err(io::Error::last_os_error());
     }
@@ -807,7 +807,7 @@ pub fn run_rootless_image(
             }
             if libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
                 (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr()) != 0 {
+                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>()) != 0 {
                 rootless_child_fail(error_pipe[1], 9);
             }
             if libc::chdir(cwd_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 10); }
