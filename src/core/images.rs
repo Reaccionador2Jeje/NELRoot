@@ -175,6 +175,9 @@ pub fn download_archive(
         }))
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("image download redirected to a non-HTTPS URL".into());
+    }
     let mut output = File::create(destination)?;
     if let Err(error) = std::io::copy(&mut response, &mut output) {
         let _ = fs::remove_file(destination);
