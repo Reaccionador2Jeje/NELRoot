@@ -228,3 +228,33 @@ mod tests {
         assert!(!valid_image(&invalid));
     }
 }
+
+/// Download and verify the latest registry entry, then transactionally update a managed image.
+pub fn update(
+    registry_url: &str,
+    name: &str,
+    architecture: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let index = fetch_index(registry_url)?;
+    let image = index
+        .images
+        .into_iter()
+        .find(|image| image.name == name && image.architecture == architecture)
+        .ok_or_else(|| format!("image '{name}' for architecture '{architecture}' was not found"))?;
+
+    let downloads = config::cache_dir().join("downloads");
+    fs::create_dir_all(&downloads)?;
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let archive = downloads.join(format!(
+        "{}-update-{}-{nonce}.tar.gz",
+        image.name,
+        std::process::id()
+    ));
+
+    let result: Result<PathBuf, Box<dyn std::error::Error>> = (|| {
+        images::download_archive(&image.url, &archive, &image.sha256)?;
+        images::update_image_from_archive(&image.name, &archive, &image.architecture)
+    })();
+    let _ = fs::remove_file(&archive);
+    result
+}
