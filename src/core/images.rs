@@ -150,9 +150,7 @@ pub fn download_archive(
     if !url.starts_with("https://") {
         return Err("image downloads require an HTTPS URL".into());
     }
-    if expected_sha256.len() != 64
-        || !expected_sha256.chars().all(|c| c.is_ascii_hexdigit())
-    {
+    if expected_sha256.len() != 64 || !expected_sha256.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("SHA-256 must contain exactly 64 hexadecimal characters".into());
     }
     if destination.exists() {
@@ -234,9 +232,9 @@ pub fn import_archive(
                 .filter_map(Result::ok)
                 .map(|entry| entry.path())
                 .filter(|path| looks_like_rootfs(path));
-            let candidate = candidates.next().ok_or(
-                "archive does not contain a recognizable Linux root filesystem",
-            )?;
+            let candidate = candidates
+                .next()
+                .ok_or("archive does not contain a recognizable Linux root filesystem")?;
             if candidates.next().is_some() {
                 return Err("archive contains multiple possible root filesystems".into());
             }
