@@ -577,7 +577,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             #[cfg(target_os = "linux")]
             ElfCommands::Emulate { path, max_steps, arguments } => {
-                use std::io::Read;
+                use std::io::{Read, Write};
                 let executable = path.to_string_lossy().into_owned();
                 let mut random = [0_u8; 16];
                 std::fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
