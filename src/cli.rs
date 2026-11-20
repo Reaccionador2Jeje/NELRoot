@@ -290,7 +290,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ImageCommands::Clean => {
                 let removed = registry::clean_staging()?;
                 let _ = logging::record("info", &format!("image cleanup removed {removed} staging directories"));
-                println!("Removed {removed} abandoned staging directories.");
+                println!("Removed {removed} stale temporary entries (staging directories and cached downloads).");
                 println!("Registered images and root filesystems were not modified.");
             }
         },
