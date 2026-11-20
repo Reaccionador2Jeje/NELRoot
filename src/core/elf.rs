@@ -21,6 +21,7 @@ pub struct ElfInfo {
     pub machine: u16,
     pub architecture: &'static str,
     pub entry_point: u64,
+    pub interpreter: Option<String>,
     pub program_headers: Vec<ProgramHeader>,
 }
 
@@ -108,6 +109,7 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
     }
 
     let mut program_headers = Vec::with_capacity(program_header_count);
+    let mut interpreter = None;
     for index in 0..program_header_count {
         let offset = table_start + index * program_header_entry_size;
         let header = ProgramHeader {
@@ -138,6 +140,29 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
             if header.alignment > 1 && !header.alignment.is_power_of_two() {
                 return Err("ELF load segment alignment is not a power of two".into());
             }
+        } else if header.kind == 3 {
+            if interpreter.is_some() {
+                return Err("ELF file contains multiple PT_INTERP segments".into());
+            }
+            if header.file_size == 0 || header.file_size > 4096 {
+                return Err("ELF interpreter path has an invalid size".into());
+            }
+            let start = usize::try_from(header.offset)?;
+            let end = usize::try_from(
+                header.offset.checked_add(header.file_size)
+                    .ok_or("ELF interpreter range overflow")?
+            )?;
+            let raw = bytes.get(start..end).ok_or("ELF interpreter extends beyond the file")?;
+            let nul = raw.iter().position(|byte| *byte == 0)
+                .ok_or("ELF interpreter path is not NUL-terminated")?;
+            if nul == 0 || raw[nul + 1..].iter().any(|byte| *byte != 0) {
+                return Err("ELF interpreter path has invalid trailing data".into());
+            }
+            let path = std::str::from_utf8(&raw[..nul])?;
+            if !path.starts_with('/') {
+                return Err("ELF interpreter path must be absolute".into());
+            }
+            interpreter = Some(path.to_owned());
         }
         program_headers.push(header);
     }
@@ -147,6 +172,7 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
         machine,
         architecture: architecture_name(machine),
         entry_point,
+        interpreter,
         program_headers,
     })
 }
