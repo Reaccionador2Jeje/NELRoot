@@ -174,7 +174,6 @@ mod tests {
     use super::*;
     use crate::core::address_space::{GuestAddressSpace, GuestPermissions, GuestRegionKind};
     use crate::core::guest_memory::GuestMemory;
-    use crate::core::abi::x86_64;
 
     fn context_with_code(code: &[u8]) -> SyscallContext {
         let mut layout = GuestAddressSpace::new();
