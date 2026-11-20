@@ -84,7 +84,9 @@ Start with a deliberately small, testable set: process exit, read/write, close, 
 
 ### 5. Process, signals and memory
 
-A guest process model owns registers, address space, descriptors, cwd, credentials and signal state. Thread creation, fork/clone semantics, wait, signal delivery and robust memory isolation are separate milestones. Do not claim multi-process Linux compatibility until lifecycle and signal tests pass.
+The initial `src/core/process.rs` supervisor owns one host child process and provides non-blocking polling, blocking wait, exit-status propagation, immediate termination, and best-effort kill/reap when its owner is dropped. It is a lifecycle primitive only: it does not create namespaces, establish a guest root, forward signals, manage descendants, or provide process isolation.
+
+A future guest process model owns registers, address space, descriptors, cwd, credentials and signal state. Thread creation, fork/clone semantics, wait, signal delivery and robust memory isolation are separate milestones. Do not claim multi-process Linux compatibility until lifecycle and signal tests pass.
 
 ### 6. Architecture execution
 
