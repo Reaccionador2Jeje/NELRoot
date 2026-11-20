@@ -32,6 +32,8 @@ const ELF64_RELA_ENTRY_SIZE: usize = 24;
 const MAX_RELOCATIONS: usize = 1_000_000;
 const MAX_DYNAMIC_TABLE_SIZE: usize = 16 * 1024 * 1024;
 
+type DynamicRelaInfo = (u64, u64, u64);
+
 /// Apply supported relative relocations to an already mapped static PIE.
 ///
 /// The function validates the complete relocation table and all destination
@@ -69,7 +71,7 @@ pub fn apply_relative_relocations(
     if dynamic_length > MAX_DYNAMIC_TABLE_SIZE {
         return Err("PT_DYNAMIC exceeds the 16 MiB safety limit".into());
     }
-    if dynamic_length % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
+    if !dynamic_length.is_multiple_of(ELF64_DYNAMIC_ENTRY_SIZE) {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
@@ -95,7 +97,11 @@ pub fn apply_relative_relocations(
     let rela_bytes = mapped.read_bytes(rela_offset, usize::try_from(rela_size)?)?;
     let mut pending = Vec::with_capacity(relocation_count);
 
-    for entry in rela_bytes.chunks_exact(ELF64_RELA_ENTRY_SIZE) {
+    let (rela_entries, rela_remainder) = rela_bytes.as_chunks::<ELF64_RELA_ENTRY_SIZE>();
+    if !rela_remainder.is_empty() {
+        return Err("ELF RELA table has an invalid entry size".into());
+    }
+    for entry in rela_entries {
         let target_address = u64::from_le_bytes(entry[0..8].try_into()?);
         let relocation_info = u64::from_le_bytes(entry[8..16].try_into()?);
         let addend = i64::from_le_bytes(entry[16..24].try_into()?);
@@ -126,8 +132,8 @@ pub fn apply_relative_relocations(
 
 fn parse_dynamic_table(
     dynamic_bytes: &[u8],
-) -> Result<Option<(u64, u64, u64)>, Box<dyn Error>> {
-    if dynamic_bytes.len() % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
+ ) -> Result<Option<DynamicRelaInfo>, Box<dyn Error>> {
+    if !dynamic_bytes.len().is_multiple_of(ELF64_DYNAMIC_ENTRY_SIZE) {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
@@ -136,7 +142,11 @@ fn parse_dynamic_table(
     let mut rela_entry_size = None;
     let mut saw_null = false;
 
-    for entry in dynamic_bytes.chunks_exact(ELF64_DYNAMIC_ENTRY_SIZE) {
+    let (dynamic_entries, dynamic_remainder) = dynamic_bytes.as_chunks::<ELF64_DYNAMIC_ENTRY_SIZE>();
+    if !dynamic_remainder.is_empty() {
+        return Err("PT_DYNAMIC has an invalid entry table size".into());
+    }
+    for entry in dynamic_entries {
         let tag = i64::from_le_bytes(entry[0..8].try_into()?);
         let value = u64::from_le_bytes(entry[8..16].try_into()?);
         if tag == DT_NULL {
@@ -150,14 +160,16 @@ fn parse_dynamic_table(
             DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
             | DT_RELR | DT_RELRSZ | DT_RELRENT
             | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
-            | DT_TEXTREL => {
-                if value != 0 || tag == DT_TEXTREL {
-                    return Err(
-                        "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
-                            .into(),
-                    );
-                }
+            | DT_TEXTREL if value != 0 || tag == DT_TEXTREL => {
+                return Err(
+                    "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
+                        .into(),
+                );
             }
+            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
+            | DT_RELR | DT_RELRSZ | DT_RELRENT
+            | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
+            | DT_TEXTREL => {}
             _ => {}
         }
     }
