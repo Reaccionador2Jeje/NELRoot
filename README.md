@@ -8,6 +8,16 @@ NELRoot is designed as an independent engine. PRoot and QEMU are not execution b
 
 > **Development status:** Early development. The current release provides the CLI, host diagnostics, configuration and image-catalog scaffolding. Guest Linux execution, ELF loading and CPU emulation are not implemented yet.
 
+## Product direction
+
+NELRoot is being developed as a modern, friendly Linux environment for developers: interactive shells, Linux commands, project builds, local web servers and project packaging through a simple CLI. The long-term goal is an independent runtime, not a wrapper around PRoot, QEMU or Docker.
+
+A major integration objective is to replace the PRoot-based Ubuntu backend in **NEXORA** with NELRoot after runtime capabilities and compatibility tests are ready. The migration will cover shell sessions, project files, process lifecycle, command execution, web-server ports and build workflows.
+
+NELRoot is also planned for native package-manager distribution: APT (`.deb`), DNF/Zypper (`.rpm`), Pacman (`.pkg.tar.zst`), APK and Termux packages. AtDev-maintained signed repositories are the initial target; inclusion in official distribution repositories requires their separate maintainer review and acceptance.
+
+See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. These are future goals, not features available in the current early-development build.
+
 ## Install
 
 Download the latest installer from the [GitHub Releases](https://github.com/Reaccionador2Jeje/NELRoot/releases/latest) page.
