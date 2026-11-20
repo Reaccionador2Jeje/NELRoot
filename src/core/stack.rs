@@ -28,6 +28,8 @@ pub struct GuestStackConfig {
     /// Argument and environment strings without terminating NUL bytes.
     pub argv: Vec<Vec<u8>>,
     pub envp: Vec<Vec<u8>>,
+    /// Executable pathname used for AT_EXECFN; may differ from argv[0].
+    pub execfn: Vec<u8>,
     /// Entropy supplied by the host adapter; copied into the guest stack.
     pub random: [u8; 16],
     /// Entries such as AT_PHDR, AT_PHENT, AT_PHNUM and AT_PAGESZ.
@@ -43,6 +45,7 @@ pub struct GuestStack {
     argv_addresses: Vec<u64>,
     envp_addresses: Vec<u64>,
     random_address: u64,
+    execfn_address: u64,
 }
 
 impl GuestStack {
@@ -52,6 +55,7 @@ impl GuestStack {
     pub fn argv_addresses(&self) -> &[u64] { &self.argv_addresses }
     pub fn envp_addresses(&self) -> &[u64] { &self.envp_addresses }
     pub fn random_address(&self) -> u64 { self.random_address }
+    pub fn execfn_address(&self) -> u64 { self.execfn_address }
 }
 
 /// Build argc, argv + NULL, envp + NULL, auxv + AT_NULL, then strings and AT_RANDOM.
@@ -71,7 +75,11 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         return Err("AT_NULL, AT_RANDOM and AT_EXECFN are reserved by the stack builder".into());
     }
 
-    let mut payload_size = 16_usize;
+    if config.execfn.is_empty() || config.execfn.contains(&0) {
+        return Err("AT_EXECFN pathname must be non-empty and contain no NUL bytes".into());
+    }
+    let mut payload_size = 16_usize.checked_add(config.execfn.len())
+        .and_then(|size| size.checked_add(1)).ok_or("guest execfn size overflow")?;
     for value in config.argv.iter().chain(config.envp.iter()) {
         if value.contains(&0) {
             return Err("guest argv/envp strings cannot contain embedded NUL bytes".into());
@@ -116,6 +124,10 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         copy_string(&mut bytes, &mut cursor, value);
     }
 
+    let execfn_address = stack_pointer.checked_add(u64::try_from(cursor)?)
+        .ok_or("guest AT_EXECFN pointer overflow")?;
+    copy_string(&mut bytes, &mut cursor, &config.execfn);
+
     let random_address = stack_pointer.checked_add(u64::try_from(cursor)?)
         .ok_or("guest AT_RANDOM pointer overflow")?;
     bytes[cursor..cursor + 16].copy_from_slice(&config.random);
@@ -131,7 +143,7 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         words.push(entry.kind);
         words.push(entry.value);
     }
-    words.extend([AT_RANDOM, random_address, AT_EXECFN, argv_addresses[0], AT_NULL, 0]);
+    words.extend([AT_RANDOM, random_address, AT_EXECFN, execfn_address, AT_NULL, 0]);
 
     if words.len() != word_count {
         return Err("internal guest stack pointer table size mismatch".into());
@@ -144,7 +156,7 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         return Err("internal guest stack payload exceeds its allocation".into());
     }
 
-    Ok(GuestStack { stack_pointer, bytes, argv_addresses, envp_addresses, random_address })
+    Ok(GuestStack { stack_pointer, bytes, argv_addresses, envp_addresses, random_address, execfn_address })
 }
 
 fn copy_string(bytes: &mut [u8], cursor: &mut usize, value: &[u8]) {
@@ -163,6 +175,7 @@ mod tests {
             stack_top: 0x7fff_ffff_f000,
             argv: vec![b"/bin/demo".to_vec(), b"--version".to_vec()],
             envp: vec![b"PATH=/usr/bin".to_vec()],
+            execfn: b"/usr/bin/demo".to_vec(),
             random: [0x5a; 16],
             auxv: vec![
                 AuxEntry { kind: 3, value: 0x400040 },
@@ -197,16 +210,18 @@ mod tests {
         assert_eq!(read_word(&stack, aux_start), AT_RANDOM);
         assert_eq!(read_word(&stack, aux_start + 1), stack.random_address());
         assert_eq!(read_word(&stack, aux_start + 2), AT_EXECFN);
-        assert_eq!(read_word(&stack, aux_start + 3), stack.argv_addresses()[0]);
+        assert_eq!(read_word(&stack, aux_start + 3), stack.execfn_address());
         assert_eq!(read_word(&stack, aux_start + 4), AT_NULL);
         assert_eq!(read_word(&stack, aux_start + 5), 0);
     }
 
     #[test]
-    fn stores_strings_and_random_bytes_at_guest_addresses() {
+    fn stores_strings_execfn_and_random_bytes_at_guest_addresses() {
         let stack = build_initial_stack(&config()).unwrap();
         let offset = (stack.argv_addresses()[0] - stack.stack_pointer()) as usize;
         assert_eq!(&stack.bytes()[offset..offset + 10], b"/bin/demo\0");
+        let execfn_offset = (stack.execfn_address() - stack.stack_pointer()) as usize;
+        assert_eq!(&stack.bytes()[execfn_offset..execfn_offset + 14], b"/usr/bin/demo\\0");
         let random_offset = (stack.random_address() - stack.stack_pointer()) as usize;
         assert_eq!(&stack.bytes()[random_offset..random_offset + 16], &[0x5a; 16]);
     }
@@ -222,6 +237,9 @@ mod tests {
     fn rejects_empty_argv() {
         let mut input = config();
         input.argv.clear();
+        assert!(build_initial_stack(&input).is_err());
+        let mut input = config();
+        input.execfn.clear();
         assert!(build_initial_stack(&input).is_err());
     }
 
