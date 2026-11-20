@@ -243,8 +243,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
             ui::state("ELF load planner", true, "mapping plan only");
-            ui::state("Native chroot runner", runtime::supported(), "host-kernel execution; Linux only");
-            ui::state("Effective root", runtime::has_required_privileges(), "required for chroot(2)");
+            ui::state(
+                "Native chroot runner",
+                runtime::supported(),
+                "host-kernel execution; Linux only",
+            );
+            ui::state(
+                "Runtime privileges",
+                runtime::has_required_privileges(),
+                "root + chroot/setuid/setgid capabilities",
+            );
             ui::state("Native executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
             ui::state("Syscall layer", false, "not implemented");
@@ -514,7 +522,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "event_logging", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
                             {"name": "elf_load_planner", "status": "available"},
-                            {"name": "native_chroot_runtime", "status": if runtime::supported() { "available" } else { "not_implemented" }},
+                            {
+                                "name": "native_chroot_runtime",
+                                "status": if runtime::supported() {
+                                    "available"
+                                } else {
+                                    "not_implemented"
+                                }
+                            },
                             {"name": "native_executor", "status": "not_implemented"},
                             {"name": "elf_loader", "status": "not_implemented"},
                             {"name": "syscall_layer", "status": "not_implemented"},
@@ -527,7 +542,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             "reason": if !runtime::supported() {
                                 "The native chroot backend requires a Linux host."
                             } else if !runtime::has_required_privileges() {
-                                "Effective root and CAP_SYS_CHROOT are required; ordinary unprivileged PRoot sessions cannot start it."
+                                concat!(
+                                    "Effective UID 0 and CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID are required; ",
+                                    "ordinary unprivileged PRoot sessions cannot start it."
+                                )
                             } else {
                                 "Native chroot process launch is implemented; this is not a syscall emulator or security sandbox."
                             }
@@ -545,7 +563,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Event logging", true, "local event log");
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
-                    ui::state("Native chroot runner", runtime::supported(), "Linux host kernel");
+                    ui::state(
+                        "Native chroot runner",
+                        runtime::supported(),
+                        "Linux host kernel",
+                    );
                     ui::heading("Under development");
                     ui::state("Native executor", false, "not implemented");
                     ui::state("ELF memory loader", false, "not implemented");
@@ -556,12 +578,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         ui::warn("Native chroot execution needs a Linux host and effective root.");
                     }
-                    ui::warn("This backend is not a security sandbox or an independent syscall emulator.");
+                    ui::warn(
+                "This backend is not a security sandbox or an independent syscall emulator.",
+            );
                     ui::muted("Machine interface: nelroot engine status --json");
                 }
             }
         },
-        Commands::Run { image, cwd, keep_root, command } => {
+        Commands::Run {
+            image,
+            cwd,
+            keep_root,
+            command,
+        } => {
             let program = &command[0];
             let arguments = &command[1..];
             ui::banner("Native Linux runtime");
@@ -577,7 +606,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(status.code().unwrap_or(128));
             }
         }
-        Commands::Shell { image, shell, cwd, keep_root } => {
+        Commands::Shell {
+            image,
+            shell,
+            cwd,
+            keep_root,
+        } => {
             ui::banner("Interactive Linux shell");
             ui::key("Image", &image);
             ui::key("Shell", &shell);
