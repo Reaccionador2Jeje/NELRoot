@@ -21,6 +21,7 @@ nelroot elf map ./static-pie
 - The entry point is reported but never called.
 - Input is bounded to 256 MiB and the reserved virtual-memory span to 512 MiB.
 - Segment byte-range overlaps and writable-executable page combinations are rejected.
-- Segment alignment larger than the host page size is rejected by this first implementation.
+- PT_LOAD alignment must be a power of two (when greater than one), congruent with the file offset, and no larger than the host page size.
+- `MappedElf::read_bytes` and `write_bytes` enforce PF_R/PF_W on every covered page and reject overflow or out-of-reservation ranges.
 
-This is a real memory mapping primitive, not yet a Linux process loader. It does not run guest instructions and does not replace the host kernel's ELF loader or syscall implementation used by the separate chroot runner.
+This is a real memory mapping primitive with permission-checked memory access, not yet a Linux process loader. It does not run guest instructions and does not replace the host kernel's ELF loader or syscall implementation used by the separate chroot runner.
