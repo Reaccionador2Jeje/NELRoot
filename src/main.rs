@@ -5,7 +5,7 @@ mod ui;
 fn main() {
     if let Err(error) = cli::run() {
         let _ = core::logging::record("error", &error.to_string());
-        eprintln!("nelroot: error: {error}");
+        crate::ui::bad(&format!("nelroot: {error}"));
         std::process::exit(1);
     }
 }
