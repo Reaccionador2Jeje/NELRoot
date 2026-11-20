@@ -141,8 +141,12 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
                 if !header.alignment.is_power_of_two() {
                     return Err("ELF load segment alignment is not a power of two".into());
                 }
-                if header.virtual_address % header.alignment != header.offset % header.alignment {
-                    return Err("ELF load segment file offset and virtual address are not congruent".into());
+                if header.virtual_address % header.alignment
+                    != header.offset % header.alignment
+                {
+                    return Err(
+                        "ELF load segment file offset and virtual address are not congruent".into(),
+                    );
                 }
             }
         } else if header.kind == 3 {
@@ -154,11 +158,17 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
             }
             let start = usize::try_from(header.offset)?;
             let end = usize::try_from(
-                header.offset.checked_add(header.file_size)
-                    .ok_or("ELF interpreter range overflow")?
+                header
+                    .offset
+                    .checked_add(header.file_size)
+                    .ok_or("ELF interpreter range overflow")?,
             )?;
-            let raw = bytes.get(start..end).ok_or("ELF interpreter extends beyond the file")?;
-            let nul = raw.iter().position(|byte| *byte == 0)
+            let raw = bytes
+                .get(start..end)
+                .ok_or("ELF interpreter extends beyond the file")?;
+            let nul = raw
+                .iter()
+                .position(|byte| *byte == 0)
                 .ok_or("ELF interpreter path is not NUL-terminated")?;
             if nul == 0 || raw[nul + 1..].iter().any(|byte| *byte != 0) {
                 return Err("ELF interpreter path has invalid trailing data".into());
@@ -266,7 +276,10 @@ mod tests {
     fn reads_absolute_pt_interp_path() {
         let bytes = elf_with_interpreter(b"/lib/ld-linux-aarch64.so.1");
         let info = inspect_elf_bytes(&bytes).unwrap();
-        assert_eq!(info.interpreter.as_deref(), Some("/lib/ld-linux-aarch64.so.1"));
+        assert_eq!(
+            info.interpreter.as_deref(),
+            Some("/lib/ld-linux-aarch64.so.1")
+        );
     }
 
     #[test]
