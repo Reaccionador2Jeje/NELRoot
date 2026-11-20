@@ -3,12 +3,7 @@
 //! This maps static ET_DYN images into the current process for inspection and
 //! future loader work. It deliberately does not transfer control to the image.
 
-use std::{
-    fs,
-    io::Read,
-    path::Path,
-    ptr::NonNull,
-};
+use std::{fs, io::Read, path::Path, ptr::NonNull};
 
 use super::elf::{self, ElfInfo, ProgramHeader};
 
@@ -29,9 +24,15 @@ impl PagePermissions {
             return Err("ELF PT_LOAD contains unsupported permission bits");
         }
         let mut bits = 0;
-        if flags & PF_R != 0 { bits |= 1; }
-        if flags & PF_W != 0 { bits |= 2; }
-        if flags & PF_X != 0 { bits |= 4; }
+        if flags & PF_R != 0 {
+            bits |= 1;
+        }
+        if flags & PF_W != 0 {
+            bits |= 2;
+        }
+        if flags & PF_X != 0 {
+            bits |= 4;
+        }
         self.0 |= bits;
         if self.0 & 2 != 0 && self.0 & 4 != 0 {
             return Err("overlapping ELF segments would create a writable-executable page");
@@ -41,14 +42,24 @@ impl PagePermissions {
 
     fn native(self) -> i32 {
         let mut protection = libc::PROT_NONE;
-        if self.0 & 1 != 0 { protection |= libc::PROT_READ; }
-        if self.0 & 2 != 0 { protection |= libc::PROT_WRITE; }
-        if self.0 & 4 != 0 { protection |= libc::PROT_EXEC; }
+        if self.0 & 1 != 0 {
+            protection |= libc::PROT_READ;
+        }
+        if self.0 & 2 != 0 {
+            protection |= libc::PROT_WRITE;
+        }
+        if self.0 & 4 != 0 {
+            protection |= libc::PROT_EXEC;
+        }
         protection
     }
 
     fn staging(self) -> i32 {
-        if self.0 == 0 { libc::PROT_NONE } else { libc::PROT_READ | libc::PROT_WRITE }
+        if self.0 == 0 {
+            libc::PROT_NONE
+        } else {
+            libc::PROT_READ | libc::PROT_WRITE
+        }
     }
 }
 
@@ -99,7 +110,10 @@ impl MappedElf {
             return Err("the first memory mapper supports static ET_DYN images only".into());
         }
         if info.interpreter.is_some() {
-            return Err("dynamic ELF images with PT_INTERP need the dynamic linker stage and cannot be mapped yet".into());
+            return Err(
+                "dynamic ELF images with PT_INTERP need the dynamic linker stage and cannot be mapped yet"
+                    .into(),
+            );
         }
         if !host_machine_matches(info.machine) {
             return Err("ELF machine does not match the current host architecture".into());
@@ -129,17 +143,23 @@ impl MappedElf {
         let mut max_page = 0_u64;
         for header in &load_segments {
             if header.alignment > page_size_u64 {
-                return Err("PT_LOAD alignment exceeds the host page size supported by this mapper".into());
+                return Err(
+                    "PT_LOAD alignment exceeds the host page size supported by this mapper".into(),
+                );
             }
             if header.file_size > header.memory_size {
                 return Err("PT_LOAD file size exceeds memory size".into());
             }
-            let file_end = header.offset.checked_add(header.file_size)
+            let file_end = header
+                .offset
+                .checked_add(header.file_size)
                 .ok_or("PT_LOAD file range overflows")?;
             if file_end > bytes.len() as u64 {
                 return Err("PT_LOAD file range extends beyond the input".into());
             }
-            let memory_end = header.virtual_address.checked_add(header.memory_size)
+            let memory_end = header
+                .virtual_address
+                .checked_add(header.memory_size)
                 .ok_or("PT_LOAD virtual range overflows")?;
             let start_page = align_down(header.virtual_address, page_size_u64);
             let end_page = align_up(memory_end, page_size_u64)?;
@@ -148,10 +168,14 @@ impl MappedElf {
             ranges.push((header.virtual_address, memory_end, start_page, end_page));
         }
 
-        let span_u64 = max_page.checked_sub(min_page).ok_or("invalid ELF mapping span")?;
+        let span_u64 = max_page
+            .checked_sub(min_page)
+            .ok_or("invalid ELF mapping span")?;
         let length = usize::try_from(span_u64)?;
         if length == 0 || length > MAX_MAPPING_SIZE {
-            return Err("ELF virtual memory span is empty or exceeds the 512 MiB mapping limit".into());
+            return Err(
+                "ELF virtual memory span is empty or exceeds the 512 MiB mapping limit".into(),
+            );
         }
         let page_count = length / page_size;
         let mut page_permissions = vec![PagePermissions::default(); page_count];
@@ -176,7 +200,10 @@ impl MappedElf {
 
         let mut entry_is_executable = false;
         for (header, (start, end, _, _)) in load_segments.iter().zip(&ranges) {
-            if header.flags & PF_X != 0 && info.entry_point >= *start && info.entry_point < *end {
+            if header.flags & PF_X != 0
+                && info.entry_point >= *start
+                && info.entry_point < *end
+            {
                 entry_is_executable = true;
             }
         }
@@ -200,10 +227,14 @@ impl MappedElf {
             return Err(std::io::Error::last_os_error().into());
         }
         if raw.is_null() {
-            unsafe { libc::munmap(raw, length); }
+            // SAFETY: the zero-address mapping still represents our reservation.
+            unsafe {
+                libc::munmap(raw, length);
+            }
             return Err("mmap returned a null address".into());
         }
-        let base = NonNull::new(raw.cast::<u8>()).expect("non-null mmap address checked above");
+        let base =
+            NonNull::new(raw.cast::<u8>()).expect("non-null mmap address checked above");
 
         let entry_offset = usize::try_from(
             info.entry_point
@@ -326,7 +357,8 @@ fn align_down(value: u64, alignment: u64) -> u64 {
 }
 
 fn align_up(value: u64, alignment: u64) -> Result<u64, &'static str> {
-    value.checked_add(alignment - 1)
+    value
+        .checked_add(alignment - 1)
         .map(|value| align_down(value, alignment))
         .ok_or("ELF page alignment overflows")
 }
@@ -350,7 +382,11 @@ mod tests {
         bytes[5] = 1;
         bytes[6] = 1;
         bytes[16..18].copy_from_slice(&ET_DYN.to_le_bytes());
-        let machine = if std::env::consts::ARCH == "aarch64" { 183_u16 } else { 62_u16 };
+        let machine = if std::env::consts::ARCH == "aarch64" {
+            183_u16
+        } else {
+            62_u16
+        };
         bytes[18..20].copy_from_slice(&machine.to_le_bytes());
         bytes[20..24].copy_from_slice(&1_u32.to_le_bytes());
         bytes[24..32].copy_from_slice(&0x100_u64.to_le_bytes());
