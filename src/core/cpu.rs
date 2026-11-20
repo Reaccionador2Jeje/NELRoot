@@ -169,6 +169,38 @@ impl X86_64Interpreter {
     }
 }
 
+/// Owns the initial CPU model and syscall state for one prepared x86_64
+/// guest. Construction copies loader output into bounded GuestMemory; it does
+/// not create a host process or enter native guest execution.
+#[cfg(target_os = "linux")]
+pub struct X86_64GuestRuntime {
+    pub cpu: X86_64Interpreter,
+    pub context: SyscallContext,
+    dispatcher: SyscallDispatcher,
+}
+
+#[cfg(target_os = "linux")]
+impl X86_64GuestRuntime {
+    pub fn from_execution_context(
+        prepared: &super::loader::GuestExecutionContext,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        if prepared.architecture != "x86_64" {
+            return Err("the initial guest interpreter supports x86_64 only".into());
+        }
+        let context = SyscallContext::from_execution_context(prepared)?;
+        let cpu = X86_64Interpreter::new(prepared.entry_point, prepared.stack_pointer);
+        Ok(Self { cpu, context, dispatcher: SyscallDispatcher })
+    }
+
+    pub fn step(&mut self) -> Result<StepOutcome, CpuError> {
+        self.cpu.step(&mut self.context, &self.dispatcher)
+    }
+
+    pub fn run(&mut self, max_steps: u64) -> Result<CpuStopReason, CpuError> {
+        self.cpu.run(&mut self.context, &self.dispatcher, max_steps)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
