@@ -183,6 +183,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn accepts_first_dynamic_tag_value() {
+        let mut slot = None;
+        set_once(&mut slot, 0x1234, "DT_RELA").unwrap();
+        assert_eq!(slot, Some(0x1234));
+    }
+
+    #[test]
+    fn rejects_duplicate_dynamic_tags() {
+        let mut slot = None;
+        set_once(&mut slot, 0x1234, "DT_RELA").unwrap();
+        assert!(set_once(&mut slot, 0x5678, "DT_RELA").is_err());
+    }
+
+    #[test]
+    fn rejects_unsupported_elf_machine() {
+        assert!(relative_relocation_value(3, 8, 0, 0x1000).is_err());
+    }
+
+    #[test]
     fn computes_x86_64_relative_relocation() {
         assert_eq!(
             relative_relocation_value(62, 8, 0x1234, 0x1000).unwrap(),
