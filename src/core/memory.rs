@@ -523,6 +523,8 @@ mod tests {
         mapped.write_bytes(4096, b"DATA").unwrap();
         assert_eq!(mapped.read_bytes(4096, 4).unwrap(), b"DATA");
         assert!(mapped.write_bytes(0, b"NOPE").is_err());
+        assert!(mapped.write_bytes(4094, b"CROSS").is_err());
+        assert!(mapped.write_bytes(usize::MAX, b"OVERFLOW").is_err());
     }
 
     #[test]
