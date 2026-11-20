@@ -49,6 +49,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -86,12 +89,13 @@ jobs:
       - name: Generate checksum
         shell: bash
         run: |
-          cd dist
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum nelroot-${{ matrix.name }}.* > nelroot-${{ matrix.name }}.sha256
-          else
-            shasum -a 256 nelroot-${{ matrix.name }}.* > nelroot-${{ matrix.name }}.sha256
-          fi
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          archive = next(Path("dist").glob("nelroot-${{ matrix.name }}.*"))
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          Path(f"dist/nelroot-${{ matrix.name }}.sha256").write_text(f"{digest}  {archive.name}\\n")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
