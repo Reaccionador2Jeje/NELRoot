@@ -167,6 +167,55 @@ mod tests {
         assert_eq!(key_id(&key).len(), 64);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn detached_signature_round_trip_and_detects_manifest_tampering() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let directory = std::env::temp_dir().join(format!("nelroot-signing-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+
+        let manifest = super::super::hub::HubManifest {
+            schema_version: 1,
+            image: super::super::hub::HubImage {
+                id: "atdev/test-image".into(),
+                name: "Test Linux".into(),
+                version: "1.0.0".into(),
+                distribution: "TestOS".into(),
+                release: "1".into(),
+                architecture: "x86_64".into(),
+                description: "Test image".into(),
+                maintainer: "AtDev".into(),
+                license: "MIT".into(),
+                tags: vec!["test".into()],
+                rootfs: super::super::hub::HubRootfs {
+                    format: "tar.gz".into(),
+                    size_bytes: 1,
+                    sha256: "a".repeat(64),
+                    download_url: "https://images.example.test/rootfs.tar.gz".into(),
+                },
+            },
+        };
+        let manifest_path = directory.join("manifest.json");
+        let private_path = directory.join("private.key");
+        let public_path = directory.join("public.key");
+        let signature_path = directory.join("manifest.sig.json");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+
+        generate_keypair(&private_path, &public_path).unwrap();
+        let signed = sign_manifest(&manifest_path, &private_path, &signature_path).unwrap();
+        let verified = verify_manifest(&manifest_path, &signature_path, &public_path).unwrap();
+        assert_eq!(signed.key_id, verified.key_id);
+
+        let mut changed = manifest;
+        changed.image.description = "Tampered image".into();
+        fs::write(&manifest_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+        assert!(verify_manifest(&manifest_path, &signature_path, &public_path).is_err());
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn signature_document_rejects_unknown_schema() {
         let value = HubSignature {
