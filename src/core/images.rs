@@ -54,9 +54,7 @@ fn save_catalog(catalog: &ImageCatalog) -> Result<(), Box<dyn std::error::Error>
     fs::create_dir_all(parent)?;
 
     let contents = toml::to_string_pretty(catalog)?;
-    let temporary = path.with_extension(format!("toml.{}.tmp", std::process::id()));
-    fs::write(&temporary, contents)?;
-    fs::rename(temporary, path)?;
+    fs::write(path, contents)?;
     Ok(())
 }
 
