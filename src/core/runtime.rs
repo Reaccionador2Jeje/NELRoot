@@ -25,6 +25,16 @@ pub fn has_required_privileges() -> bool {
     }
 }
 
+fn validate_guest_cwd(path: &Path) -> Result<(), &'static str> {
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return Err("guest working directory must be an absolute path inside the image");
+    }
+    if path.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
+        return Err("guest working directory must not contain '..'");
+    }
+    Ok(())
+}
+
 fn host_architecture_matches(guest: &str) -> bool {
     let host = std::env::consts::ARCH;
     matches!(
@@ -65,12 +75,7 @@ pub fn run_image(
         if !program.starts_with('/') || program.as_bytes().contains(&0) {
             return Err("guest executable must be an absolute path such as /bin/sh".into());
         }
-        if guest_cwd.as_os_str().is_empty() || !guest_cwd.is_absolute() {
-            return Err("guest working directory must be an absolute path inside the image".into());
-        }
-        if guest_cwd.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
-            return Err("guest working directory must not contain '..'".into());
-        }
+        validate_guest_cwd(guest_cwd)?;
 
         let catalog = images::load_catalog()?;
         let image = catalog
@@ -179,8 +184,9 @@ mod tests {
     }
 
     #[test]
-    fn cwd_parent_traversal_is_not_accepted_by_path_validation() {
-        let path = Path::new("/tmp/../etc");
-        assert!(path.components().any(|part| matches!(part, std::path::Component::ParentDir)));
+    fn cwd_validation_requires_absolute_confined_path() {
+        assert!(validate_guest_cwd(Path::new("/workspace")).is_ok());
+        assert!(validate_guest_cwd(Path::new("workspace")).is_err());
+        assert!(validate_guest_cwd(Path::new("/tmp/../etc")).is_err());
     }
 }
