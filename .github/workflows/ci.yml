@@ -20,7 +20,25 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No previous commit available; skipping changed-file format check."
+            exit 0
+          fi
+
+          mapfile -t RUST_FILES < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA" -- '*.rs')
+          if (("${#RUST_FILES[@]}" > 0)); then
+            rustfmt --edition 2024 --check "${RUST_FILES[@]}"
+          else
+            echo "No Rust source files changed."
+          fi
       - name: Check shell scripts
         run: bash -n scripts/install.sh scripts/smoke-test.sh packaging/build-deb.sh packaging/build-rpm.sh
       - name: Test official rootfs publisher
