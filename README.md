@@ -17,20 +17,22 @@ Download the latest installer from the [GitHub Releases](https://github.com/Reac
 Run the setup wizard:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.sh | bash
+python3 -c "import urllib.request; open('nelroot-install.sh','wb').write(urllib.request.urlopen('https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.sh').read())"
+bash nelroot-install.sh
 ```
 
-The wizard detects the operating system and CPU architecture, downloads the matching release, asks where to install, and configures the user PATH. Choose system-wide installation when prompted if you want the executable available to all local users; this requires sudo permissions. On Termux, it installs into the Termux prefix without root.
+The wizard detects the operating system and CPU architecture, downloads the matching release through Python's standard HTTPS library, verifies its SHA-256 checksum, asks where to install, and configures the user PATH. It does not call curl or wget. Python 3 and tar are required on Unix-like systems. Choose system-wide installation when prompted if you want the executable available to all local users; this requires sudo permissions. On Termux, install Python and tar with `pkg install python tar`, then run the wizard; it installs into the Termux prefix without root.
 
 ### Windows (PowerShell)
 
 Open PowerShell and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.ps1 | iex
+[System.IO.File]::WriteAllText("$env:TEMP\\nelroot-install.ps1", (New-Object System.Net.Http.HttpClient).GetStringAsync("https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.ps1").GetAwaiter().GetResult())
+& "$env:TEMP\\nelroot-install.ps1"
 ```
 
-The wizard installs into the current user's Programs directory and adds it to the user's PATH.
+The wizard uses .NET HttpClient (not curl or wget), verifies the SHA-256 checksum, installs into the current user's Programs directory and adds it to the user's PATH.
 
 ### Supported release targets
 
