@@ -19,7 +19,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [x] First native Linux process-launch backend using chroot(2), same-architecture ELF execution and child exit-code propagation.
 - [x] Read-only Linux user-namespace policy and procfs namespace-interface diagnostics (prerequisite probe only; no namespace runtime yet).
-- [x] Initial guest VFS path normalization and root confinement with canonical symlink checks (path resolution only; no fd operations or race-free openat2 layer).
+- [x] Initial guest VFS path normalization and root confinement with canonical symlink checks (inspection helpers only; not a security boundary for later opens).
+- [x] Linux root-confined file open and exclusive create using openat2(2), pinned root directory descriptors and RESOLVE_IN_ROOT (requires Linux 5.6+; no fallback on older kernels).
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
