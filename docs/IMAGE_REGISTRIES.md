@@ -205,5 +205,6 @@ Current limits and deployment boundaries:
   and secret rotation must be configured by the deployment operator.
 - Publishing uses one bearer token; per-user accounts, scoped credentials,
   moderation, signed provenance and key rotation are not implemented yet.
-- The server exposes a publishing API, but the NELRoot CLI does not yet have
-  remote login/publish/pull commands.
+- The CLI now supports public catalog search, verified image pull/update and
+  bearer-token image publishing. Interactive account management, scoped
+  credentials, moderation and credential rotation are still not implemented.
