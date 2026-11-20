@@ -70,3 +70,17 @@ Package-manager tests (`apt`, `apk`, `dnf`) come only after the basic process, f
 The Linux runtime exposes `configure_user_namespace_mappings(child_pid)` for the parent side of a future launch protocol. It maps namespace UID/GID 0 to the caller's effective host UID/GID, writes `setgroups=deny` before `gid_map`, and fails closed if any procfs write fails. The child must already have entered its new user namespace and remain blocked while the parent performs these writes.
 
 This is only a mapping primitive: NELRoot does not yet create and synchronize that paused child, so this function is not a complete rootless launcher and is not called by the CLI. Tests cover map formatting without requiring namespace privileges.
+
+
+## Private mount namespace primitive
+
+On Linux, `prepare_private_mount_namespace()` creates a new mount namespace
+for the calling child with `unshare(CLONE_NEWNS)`, then changes propagation
+for that namespace's mount tree to recursive-private. It must run after the
+child has entered a user namespace and the parent has installed valid UID/GID
+maps. Failure is returned immediately; there is no fallback that changes the
+host mount namespace.
+
+This primitive does not coordinate the parent/child mapping handshake, mount a
+root filesystem, perform `pivot_root`, or launch a guest process. It is a
+building block, not a complete runtime capability.
