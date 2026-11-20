@@ -17,9 +17,11 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Adaptive terminal UI with color-safe banners, capability indicators, diagnostics and errors.
 - [x] First-party NELRoot Image Hub schema v1 for catalogs and per-image manifests, including strict metadata validation, HTTPS-only artifact URLs and SHA-256 requirements.
 - [x] Local first-party Hub catalog validation and metadata search CLI.
-- [ ] Build the hosted NELRoot Image Hub API, catalog publishing workflow and immutable manifest storage.
-- [ ] Add authenticated maintainer publishing, image review and provenance/signature verification.
-- [ ] Add remote Hub catalog/manifest retrieval and verified rootfs pulls.
+- [x] Implement the standalone NELRoot Image Hub HTTP API for public catalog/manifest reads and content-addressed artifact downloads.
+- [x] Add bearer-token-protected artifact upload and immutable manifest publication with SHA-256 and rootfs-size verification.
+- [ ] Deploy and operate the public Hub service with TLS, backups, monitoring, rate limits and durable production storage.
+- [ ] Add maintainer accounts, scoped credentials, image review/moderation and signed provenance verification.
+- [ ] Add remote Hub catalog/manifest retrieval and verified rootfs pulls to the NELRoot CLI.
 - [ ] OCI layer download, digest verification, whiteout handling and transactional rootfs reconstruction for optional OCI sources.
 - [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Publish and operate official AtDev images for Ubuntu, Debian and Alpine.
