@@ -1,5 +1,17 @@
 use std::{env, fs, path::PathBuf};
 
+const DEFAULT_CONFIG: &str = concat!(
+    "# NELRoot configuration (schema v1)\n",
+    "schema_version = 1\n",
+    "log_level = \"info\"\n",
+    "\n[paths]\n",
+    "image_catalog = \"images.toml\"\n",
+    "image_store = \"images\"\n",
+    "cache = \"cache\"\n",
+    "logs = \"logs\"\n",
+    "runtime = \"run\"\n",
+);
+
 pub fn data_dir() -> PathBuf {
     if let Some(root) = env::var_os("NELROOT_HOME") {
         return PathBuf::from(root);
@@ -45,10 +57,7 @@ pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
 
     let config_path = config_path();
     if !config_path.exists() {
-        fs::write(
-            &config_path,
-            "# NELRoot configuration (schema v1)\nschema_version = 1\nlog_level = \"info\"\n\n[paths]\nimage_catalog = \"images.toml\"\nimage_store = \"images\"\ncache = \"cache\"\nlogs = \"logs\"\nruntime = \"run\"\n",
-        )?;
+        fs::write(&config_path, DEFAULT_CONFIG)?;
     }
 
     let catalog_path = directory.join("images.toml");
