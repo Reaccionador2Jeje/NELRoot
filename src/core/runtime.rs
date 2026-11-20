@@ -8,7 +8,7 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-use crate::core::images;
+use crate::core::{images, process::SupervisedProcess};
 
 /// Read-only diagnostics for Linux user-namespace prerequisites. This is a
 /// capability hint, not proof that namespace creation will pass seccomp or LSM policy.
@@ -262,8 +262,8 @@ pub fn run_image(
             eprintln!("NELRoot: guest credentials dropped to uid/gid 65534 (nobody).");
         }
 
-        let status = command.status()?;
-        Ok(status)
+        let mut process = SupervisedProcess::spawn(&mut command)?;
+        process.wait().map_err(Into::into)
     }
 }
 
