@@ -201,6 +201,36 @@ pub fn configure_user_namespace_mappings(
     Ok(mapping)
 }
 
+/// Create a private mount namespace after user-namespace mappings are installed.
+///
+/// Call this inside the child after it has entered a user namespace and received
+/// valid UID/GID maps. It creates a new mount namespace and makes propagation
+/// recursively private. It does not mount a rootfs or launch a guest process.
+#[cfg(target_os = "linux")]
+pub fn prepare_private_mount_namespace() -> io::Result<()> {
+    // SAFETY: unshare changes only the calling process's namespace membership.
+    if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    // SAFETY: null source/filesystem/data are valid for a propagation change;
+    // "/" is the mount target and MS_REC|MS_PRIVATE are mount flags.
+    let result = unsafe {
+        libc::mount(
+            std::ptr::null(),
+            c"/".as_ptr(),
+            std::ptr::null(),
+            (libc::MS_REC | libc::MS_PRIVATE) as libc::c_ulong,
+            std::ptr::null(),
+        )
+    };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
