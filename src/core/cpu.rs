@@ -233,7 +233,7 @@ impl X86_64Interpreter {
     fn set_arithmetic_flags(&mut self, result: u64, carry: bool, overflow: bool, auxiliary: bool) {
         let mut flags = self.registers.rflags & !ARITHMETIC_FLAGS;
         if carry { flags |= FLAG_CF; }
-        if result.to_le_bytes()[0].count_ones().is_multiple_of(2) { flags |= FLAG_PF; }
+        if result.to_le_bytes()[0].count_ones() % 2 == 0 { flags |= FLAG_PF; }
         if auxiliary { flags |= FLAG_AF; }
         if result == 0 { flags |= FLAG_ZF; }
         if result & (1 << 63) != 0 { flags |= FLAG_SF; }
