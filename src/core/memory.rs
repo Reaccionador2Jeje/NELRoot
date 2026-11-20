@@ -362,7 +362,9 @@ mod tests {
         assert!(mapped.length() >= 8192);
         assert!(mapped.entry_address() >= mapped.base_address());
         let bss_offset = bytes.len();
-        for offset in bss_offset..bss_offset + 64 {\n            assert_eq!(mapped.read_byte(offset).unwrap(), 0);\n        }
+        for offset in bss_offset..bss_offset + 64 {
+            assert_eq!(mapped.read_byte(offset).unwrap(), 0);
+        }
     }
 
     #[test]
