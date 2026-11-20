@@ -425,6 +425,94 @@ pub fn pull_remote_image(
     result.map(|path| (name, path))
 }
 
+/// Publish a verified local rootfs archive and its manifest to a first-party Hub.
+pub fn publish_image(
+    hub_url: &str,
+    manifest_path: &Path,
+    archive_path: &Path,
+    token: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if token.len() < 32 {
+        return Err("Hub publishing token must contain at least 32 bytes".into());
+    }
+    let base = reqwest::Url::parse(hub_url)?;
+    if base.scheme() != "https"
+        || base.host_str().is_none()
+        || !base.username().is_empty()
+        || base.password().is_some()
+        || base.query().is_some()
+        || base.fragment().is_some()
+    {
+        return Err("Hub URL must be an HTTPS base URL without credentials, query or fragment".into());
+    }
+
+    let manifest = load_manifest(manifest_path)?;
+    let metadata = fs::metadata(archive_path)?;
+    if !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAX_ARTIFACT_BYTES
+    {
+        return Err("rootfs archive must be a regular file between 1 byte and 512 MiB".into());
+    }
+    if metadata.len() != manifest.image.rootfs.size_bytes {
+        return Err(format!(
+            "manifest rootfs size mismatch: expected {} bytes, local archive has {}",
+            manifest.image.rootfs.size_bytes,
+            metadata.len()
+        ).into());
+    }
+
+    let mut file = fs::File::open(archive_path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    let digest = format!("{:x}", hasher.finalize());
+    if !digest.eq_ignore_ascii_case(&manifest.image.rootfs.sha256) {
+        return Err(format!(
+            "local rootfs SHA-256 mismatch: manifest expects {}, archive is {digest}",
+            manifest.image.rootfs.sha256
+        ).into());
+    }
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(900))
+        .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let artifact_url = base.join(&format!("/v1/artifacts/{digest}"))?;
+    let upload = reqwest::blocking::Body::new(fs::File::open(archive_path)?);
+    client
+        .post(artifact_url)
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .header(reqwest::header::CONTENT_LENGTH, metadata.len())
+        .body(upload)
+        .send()?
+        .error_for_status()?;
+
+    let manifest_url = base.join("/v1/manifests")?;
+    let manifest_bytes = serde_json::to_vec(&manifest)?;
+    let response: serde_json::Value = client
+        .post(manifest_url)
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(manifest_bytes)
+        .send()?
+        .error_for_status()?
+        .json()?;
+    let published_url = response
+        .get("manifest_url")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("Hub publish response did not contain manifest_url")?;
+    Ok(published_url.to_owned())
+}
+
 /// Update a NELRoot-managed local image from a verified first-party Hub archive.
 pub fn update_remote_image(
     hub_url: &str,
