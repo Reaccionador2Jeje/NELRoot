@@ -400,16 +400,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Elf { command } => match command {
             ElfCommands::Inspect { path } => {
                 let info = elf::inspect_file(&path)?;
-                println!("ELF file: {}", path.display());
-                println!("Type: {}", info.file_type);
-                println!("Machine: {} ({})", info.machine, info.architecture);
-                println!("Entry point: 0x{:016x}", info.entry_point);
+                ui::banner("ELF64 inspection");
+                ui::key("File", path.display());
+                ui::key("Type", info.file_type);
+                ui::key("Machine", format!("{} ({})", info.machine, info.architecture));
+                ui::key("Entry point", format!("0x{:016x}", info.entry_point));
                 if let Some(interpreter) = &info.interpreter {
-                    println!("Interpreter: {interpreter}");
+                    ui::key("Interpreter", interpreter);
                 } else {
-                    println!("Interpreter: static / not specified");
+                    ui::key("Interpreter", "static / not specified");
                 }
-                println!("Program headers: {}", info.program_headers.len());
+                ui::heading(&format!("Program headers ({})", info.program_headers.len()));
                 for (index, header) in info.program_headers.iter().enumerate() {
                     println!(
                         "  [{index}] t={} f={:#x} o={:#x} va={:#x} fs={} ms={} a={}",
@@ -426,10 +427,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ElfCommands::Plan { path, load_bias } => {
                 let info = elf::inspect_file(&path)?;
                 let plan = crate::core::loader::plan_load(&info, load_bias)?;
-                println!("ELF load plan (inspection only; no memory mapped or code executed)");
-                println!("Architecture: {}", plan.architecture);
-                println!("Load bias: 0x{:016x}", plan.load_bias);
-                println!("Entry point: 0x{:016x}", plan.entry_point);
+                ui::banner("ELF load plan");
+                ui::warn("Inspection only: no memory mapped and no code executed.");
+                ui::key("Architecture", plan.architecture);
+                ui::key("Load bias", format!("0x{:016x}", plan.load_bias));
+                ui::key("Entry point", format!("0x{:016x}", plan.entry_point));
+                ui::heading(&format!("Segments ({})", plan.segments.len()));
                 for (index, segment) in plan.segments.iter().enumerate() {
                     let mut permissions = String::new();
                     permissions.push(if segment.readable { 'r' } else { '-' });
@@ -476,22 +479,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     });
                     println!("{}", serde_json::to_string_pretty(&status)?);
                 } else {
-                    println!("NELRoot engine status");
-                    println!("---------------------");
-                    println!("Core             : available");
-                    println!("Host detection   : available");
-                    println!("Configuration    : available");
-                    println!("Image catalog    : available");
-                    println!("Registry client  : available");
-                    println!("Event logging    : available");
-                    println!("Native executor  : not implemented");
-                    println!("ELF64 parser     : available (inspection only)");
-                    println!("ELF load planner : available (planning only)");
-                    println!("ELF loader       : not implemented");
-                    println!("Syscall layer    : not implemented");
-                    println!("CPU emulator     : not implemented");
-                    println!("Linux guest boot : not available");
-                    println!("Machine interface: nelroot engine status --json");
+                    ui::banner("Engine capability status");
+                    ui::heading("Available");
+                    ui::state("Core", true, "initialized");
+                    ui::state("Host detection", true, "platform information");
+                    ui::state("Configuration", true, "user settings");
+                    ui::state("Image catalog", true, "local metadata");
+                    ui::state("Registry client", true, "HTTPS + SHA-256");
+                    ui::state("Event logging", true, "local event log");
+                    ui::state("ELF64 inspector", true, "metadata only");
+                    ui::state("ELF load planner", true, "planning only");
+                    ui::heading("Under development");
+                    ui::state("Native executor", false, "not implemented");
+                    ui::state("ELF memory loader", false, "not implemented");
+                    ui::state("Syscall layer", false, "not implemented");
+                    ui::state("CPU emulator", false, "not implemented");
+                    ui::warn("Guest Linux execution is not available yet.");
+                    ui::muted("Machine interface: nelroot engine status --json");
                 }
             }
         },
