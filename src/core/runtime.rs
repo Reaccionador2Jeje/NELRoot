@@ -474,7 +474,7 @@ pub fn bind_mount_rootfs_read_only(rootfs: &Path, target: &Path) -> io::Result<(
             root.as_ptr(),
             target.as_ptr(),
             std::ptr::null(),
-            (libc::MS_BIND | libc::MS_REC) as libc::c_ulong,
+            libc::MS_BIND as libc::c_ulong,
             std::ptr::null(),
         )
     } != 0
