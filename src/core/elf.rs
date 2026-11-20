@@ -137,8 +137,13 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
                 .virtual_address
                 .checked_add(header.memory_size)
                 .ok_or("ELF load segment virtual address overflow")?;
-            if header.alignment > 1 && !header.alignment.is_power_of_two() {
-                return Err("ELF load segment alignment is not a power of two".into());
+            if header.alignment > 1 {
+                if !header.alignment.is_power_of_two() {
+                    return Err("ELF load segment alignment is not a power of two".into());
+                }
+                if header.virtual_address % header.alignment != header.offset % header.alignment {
+                    return Err("ELF load segment file offset and virtual address are not congruent".into());
+                }
             }
         } else if header.kind == 3 {
             if interpreter.is_some() {
@@ -209,8 +214,7 @@ mod tests {
         let ph = ELF_HEADER_SIZE;
         bytes[ph..ph + 4].copy_from_slice(&1_u32.to_le_bytes());
         bytes[ph + 4..ph + 8].copy_from_slice(&5_u32.to_le_bytes());
-        let file_len = bytes.len() as u64;
-        bytes[ph + 8..ph + 16].copy_from_slice(&file_len.to_le_bytes());
+        bytes[ph + 8..ph + 16].copy_from_slice(&0_u64.to_le_bytes());
         bytes[ph + 16..ph + 24].copy_from_slice(&0x400000_u64.to_le_bytes());
         bytes[ph + 32..ph + 40].copy_from_slice(&0_u64.to_le_bytes());
         bytes[ph + 40..ph + 48].copy_from_slice(&4096_u64.to_le_bytes());
@@ -268,6 +272,14 @@ mod tests {
     #[test]
     fn rejects_relative_pt_interp_path() {
         let bytes = elf_with_interpreter(b"ld-linux.so");
+        assert!(inspect_elf_bytes(&bytes).is_err());
+    }
+
+    #[test]
+    fn rejects_misaligned_load_segment() {
+        let mut bytes = minimal_elf64();
+        let ph = ELF_HEADER_SIZE;
+        bytes[ph + 8..ph + 16].copy_from_slice(&1_u64.to_le_bytes());
         assert!(inspect_elf_bytes(&bytes).is_err());
     }
 
