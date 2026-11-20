@@ -53,7 +53,7 @@ enum Commands {
     Engine {
         #[command(subcommand)]
         command: EngineCommands,
-    },,
+    },
     /// Execute a host-native program inside a registered image using Linux chroot.
     Run {
         /// Registered image name.
@@ -545,12 +545,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Event logging", true, "local event log");
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
+                    ui::state("Native chroot runner", runtime::supported(), "Linux host kernel");
                     ui::heading("Under development");
                     ui::state("Native executor", false, "not implemented");
                     ui::state("ELF memory loader", false, "not implemented");
                     ui::state("Syscall layer", false, "not implemented");
                     ui::state("CPU emulator", false, "not implemented");
-                    ui::warn("Guest Linux execution is not available yet.");
+                    if runtime::supported() && runtime::has_required_privileges() {
+                        ui::good("Native same-architecture chroot execution is available.");
+                    } else {
+                        ui::warn("Native chroot execution needs a Linux host and effective root.");
+                    }
+                    ui::warn("This backend is not a security sandbox or an independent syscall emulator.");
                     ui::muted("Machine interface: nelroot engine status --json");
                 }
             }
