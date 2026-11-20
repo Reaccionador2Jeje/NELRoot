@@ -369,6 +369,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Type: {}", info.file_type);
                 println!("Machine: {} ({})", info.machine, info.architecture);
                 println!("Entry point: 0x{:016x}", info.entry_point);
+                if let Some(interpreter) = &info.interpreter {
+                    println!("Interpreter: {interpreter}");
+                } else {
+                    println!("Interpreter: static / not specified");
+                }
                 println!("Program headers: {}", info.program_headers.len());
                 for (index, header) in info.program_headers.iter().enumerate() {
                     println!(
