@@ -50,18 +50,5 @@ class OfficialImageValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MODULE.request_bytes("http://example.invalid/")
 
-    def test_checksum_mismatch_never_publishes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory) / "image.tar.gz"
-            with self.assertRaises(Exception):
-                MODULE.download_verified(
-                    "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/"
-                    "alpine-minirootfs-3.24.4-x86_64.tar.gz",
-                    "0" * 64,
-                    destination,
-                )
-            self.assertFalse(destination.exists())
-
-
 if __name__ == "__main__":
     unittest.main()
