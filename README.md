@@ -78,11 +78,26 @@ nelroot image validate <rootfs-path>
 nelroot image inspect <name>
 nelroot image register <name> <rootfs-path> --architecture aarch64
 nelroot image remove <name>
+nelroot image search ubuntu --registry https://example.org/nelroot/index.json
+nelroot image pull ubuntu --registry https://example.org/nelroot/index.json --architecture aarch64
+nelroot image clean
 
+nelroot logs --lines 50
 nelroot engine status
 ```
 
 Run `nelroot <command> --help` for command-specific help.
+
+### Remote image registry
+
+NELRoot supports a versioned, HTTPS-only JSON registry index. Registry entries include an image name, description, architecture, HTTPS archive URL and SHA-256 digest. The index is limited to 4 MiB; invalid names, duplicate name/architecture pairs, non-HTTPS URLs and malformed checksums are rejected.
+
+```bash
+nelroot image search ubuntu --registry https://example.org/nelroot/index.json
+nelroot image pull ubuntu --registry https://example.org/nelroot/index.json --architecture aarch64
+```
+
+The registry client verifies the archive SHA-256 before importing it. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
 
 ### Local image catalog
 
