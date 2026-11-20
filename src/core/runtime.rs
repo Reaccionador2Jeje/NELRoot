@@ -163,60 +163,156 @@ pub fn probe_user_namespace_creation() -> std::io::Result<()> {
 /// exits immediately; no host namespace or mount propagation is changed.
 #[cfg(target_os = "linux")]
 pub fn probe_rootless_user_and_mount_namespaces() -> io::Result<UserNamespaceMapping> {
-    let mut pipes = [0; 2];
-    // SAFETY: pipes points to two writable integers; pipe2 initializes both.
-    if unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+    let mut ready_pipe = [0; 2];
+    let mut release_pipe = [0; 2];
+
+    // SAFETY: pipe2 initializes the two descriptors in each valid array.
+    if unsafe { libc::pipe2(ready_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
         return Err(io::Error::last_os_error());
     }
+    if unsafe { libc::pipe2(release_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        let error = io::Error::last_os_error();
+        unsafe {
+            libc::close(ready_pipe[0]);
+            libc::close(ready_pipe[1]);
+        }
+        return Err(error);
+    }
 
-    // SAFETY: the child performs only libc syscalls and _exit after fork.
+    // SAFETY: the child performs only close/unshare/read/write/mount/_exit
+    // syscalls after fork and never resumes normal Rust execution.
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let error = io::Error::last_os_error();
         unsafe {
-            libc::close(pipes[0]);
-            libc::close(pipes[1]);
+            libc::close(ready_pipe[0]);
+            libc::close(ready_pipe[1]);
+            libc::close(release_pipe[0]);
+            libc::close(release_pipe[1]);
         }
         return Err(error);
     }
 
     if pid == 0 {
-        // Child: close the write end, enter userns, then announce readiness.
         unsafe {
-            libc::close(pipes[1]);
-            if libc::unshare(libc::CLONE_NEWUSER) != 0 {
+            libc::close(ready_pipe[0]);
+            libc::close(release_pipe[1]);
+
+            let namespace_result = libc::unshare(libc::CLONE_NEWUSER);
+            let result_byte = if namespace_result == 0 {
+                0_u8
+            } else {
+                (*libc::__errno_location()).clamp(1, 255) as u8
+            };
+            if libc::write(ready_pipe[1], (&result_byte as *const u8).cast(), 1) != 1 {
+                libc::_exit(248);
+            }
+            if result_byte != 0 {
+                libc::_exit(result_byte as i32);
+            }
+
+            let mut release = 0_u8;
+            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1
+                || release != 1
+            {
+                libc::_exit(247);
+            }
+
+            if libc::unshare(libc::CLONE_NEWNS) != 0 {
                 let errno = *libc::__errno_location();
                 libc::_exit(errno.clamp(1, 255));
             }
-            let ready = [1_u8];
-            if libc::write(pipes[0], ready.as_ptr().cast(), 0) < 0 {
-                libc::_exit(250);
+            if libc::mount(
+                std::ptr::null(),
+                c"/".as_ptr(),
+                std::ptr::null(),
+                (libc::MS_REC | libc::MS_PRIVATE) as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0
+            {
+                let errno = *libc::__errno_location();
+                libc::_exit(errno.clamp(1, 255));
             }
+            libc::_exit(0);
         }
-        // The read end cannot be used to notify the parent. Use a dedicated
-        // second pipe in the next version; fail closed rather than proceeding.
-        unsafe { libc::_exit(249) };
     }
 
-    // Parent: this initial implementation is intentionally not allowed to
-    // claim a successful handshake until both pipe directions are available.
+    // Parent owns the opposite ends of both synchronization pipes.
     unsafe {
-        libc::close(pipes[0]);
-        libc::close(pipes[1]);
-        libc::kill(pid, libc::SIGKILL);
+        libc::close(ready_pipe[1]);
+        libc::close(release_pipe[0]);
     }
+
+    let mut ready = 0_u8;
+    // SAFETY: ready points to one writable byte and the pipe descriptor is open.
+    let read_result = unsafe { libc::read(ready_pipe[0], (&mut ready as *mut u8).cast(), 1) };
+    unsafe { libc::close(ready_pipe[0]) };
+    if read_result != 1 || ready != 0 {
+        unsafe {
+            libc::close(release_pipe[1]);
+            libc::kill(pid, libc::SIGKILL);
+        }
+        let status = wait_for_child(pid)?;
+        let _ = status;
+        return Err(if read_result == 1 {
+            io::Error::from_raw_os_error(ready as i32)
+        } else {
+            io::Error::last_os_error()
+        });
+    }
+
+    let mapping = match configure_user_namespace_mappings(pid) {
+        Ok(mapping) => mapping,
+        Err(error) => {
+            unsafe {
+                libc::close(release_pipe[1]);
+                libc::kill(pid, libc::SIGKILL);
+            }
+            let _ = wait_for_child(pid);
+            return Err(error);
+        }
+    };
+
+    let release = 1_u8;
+    // SAFETY: release points to one readable byte for the waiting child.
+    let write_result =
+        unsafe { libc::write(release_pipe[1], (&release as *const u8).cast(), 1) };
+    unsafe { libc::close(release_pipe[1]) };
+    if write_result != 1 {
+        unsafe { libc::kill(pid, libc::SIGKILL) };
+        let _ = wait_for_child(pid);
+        return Err(io::Error::last_os_error());
+    }
+
+    let status = wait_for_child(pid)?;
+    if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
+        Ok(mapping)
+    } else if libc::WIFEXITED(status) {
+        Err(io::Error::from_raw_os_error(libc::WEXITSTATUS(status)))
+    } else {
+        Err(io::Error::other(
+            "rootless namespace probe child did not exit normally",
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_child(pid: libc::pid_t) -> io::Result<libc::c_int> {
     let mut status = 0;
-    // SAFETY: status is a valid writable pointer for waitpid.
-    while unsafe { libc::waitpid(pid, &mut status, 0) } < 0 {
-        let error = io::Error::last_os_error();
-        if error.kind() != io::ErrorKind::Interrupted {
+    loop {
+        // SAFETY: status is a valid writable pointer and pid is our child.
+        let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
+        if waited == pid {
+            return Ok(status);
+        }
+        if waited < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
             return Err(error);
         }
     }
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "namespace handshake requires a bidirectional synchronization channel",
-    ))
 }
 
 /// The single-ID mapping installed for a rootless user namespace.
