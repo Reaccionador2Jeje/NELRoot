@@ -22,7 +22,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
 - [x] Non-executing ELF load-plan foundation with page-range, entry-point and W^X validation.
-- [ ] Actual ELF memory mapping, loading and dynamic-linking support.
+- [x] Bounded Linux memory mapping for host-native static ET_DYN images, including PT_LOAD population, BSS zero-fill, page permissions and RAII unmapping (mapping only; no execution).
+- [ ] Full ELF loading, relocation processing, dynamic-linking and initial process-stack support.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
