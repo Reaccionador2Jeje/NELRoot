@@ -251,7 +251,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             if runtime::has_required_privileges() {
                 ui::good("Required chroot/setuid/setgid capabilities are present.");
             } else {
-                ui::warn("Required chroot/setuid/setgid capabilities are unavailable to this process.");
+                ui::warn(
+                    "Required chroot/setuid/setgid capabilities are unavailable to this process.",
+                );
             }
             ui::state("Independent ELF executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
@@ -576,11 +578,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
                     } else {
-                        ui::warn("Native chroot needs Linux plus effective root/chroot/setuid/setgid capabilities.");
+                        ui::warn(
+                            "Native chroot needs Linux plus effective root/chroot/setuid/setgid capabilities.",
+                        );
                     }
                     ui::warn(
-                "This backend is not a security sandbox or an independent syscall emulator.",
-            );
+                        "This backend is not a security sandbox or an independent syscall emulator.",
+                    );
                     ui::muted("Machine interface: nelroot engine status --json");
                 }
             }
