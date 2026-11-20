@@ -10,7 +10,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Validate, register, inspect and unregister existing root filesystem directories.
 - [x] HTTPS image archive download with mandatory SHA-256 verification.
 - [x] Safe gzip/tar rootfs import into NELRoot-managed image storage.
-- [x] Versioned HTTPS image registry index with search, architecture selection, verified pull and safe stale-cache cleanup.
+- [x] Versioned HTTPS image registry index with search, architecture selection, verified pull/update and safe stale-cache cleanup.
 - [x] User-scoped data/cache/log/runtime directory initialization and local event log.
 - [x] Expanded host diagnostics with kernel and host-interface detection.
 - [x] Versioned JSON engine capability probe for NEXORA (`nelroot engine status --json`).
