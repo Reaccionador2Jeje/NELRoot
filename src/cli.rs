@@ -83,6 +83,17 @@ enum ImageCommands {
         #[arg(long, default_value_t = std::env::consts::ARCH)]
         architecture: String,
     },
+    /// Update a NELRoot-managed image from a registry.
+    Update {
+        /// Existing image name in the local catalog and registry.
+        name: String,
+        /// HTTPS URL of the registry index.json.
+        #[arg(long)]
+        registry: String,
+        /// Guest CPU architecture.
+        #[arg(long, default_value_t = std::env::consts::ARCH)]
+        architecture: String,
+    },
     /// Download an HTTPS image archive and verify its SHA-256 checksum.
     Download {
         /// HTTPS URL of a .tar.gz image archive.
@@ -261,6 +272,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     &format!("image pulled: {name} ({architecture})"),
                 );
                 println!("Image '{name}' downloaded, SHA-256 verified and imported.");
+                println!("Root filesystem: {}", rootfs.display());
+                println!("Architecture: {architecture}");
+            }
+            ImageCommands::Update {
+                name,
+                registry: registry_url,
+                architecture,
+            } => {
+                let rootfs = registry::update(&registry_url, &name, &architecture)?;
+                let _ = logging::record(
+                    "info",
+                    &format!("image updated: {name} ({architecture})"),
+                );
+                println!("Image '{name}' updated and SHA-256 verified.");
                 println!("Root filesystem: {}", rootfs.display());
                 println!("Architecture: {architecture}");
             }
