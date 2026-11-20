@@ -95,10 +95,12 @@ nelroot image clean
 nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
+# Linux only: map a static host-native PIE into memory, without executing it
+nelroot elf map /path/to/static-pie
 nelroot engine status
 nelroot engine status --json
 
-# Native Linux execution (Linux host + effective root + CAP_SYS_CHROOT)
+# Native Linux execution (Linux host + effective UID 0 and required capabilities)
 nelroot run ubuntu -- /bin/uname -a
 nelroot shell ubuntu
 # Optional, unsafe: retain host root credentials inside chroot
