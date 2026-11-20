@@ -561,6 +561,16 @@ mod tests {
     }
 
     #[test]
+    fn loader_copy_can_read_execute_only_segment_bytes() {
+        let (bytes, mut info) = static_pie();
+        info.program_headers[0].flags = PF_X;
+        let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+        let copied = mapped.copy_virtual_bytes(0, 4).unwrap();
+        assert_eq!(copied, b"\\x7fELF");
+        assert!(mapped.read_bytes(0, 4).is_err());
+    }
+
+    #[test]
     fn rejects_non_power_of_two_segment_alignment() {
         let (bytes, mut info) = static_pie();
         info.program_headers[0].alignment = 3;
