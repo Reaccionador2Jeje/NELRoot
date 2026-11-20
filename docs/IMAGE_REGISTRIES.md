@@ -63,10 +63,24 @@ Search a local catalog copy:
     nelroot image hub-catalog-search ./catalog.json alpine
     nelroot image hub-catalog-search ./catalog.json alpine --architecture x86_64
 
-These commands validate and search local JSON files. They do not yet contact a
-hosted Hub, publish images, download a manifest, or pull an image from a Hub
-catalog. The remote service, publishing workflow, authentication policy,
-storage backend and manifest-fetch client are subsequent milestones.
+The CLI can also search and pull from a live first-party Hub:
+
+    nelroot image hub-remote-search alpine --hub https://hub.example.org
+    nelroot image hub-remote-search ubuntu --hub https://hub.example.org --architecture x86_64
+
+    nelroot image hub-pull atdev/alpine-3.22 --hub https://hub.example.org
+    nelroot image hub-pull atdev/ubuntu-24.04 --hub https://hub.example.org --architecture x86_64 --name ubuntu-dev
+
+    nelroot image hub-update atdev/alpine-3.22 alpine-x86_64 --hub https://hub.example.org
+
+A pull fetches the catalog, selects the exact image ID and architecture,
+downloads the content-addressed manifest, verifies its catalog-published
+SHA-256, checks that manifest metadata agrees with the catalog, then downloads
+the rootfs over HTTPS. The archive is limited to 512 MiB and must match both
+the manifest's exact byte size and SHA-256 before safe tar extraction and local
+registration. Update is restricted to NELRoot-managed images; externally
+registered directories are not replaced. The CLI does not yet publish images
+or manage Hub credentials.
 
 ## Existing archive-index registry
 
