@@ -77,54 +77,11 @@ pub fn apply_relative_relocations(
         mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
     let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic_length)?;
 
-    let mut rela_address = None;
-    let mut rela_size = None;
-    let mut rela_entry_size = None;
-    let mut saw_null = false;
-
-    for entry in dynamic_bytes.chunks_exact(ELF64_DYNAMIC_ENTRY_SIZE) {
-        let tag = i64::from_le_bytes(entry[0..8].try_into()?);
-        let value = u64::from_le_bytes(entry[8..16].try_into()?);
-        if tag == DT_NULL {
-            saw_null = true;
-            break;
-        }
-        match tag {
-            DT_RELA => set_once(&mut rela_address, value, "DT_RELA")?,
-            DT_RELASZ => set_once(&mut rela_size, value, "DT_RELASZ")?,
-            DT_RELAENT => set_once(&mut rela_entry_size, value, "DT_RELAENT")?,
-            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
-            | DT_RELR | DT_RELRSZ | DT_RELRENT
-            | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
-            | DT_TEXTREL => {
-                if value != 0 || tag == DT_TEXTREL {
-                    return Err(
-                        "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
-                            .into(),
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if !saw_null {
-        return Err("PT_DYNAMIC is missing its DT_NULL terminator".into());
-    }
-
-    let any_rela = rela_address.is_some() || rela_size.is_some() || rela_entry_size.is_some();
-    if !any_rela {
-        return Ok(0);
-    }
-
-    let rela_address = rela_address.ok_or("DT_RELA is missing")?;
-    let rela_size = rela_size.ok_or("DT_RELASZ is missing")?;
-    let rela_entry_size = rela_entry_size.ok_or("DT_RELAENT is missing")?;
-    if rela_entry_size != ELF64_RELA_ENTRY_SIZE as u64
-        || rela_size % ELF64_RELA_ENTRY_SIZE as u64 != 0
-    {
-        return Err("ELF image has an unsupported RELA entry size".into());
-    }
+    let (rela_address, rela_size, rela_entry_size) =
+        match parse_dynamic_table(&dynamic_bytes)? {
+            Some(table) => table,
+            None => return Ok(0),
+        };
 
     let relocation_count = usize::try_from(rela_size / ELF64_RELA_ENTRY_SIZE as u64)?;
     if relocation_count > MAX_RELOCATIONS {
@@ -167,6 +124,65 @@ pub fn apply_relative_relocations(
     Ok(pending.len())
 }
 
+fn parse_dynamic_table(
+    dynamic_bytes: &[u8],
+) -> Result<Option<(u64, u64, u64)>, Box<dyn Error>> {
+    if dynamic_bytes.len() % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
+        return Err("PT_DYNAMIC has an invalid entry table size".into());
+    }
+
+    let mut rela_address = None;
+    let mut rela_size = None;
+    let mut rela_entry_size = None;
+    let mut saw_null = false;
+
+    for entry in dynamic_bytes.chunks_exact(ELF64_DYNAMIC_ENTRY_SIZE) {
+        let tag = i64::from_le_bytes(entry[0..8].try_into()?);
+        let value = u64::from_le_bytes(entry[8..16].try_into()?);
+        if tag == DT_NULL {
+            saw_null = true;
+            break;
+        }
+        match tag {
+            DT_RELA => set_once(&mut rela_address, value, "DT_RELA")?,
+            DT_RELASZ => set_once(&mut rela_size, value, "DT_RELASZ")?,
+            DT_RELAENT => set_once(&mut rela_entry_size, value, "DT_RELAENT")?,
+            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
+            | DT_RELR | DT_RELRSZ | DT_RELRENT
+            | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
+            | DT_TEXTREL => {
+                if value != 0 || tag == DT_TEXTREL {
+                    return Err(
+                        "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
+                            .into(),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !saw_null {
+        return Err("PT_DYNAMIC is missing its DT_NULL terminator".into());
+    }
+
+    let any_rela = rela_address.is_some() || rela_size.is_some() || rela_entry_size.is_some();
+    if !any_rela {
+        return Ok(None);
+    }
+
+    let address = rela_address.ok_or("DT_RELA is missing")?;
+    let size = rela_size.ok_or("DT_RELASZ is missing")?;
+    let entry_size = rela_entry_size.ok_or("DT_RELAENT is missing")?;
+    if entry_size != ELF64_RELA_ENTRY_SIZE as u64
+        || size % ELF64_RELA_ENTRY_SIZE as u64 != 0
+    {
+        return Err("ELF image has an unsupported RELA entry size".into());
+    }
+
+    Ok(Some((address, size, entry_size)))
+}
+
 fn set_once(
     slot: &mut Option<u64>,
     value: u64,
@@ -206,6 +222,43 @@ fn relative_relocation_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn dynamic_entry(tag: i64, value: u64) -> [u8; ELF64_DYNAMIC_ENTRY_SIZE] {
+        let mut entry = [0_u8; ELF64_DYNAMIC_ENTRY_SIZE];
+        entry[..8].copy_from_slice(&tag.to_le_bytes());
+        entry[8..].copy_from_slice(&value.to_le_bytes());
+        entry
+    }
+
+    #[test]
+    fn parses_complete_rela_dynamic_table() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&dynamic_entry(DT_RELA, 0x3000));
+        bytes.extend_from_slice(&dynamic_entry(DT_RELASZ, 24));
+        bytes.extend_from_slice(&dynamic_entry(DT_RELAENT, 24));
+        bytes.extend_from_slice(&dynamic_entry(DT_NULL, 0));
+        assert_eq!(parse_dynamic_table(&bytes).unwrap(), Some((0x3000, 24, 24)));
+    }
+
+    #[test]
+    fn rejects_dynamic_table_without_null_terminator() {
+        let bytes = dynamic_entry(DT_RELA, 0x3000);
+        assert!(parse_dynamic_table(&bytes).is_err());
+    }
+
+    #[test]
+    fn rejects_relr_dynamic_table() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&dynamic_entry(DT_RELR, 0x3000));
+        bytes.extend_from_slice(&dynamic_entry(DT_NULL, 0));
+        assert!(parse_dynamic_table(&bytes).is_err());
+    }
+
+    #[test]
+    fn accepts_dynamic_table_without_relocations() {
+        let bytes = dynamic_entry(DT_NULL, 0);
+        assert_eq!(parse_dynamic_table(&bytes).unwrap(), None);
+    }
 
     #[test]
     fn accepts_first_dynamic_tag_value() {
