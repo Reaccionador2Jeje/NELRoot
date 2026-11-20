@@ -99,9 +99,10 @@ impl X86_64Interpreter {
                 self.registers.rax = 0; // XOR EAX, EAX (zero-extends into RAX)
                 (2, StepOutcome::Continued)
             }
-            0x48 if bytes.get(1) == Some(&0xb8) => {
+            0x48 if bytes.get(1).is_some_and(|opcode| (0xb8..=0xbf).contains(opcode)) => {
                 if bytes.len() < 10 { return Err(CpuError::TruncatedInstruction); }
-                self.registers.rax = u64::from_le_bytes(bytes[2..10].try_into().unwrap());
+                let value = u64::from_le_bytes(bytes[2..10].try_into().unwrap());
+                self.set_register((bytes[1] - 0xb8) as usize, value);
                 (10, StepOutcome::Continued)
             }
             0x0f if bytes.get(1) == Some(&0x05) => {
@@ -130,6 +131,20 @@ impl X86_64Interpreter {
             Ok(StepOutcome::ProcessExited { code })
         } else {
             Ok(outcome)
+        }
+    }
+
+    fn set_register(&mut self, index: usize, value: u64) {
+        match index {
+            0 => self.registers.rax = value,
+            1 => self.registers.rcx = value,
+            2 => self.registers.rdx = value,
+            3 => self.registers.rbx = value,
+            4 => self.registers.rsp = value,
+            5 => self.registers.rbp = value,
+            6 => self.registers.rsi = value,
+            7 => self.registers.rdi = value,
+            _ => unreachable!("B8..BF encodes exactly eight registers"),
         }
     }
 
