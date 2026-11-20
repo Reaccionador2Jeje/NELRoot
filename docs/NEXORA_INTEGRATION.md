@@ -31,7 +31,15 @@ The exact syntax may evolve before the runtime milestone. NEXORA should initiall
 
 ## Required machine-readable response
 
-Before integration, add a versioned JSON mode with a stable schema. Each environment operation should report:
+The first versioned machine-readable probe is implemented:
+
+```bash
+nelroot engine status --json
+```
+
+It returns `schema_version`, product/version, host OS and architecture, a component status array, and `guest_execution.available`. NEXORA should check `schema_version == 1` and treat `guest_execution.available == false` as a hard stop for guest operations.
+
+Before environment lifecycle integration, add versioned JSON responses for environment listing, inspection, process execution and errors. Each environment operation should report:
 
 - API/schema version.
 - Environment identifier and lifecycle state.
