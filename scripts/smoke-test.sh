@@ -13,6 +13,7 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
 "$BINARY" elf map --help >/dev/null
+"$BINARY" elf relocate --help >/dev/null
 
 PLAIN_OUTPUT="$("$BINARY" info)"
 if printf '%s' "$PLAIN_OUTPUT" | grep -q $'\033'; then
@@ -43,6 +44,7 @@ required = {
     "elf64_inspector",
     "elf_load_planner",
     "elf_memory_mapper",
+    "elf_relative_relocator",
     "native_chroot_runtime",
 }
 available = {item["name"] for item in data["components"] if item["status"] == "available"}
