@@ -393,7 +393,15 @@ pub fn update_image_from_archive(
             return Err(error.into());
         }
 
-        let canonical = validate_rootfs(&destination)?;
+        let canonical = match validate_rootfs(&destination) {
+            Ok(path) => path,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&destination);
+                let _ = fs::rename(&backup, &destination);
+                backup_created = false;
+                return Err(error);
+            }
+        };
         let updated = catalog
             .images
             .iter_mut()
