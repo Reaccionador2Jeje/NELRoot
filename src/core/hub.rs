@@ -4,7 +4,7 @@
 //! catalog. Network transport and publishing are intentionally separate stages.
 
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CATALOG_ENTRIES: usize = 100_000;
@@ -201,11 +201,9 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
         }
     }
 
-    for (index, entry) in catalog.images.iter().enumerate() {
-        if catalog.images[index + 1..]
-            .iter()
-            .any(|other| other.id == entry.id)
-        {
+    let mut identifiers = HashSet::with_capacity(catalog.images.len());
+    for entry in &catalog.images {
+        if !identifiers.insert(entry.id.as_str()) {
             return Err(format!("catalog contains duplicate image id '{}'", entry.id));
         }
     }
@@ -222,13 +220,23 @@ fn read_metadata(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 
 pub fn load_manifest(path: &Path) -> Result<HubManifest, Box<dyn std::error::Error>> {
     let manifest: HubManifest = serde_json::from_slice(&read_metadata(path)?)?;
-    validate_manifest(&manifest).map_err(|error| format!("invalid NELRoot manifest: {error}"))?;
+    validate_manifest(&manifest).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid NELRoot manifest: {error}"),
+        )
+    })?;
     Ok(manifest)
 }
 
 pub fn load_catalog(path: &Path) -> Result<HubCatalog, Box<dyn std::error::Error>> {
     let catalog: HubCatalog = serde_json::from_slice(&read_metadata(path)?)?;
-    validate_catalog(&catalog).map_err(|error| format!("invalid NELRoot catalog: {error}"))?;
+    validate_catalog(&catalog).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid NELRoot catalog: {error}"),
+        )
+    })?;
     Ok(catalog)
 }
 
