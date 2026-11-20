@@ -270,10 +270,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::heading("NELRoot runtime");
             let namespaces = runtime::rootless_namespace_info();
+            let namespace_creation = runtime::probe_user_namespace_creation();
             ui::state(
-                "Rootless user namespaces",
+                "Rootless user namespace policy",
                 namespaces.potentially_available(),
-                "kernel-policy probe only; runtime backend not implemented yet",
+                "read-only kernel-policy hints",
+            );
+            ui::state(
+                "User namespace creation",
+                namespace_creation.is_ok(),
+                namespace_creation
+                    .as_ref()
+                    .err()
+                    .map(|error| error.to_string())
+                    .unwrap_or_else(|| "created successfully in disposable child".to_owned()),
             );
             ui::key(
                 "User namespace sysctl",
@@ -651,6 +661,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Engine { command } => match command {
             EngineCommands::Status { json } => {
                 if json {
+                    let namespace_creation = runtime::probe_user_namespace_creation();
                     let status = serde_json::json!({
                         "schema_version": 1,
                         "product": "NELRoot",
@@ -663,6 +674,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "image_catalog", "status": "available"},
                             {"name": "registry_client", "status": "available"},
                             {"name": "event_logging", "status": "available"},
+                            {"name": "process_supervisor", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
                             {"name": "elf_load_planner", "status": "available"},
                             {
@@ -683,6 +695,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 } else {
                                     "unavailable_or_unknown"
                                 }
+                            },
+                            {
+                                "name": "rootless_user_namespace_creation",
+                                "status": if namespace_creation.is_ok() {
+                                    "created_in_disposable_child"
+                                } else {
+                                    "unavailable_or_denied"
+                                },
+                                "errno": namespace_creation
+                                    .as_ref()
+                                    .err()
+                                    .and_then(std::io::Error::raw_os_error)
                             },
                             {"name": "rootless_process_runtime", "status": "not_implemented"},
                             {"name": "guest_memory_backing", "status": "model_available_not_execution"},
@@ -737,10 +761,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::banner("Engine capability status");
                     ui::heading("Available");
                     let namespaces = runtime::rootless_namespace_info();
+                    let namespace_creation = runtime::probe_user_namespace_creation();
                     ui::state(
                         "Rootless user namespace prerequisites",
                         namespaces.potentially_available(),
                         "read-only kernel-policy probe",
+                    );
+                    ui::state(
+                        "User namespace creation",
+                        namespace_creation.is_ok(),
+                        namespace_creation
+                            .as_ref()
+                            .err()
+                            .map(|error| error.to_string())
+                            .unwrap_or_else(|| "disposable child probe succeeded".to_owned()),
                     );
                     ui::state("Core", true, "initialized");
                     ui::state("Host detection", true, "platform information");
@@ -748,6 +782,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Image catalog", true, "local metadata");
                     ui::state("Registry client", true, "HTTPS + SHA-256");
                     ui::state("Event logging", true, "local event log");
+                    ui::state("Process supervisor", true, "owned child wait/terminate lifecycle");
                     ui::state("Guest memory", true, "bounded byte-backed model");
                     ui::state("Guest syscall ABI", true, "x86_64 write/exit model; connected to guest interpreter");
                     ui::state("ELF64 inspector", true, "metadata only");
