@@ -436,6 +436,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_entry_point_in_zero_filled_bss() {
+        let (bytes, mut info) = static_pie();
+        info.entry_point = 0x100;
+        assert!(MappedElf::map_bytes(&bytes, &info).is_err());
+    }
+
+    #[test]
     fn rejects_non_host_machine() {
         let (bytes, mut info) = static_pie();
         info.machine = if std::env::consts::ARCH == "aarch64" { 62 } else { 183 };
