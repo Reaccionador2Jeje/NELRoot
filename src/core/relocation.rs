@@ -77,7 +77,7 @@ pub fn apply_relative_relocations(
         mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
     let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic_length)?;
 
-    let (rela_address, rela_size, rela_entry_size) =
+    let (rela_address, rela_size, _rela_entry_size) =
         match parse_dynamic_table(&dynamic_bytes)? {
             Some(table) => table,
             None => return Ok(0),
