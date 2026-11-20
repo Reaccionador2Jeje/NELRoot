@@ -96,10 +96,6 @@ nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
-
-# Inspect ELF64 metadata without executing the file
-nelroot elf inspect ./program
-nelroot engine status --json
 ```
 
 Run `nelroot <command> --help` for command-specific help.
