@@ -250,7 +250,10 @@ pub fn import_archive(
         };
 
         if root != staging {
-            let normalized = store.join(format!(".{name}.rootfs-{}", std::process::id()));
+            let normalized = store.join(format!(
+                ".{name}.rootfs-{}-{nonce}",
+                std::process::id()
+            ));
             fs::rename(&root, &normalized)?;
             fs::remove_dir_all(&staging)?;
             fs::rename(normalized, &destination)?;
@@ -272,6 +275,13 @@ pub fn import_archive(
     if result.is_err() {
         if staging.exists() {
             let _ = fs::remove_dir_all(&staging);
+        }
+        let normalized = store.join(format!(
+            ".{name}.rootfs-{}-{nonce}",
+            std::process::id()
+        ));
+        if normalized.exists() {
+            let _ = fs::remove_dir_all(&normalized);
         }
         // A failed catalog write must not leave an unregistered managed rootfs behind.
         if destination.exists()
