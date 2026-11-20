@@ -53,6 +53,13 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(30))
         .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
     if response
