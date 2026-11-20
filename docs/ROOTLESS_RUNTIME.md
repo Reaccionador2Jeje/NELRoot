@@ -162,24 +162,3 @@ Explicit limitations: the guest is not PID 1; PID namespace supervision and sign
 Example:
 
     nelroot run-rootless alpine -- /bin/sh -c 'printf "rootless OK\\n"'
-
-
-## Docker Hub discovery and OCI manifest inspection
-
-NELRoot can query the public Docker Hub web catalog to search repositories and
-list their tags. The registry client obtains a short-lived anonymous bearer token
-from Docker Hub's token service and resolves OCI/Docker manifests through the
-Docker Registry HTTP API. Multi-platform image indexes are inspected by selecting
-the requested Linux architecture (for example x86_64 → amd64 or aarch64 → arm64).
-
-Commands:
-
-    nelroot image hub-search alpine
-    nelroot image hub-tags alpine
-    nelroot image hub-inspect alpine latest --architecture x86_64
-
-This milestone is remote discovery and manifest inspection only. It does not
-download image layers, apply OCI whiteouts, reconstruct a root filesystem, or
-register the image locally. Those operations require the dedicated layer-pull
-and safe extraction pipeline; the existing HTTPS archive registry remains
-available independently.
