@@ -155,6 +155,57 @@ pub fn probe_user_namespace_creation() -> std::io::Result<()> {
     }
 }
 
+/// The single-ID mapping installed for a rootless user namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UserNamespaceMapping {
+    /// Namespace UID 0 maps to this unprivileged host UID.
+    pub host_uid: u32,
+    /// Namespace GID 0 maps to this unprivileged host GID.
+    pub host_gid: u32,
+}
+
+#[cfg(target_os = "linux")]
+fn format_id_map(host_id: u32) -> String {
+    format!("0 {host_id} 1\\n")
+}
+
+/// Configure a paused child that has already entered a new user namespace.
+///
+/// The caller must keep the child blocked until this function returns, then
+/// release it to continue. This helper writes only the child's procfs mapping
+/// files; it does not create namespaces, synchronize a child, or launch a guest.
+#[cfg(target_os = "linux")]
+pub fn configure_user_namespace_mappings(
+    child_pid: libc::pid_t,
+) -> io::Result<UserNamespaceMapping> {
+    if child_pid <= 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "child PID must be a positive process ID",
+        ));
+    }
+
+    // SAFETY: geteuid/getegid take no pointers and only read process credentials.
+    let mapping = UserNamespaceMapping {
+        host_uid: unsafe { libc::geteuid() },
+        host_gid: unsafe { libc::getegid() },
+    };
+    let proc_child = Path::new("/proc").join(child_pid.to_string());
+
+    // The kernel requires setgroups to be disabled before an unprivileged
+    // process writes gid_map. Fail closed if this operation is unavailable.
+    std::fs::write(proc_child.join("setgroups"), "deny\\n")?;
+    std::fs::write(proc_child.join("uid_map"), format_id_map(mapping.host_uid))?;
+    std::fs::write(proc_child.join("gid_map"), format_id_map(mapping.host_gid))?;
+
+    Ok(mapping)
+}
+
+#[cfg(test)]
+fn format_id_map_for_test(host_id: u32) -> String {
+    format!("0 {host_id} 1\\n")
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
@@ -379,6 +430,12 @@ mod tests {
             }
             .potentially_available()
         );
+    }
+
+    #[test]
+    fn user_namespace_id_map_format_is_single_id_and_newline_terminated() {
+        assert_eq!(format_id_map_for_test(1000), "0 1000 1\\n");
+        assert_eq!(format_id_map_for_test(0), "0 0 1\\n");
     }
 
     #[test]
