@@ -115,6 +115,34 @@ enum ImageCommands {
         /// Path to the manifest JSON file.
         path: std::path::PathBuf,
     },
+    /// Generate an Ed25519 signing key pair (private key is stored locally).
+    HubKeygen {
+        /// Output path for the private 32-byte key.
+        private_key: std::path::PathBuf,
+        /// Output path for the public key (hex encoded).
+        public_key: std::path::PathBuf,
+    },
+    /// Sign the exact bytes of a validated Hub manifest.
+    HubSign {
+        /// Path to the manifest JSON file.
+        manifest: std::path::PathBuf,
+        /// Path to the private signing key.
+        #[arg(long)]
+        key: std::path::PathBuf,
+        /// Output path for the detached signature JSON.
+        #[arg(long)]
+        output: std::path::PathBuf,
+    },
+    /// Verify a detached manifest signature against an explicitly trusted public key.
+    HubVerify {
+        /// Path to the manifest JSON file.
+        manifest: std::path::PathBuf,
+        /// Path to the detached signature JSON.
+        signature: std::path::PathBuf,
+        /// Path to the trusted public key (hex encoded).
+        #[arg(long)]
+        key: std::path::PathBuf,
+    },
     /// Validate a first-party NELRoot Hub catalog JSON file.
     HubCatalogValidate {
         /// Path to the catalog JSON file.
@@ -508,6 +536,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Rootfs size", manifest.image.rootfs.size_bytes);
                 ui::key("SHA-256", &manifest.image.rootfs.sha256);
                 ui::key("Download URL", &manifest.image.rootfs.download_url);
+            }
+            ImageCommands::HubKeygen { private_key, public_key } => {
+                let key_id = hub_signing::generate_keypair(&private_key, &public_key)?;
+                ui::banner("NELRoot Hub Ed25519 identity");
+                ui::good("Signing key pair generated.");
+                ui::key("Key ID", key_id);
+                ui::key("Private key", private_key.display());
+                ui::key("Public key", public_key.display());
+                ui::warn("Keep the private key secret and backed up. Share the public key through an independently trusted channel.");
+            }
+            ImageCommands::HubSign { manifest, key, output } => {
+                let signed = hub_signing::sign_manifest(&manifest, &key, &output)?;
+                ui::banner("NELRoot Hub manifest signature");
+                ui::good("Manifest signature created.");
+                ui::key("Key ID", signed.key_id);
+                ui::key("Manifest SHA-256", signed.manifest_sha256);
+                ui::key("Signature", output.display());
+            }
+            ImageCommands::HubVerify { manifest, signature, key } => {
+                let verified = hub_signing::verify_manifest(&manifest, &signature, &key)?;
+                ui::banner("NELRoot Hub signature verification");
+                ui::good("Ed25519 signature is valid for the exact manifest bytes.");
+                ui::key("Key ID", verified.key_id);
+                ui::key("Manifest SHA-256", verified.manifest_sha256);
+                ui::muted("Trust comes from the public key you explicitly supplied; the signature file is not itself a trust source.");
             }
             ImageCommands::HubCatalogValidate { path } => {
                 let catalog = hub::load_catalog(&path)?;
