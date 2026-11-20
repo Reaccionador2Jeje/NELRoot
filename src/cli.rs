@@ -8,7 +8,8 @@ use crate::ui;
     name = "nelroot",
     version,
     about = "Independent Linux execution and virtualization engine",
-    long_about = "Independent first-party Linux runtime and systems project by AtDev."
+    long_about = "Independent first-party Linux runtime and systems project by AtDev.",
+    color = clap::ColorChoice::Auto
 )]
 pub struct Cli {
     #[command(subcommand)]
