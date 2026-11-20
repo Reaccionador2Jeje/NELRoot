@@ -509,14 +509,20 @@ mod tests {
     #[test]
     fn writes_only_to_writable_guest_pages() {
         let (bytes, mut info) = static_pie();
-        info.program_headers[0].flags = PF_R | PF_W;
+        info.program_headers[0].memory_size = 4096;
+        info.program_headers.push(ProgramHeader {
+            kind: PT_LOAD,
+            flags: PF_R | PF_W,
+            offset: bytes.len() as u64,
+            virtual_address: 4096,
+            file_size: 0,
+            memory_size: 4096,
+            alignment: 4096,
+        });
         let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
-        mapped.write_bytes(0, b"DATA").unwrap();
-        assert_eq!(mapped.read_bytes(0, 4).unwrap(), b"DATA");
-
-        let (bytes, info) = static_pie();
-        let mut read_only = MappedElf::map_bytes(&bytes, &info).unwrap();
-        assert!(read_only.write_bytes(0, b"NOPE").is_err());
+        mapped.write_bytes(4096, b"DATA").unwrap();
+        assert_eq!(mapped.read_bytes(4096, 4).unwrap(), b"DATA");
+        assert!(mapped.write_bytes(0, b"NOPE").is_err());
     }
 
     #[test]
