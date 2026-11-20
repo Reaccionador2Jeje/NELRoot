@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::core::{config, elf, host, images, logging, registry, runtime};
+#[cfg(target_os = "linux")]
+use crate::core::{memory, relocation};
 use crate::ui;
 
 #[derive(Debug, Parser)]
@@ -193,6 +195,12 @@ enum ElfCommands {
     /// Map a static host-native ET_DYN image into memory without executing it (Linux only).
     #[cfg(target_os = "linux")]
     Map {
+        /// Path to the ELF file.
+        path: std::path::PathBuf,
+    },
+    /// Map a static PIE and apply supported RELATIVE relocations without executing it (Linux only).
+    #[cfg(target_os = "linux")]
+    Relocate {
         /// Path to the ELF file.
         path: std::path::PathBuf,
     },
@@ -535,6 +543,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     format!("{:#018x}", mapped.min_virtual_address()),
                 );
                 ui::muted("The mapping is released automatically when this command exits.");
+            }
+            #[cfg(target_os = "linux")]
+            ElfCommands::Relocate { path } => {
+                let info = elf::inspect_file(&path)?;
+                let mut mapped = memory::MappedElf::map_file(&path)?;
+                let count = relocation::apply_relative_relocations(&mut mapped, &info)?;
+                ui::banner("ELF relative relocations");
+                ui::key("File", path.display());
+                ui::key("Relocations applied", count);
+                ui::key("Load bias", format!("{:#018x}", mapped.load_bias()));
+                ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
+                ui::warn("Relocations applied in memory only; the ELF entry point was not executed.");
             }
         },
         Commands::Engine { command } => match command {
