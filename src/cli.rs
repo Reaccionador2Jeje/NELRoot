@@ -867,7 +867,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Host detection", true, "platform information");
                     ui::state("Configuration", true, "user settings");
                     ui::state("Image catalog", true, "local metadata");
-                    ui::state("Registry client", true, "HTTPS + SHA-256");
+                    ui::state("Registry client", true, "HTTPS + SHA-256 archive index; Docker Hub search/tags and OCI manifest inspection");
                     ui::state("Event logging", true, "local event log");
                     ui::state("Process supervisor", true, "owned child wait/terminate lifecycle");
                     ui::state("Guest memory", true, "bounded byte-backed model");
