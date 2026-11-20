@@ -449,7 +449,10 @@ impl MappedElf {
         virtual_address: u64,
         length: usize,
     ) -> Result<Vec<u8>, &'static str> {
-        let offset = self.virtual_address_offset(virtual_address, length)?;
+        let image_address = virtual_address
+            .checked_sub(self.load_bias)
+            .ok_or("guest virtual address precedes the ELF load bias")?;
+        let offset = self.virtual_address_offset(image_address, length)?;
         if length == 0 {
             return Ok(Vec::new());
         }
@@ -565,7 +568,7 @@ mod tests {
         let (bytes, mut info) = static_pie();
         info.program_headers[0].flags = PF_X;
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
-        let copied = mapped.copy_virtual_bytes(0, 4).unwrap();
+        let copied = mapped.copy_virtual_bytes(mapped.load_bias(), 4).unwrap();
         assert_eq!(copied, b"\x7fELF");
         assert!(mapped.read_bytes(0, 4).is_err());
     }
