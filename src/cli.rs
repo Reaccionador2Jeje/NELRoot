@@ -248,7 +248,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
-            ui::state("ELF load planner", true, "mapping plan only");\n            ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
+            ui::state("ELF load planner", true, "mapping plan only");
+            ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
             ui::state(
                 "Native chroot runner",
                 runtime::supported(),
@@ -542,7 +543,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "registry_client", "status": "available"},
                             {"name": "event_logging", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
-                            {"name": "elf_load_planner", "status": "available"},\n                            {"name": "elf_memory_mapper", "status": if cfg!(target_os = "linux") { "available" } else { "not_implemented" }},
+                            {"name": "elf_load_planner", "status": "available"},
+                            {"name": "elf_memory_mapper", "status": if cfg!(target_os = "linux") { "available" } else { "not_implemented" }},
                             {
                                 "name": "native_chroot_runtime",
                                 "status": if runtime::supported() {
@@ -583,7 +585,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Registry client", true, "HTTPS + SHA-256");
                     ui::state("Event logging", true, "local event log");
                     ui::state("ELF64 inspector", true, "metadata only");
-                    ui::state("ELF load planner", true, "planning only");\n                    ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
+                    ui::state("ELF load planner", true, "planning only");
+                    ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
                     ui::state(
                         "Native chroot runner",
                         runtime::supported(),
