@@ -13,15 +13,41 @@ pub fn data_dir() -> PathBuf {
     home.join(".nelroot")
 }
 
+pub fn cache_dir() -> PathBuf {
+    data_dir().join("cache")
+}
+
+pub fn logs_dir() -> PathBuf {
+    data_dir().join("logs")
+}
+
+pub fn runtime_dir() -> PathBuf {
+    data_dir().join("run")
+}
+
+pub fn config_path() -> PathBuf {
+    data_dir().join("config.toml")
+}
+
+/// Create NELRoot's complete, user-scoped directory layout and default files.
 pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let directory = data_dir();
-    fs::create_dir_all(&directory)?;
+    for path in [
+        directory.clone(),
+        directory.join("images"),
+        cache_dir(),
+        cache_dir().join("downloads"),
+        logs_dir(),
+        runtime_dir(),
+    ] {
+        fs::create_dir_all(path)?;
+    }
 
-    let config_path = directory.join("config.toml");
+    let config_path = config_path();
     if !config_path.exists() {
         fs::write(
             &config_path,
-            "# NELRoot configuration\ndata_dir = \"~/.nelroot\"\nimage_catalog = \"images.toml\"\n",
+            "# NELRoot configuration (schema v1)\nschema_version = 1\nlog_level = \"info\"\n\n[paths]\nimage_catalog = \"images.toml\"\nimage_store = \"images\"\ncache = \"cache\"\nlogs = \"logs\"\nruntime = \"run\"\n",
         )?;
     }
 
@@ -38,7 +64,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn data_directory_has_nelroot_suffix() {
-        assert!(data_dir().ends_with(".nelroot"));
+    fn standard_directories_are_inside_data_dir() {
+        assert!(cache_dir().starts_with(data_dir()));
+        assert!(logs_dir().starts_with(data_dir()));
+        assert!(runtime_dir().starts_with(data_dir()));
+    }
+
+    #[test]
+    fn data_directory_has_nelroot_suffix_by_default() {
+        if env::var_os("NELROOT_HOME").is_none() {
+            assert!(data_dir().ends_with(".nelroot"));
+        }
     }
 }
