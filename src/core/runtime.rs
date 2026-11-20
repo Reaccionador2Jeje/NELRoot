@@ -42,7 +42,10 @@ fn validate_guest_cwd(path: &Path) -> Result<(), &'static str> {
     if path.as_os_str().is_empty() || !path.is_absolute() {
         return Err("guest working directory must be an absolute path inside the image");
     }
-    if path.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
+    if path
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
         return Err("guest working directory must not contain '..'");
     }
     Ok(())
@@ -73,7 +76,7 @@ pub fn run_image(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (image_name, program, arguments, guest_cwd, keep_root);
-        return Err("the native chroot runtime is currently supported on Linux hosts only".into());
+        Err("the native chroot runtime is currently supported on Linux hosts only".into())
     }
 
     #[cfg(target_os = "linux")]
@@ -167,7 +170,9 @@ pub fn run_image(
             rootfs.display()
         );
         if keep_root {
-            eprintln!("WARNING: guest process retains host root privileges; chroot is not a security boundary.");
+            eprintln!(
+            "WARNING: guest process retains host root privileges; chroot is not a security boundary."
+        );
         } else {
             eprintln!("NELRoot: guest credentials dropped to uid/gid 65534 (nobody).");
         }
