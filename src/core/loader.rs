@@ -181,4 +181,28 @@ mod tests {
         info.entry_point = 0x900000;
         assert!(plan_load(&info, 0).is_err());
     }
+
+    #[test]
+    fn applies_load_bias_to_dynamic_image() {
+        let mut info = sample();
+        info.file_type = ET_DYN;
+        let plan = plan_load(&info, 0x2000).unwrap();
+        assert_eq!(plan.entry_point, 0x402000);
+        assert_eq!(plan.segments[0].virtual_start, 0x402000);
+    }
+
+    #[test]
+    fn rejects_unsupported_machine() {
+        let mut info = sample();
+        info.machine = 3;
+        assert!(plan_load(&info, 0).is_err());
+    }
+
+    #[test]
+    fn rejects_load_bias_address_overflow() {
+        let mut info = sample();
+        info.file_type = ET_DYN;
+        info.entry_point = u64::MAX - 0x100;
+        assert!(plan_load(&info, 0x2000).is_err());
+    }
 }
