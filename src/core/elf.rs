@@ -183,7 +183,8 @@ mod tests {
         let ph = ELF_HEADER_SIZE;
         bytes[ph..ph + 4].copy_from_slice(&1_u32.to_le_bytes());
         bytes[ph + 4..ph + 8].copy_from_slice(&5_u32.to_le_bytes());
-        bytes[ph + 8..ph + 16].copy_from_slice(&(bytes.len() as u64).to_le_bytes());
+        let file_len = bytes.len() as u64;
+        bytes[ph + 8..ph + 16].copy_from_slice(&file_len.to_le_bytes());
         bytes[ph + 16..ph + 24].copy_from_slice(&0x400000_u64.to_le_bytes());
         bytes[ph + 32..ph + 40].copy_from_slice(&0_u64.to_le_bytes());
         bytes[ph + 40..ph + 48].copy_from_slice(&4096_u64.to_le_bytes());
