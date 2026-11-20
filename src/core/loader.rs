@@ -277,6 +277,8 @@ pub struct GuestExecutionContext {
     pub mapped: super::memory::MappedElf,
     pub stack: super::stack::GuestStack,
     pub relocations_applied: usize,
+    /// Validated guest virtual-region metadata; not a host mapping or isolation boundary.
+    pub address_space: super::address_space::GuestAddressSpace,
 }
 
 #[cfg(target_os = "linux")]
@@ -296,6 +298,10 @@ impl PreparedStaticPie {
         {
             return Err("planned ELF entry point does not match the mapped executable address".into());
         }
+        let address_space = super::address_space::GuestAddressSpace::from_load_plan(
+            &self.plan,
+            &self.stack,
+        )?;
         let cpu_state = match self.info.machine {
             EM_X86_64 => InitialCpuState::X86_64 {
                 instruction_pointer: self.plan.entry_point,
@@ -318,6 +324,7 @@ impl PreparedStaticPie {
             mapped: self.mapped,
             stack: self.stack,
             relocations_applied: self.relocations_applied,
+            address_space,
         })
     }
 }
