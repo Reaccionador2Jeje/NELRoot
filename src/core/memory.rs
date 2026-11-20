@@ -192,7 +192,7 @@ impl MappedElf {
         }
         let base = NonNull::new(raw.cast::<u8>()).ok_or("mmap returned a null address")?;
 
-        let mut mapped = Self {
+        let entry_offset = usize::try_from(\n            info.entry_point\n                .checked_sub(min_page)\n                .ok_or("ELF entry point precedes the mapped image")?,\n        )?;\n\n        let mut mapped = Self {
             base,
             length,
             min_virtual_address: min_page,
@@ -348,7 +348,7 @@ mod tests {
         bytes[68..72].copy_from_slice(&(PF_R | PF_X).to_le_bytes());
         bytes[72..80].copy_from_slice(&0_u64.to_le_bytes());
         bytes[80..88].copy_from_slice(&0_u64.to_le_bytes());
-        bytes[96..104].copy_from_slice(&(bytes.len() as u64).to_le_bytes());
+        let file_size = bytes.len() as u64;\n        bytes[96..104].copy_from_slice(&file_size.to_le_bytes());
         bytes[104..112].copy_from_slice(&8192_u64.to_le_bytes());
         bytes[112..120].copy_from_slice(&4096_u64.to_le_bytes());
         let info = elf::inspect_elf_bytes(&bytes).unwrap();
@@ -360,7 +360,7 @@ mod tests {
         let (bytes, info) = static_pie();
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
         assert!(mapped.length() >= 8192);
-        assert!(mapped.entry_address() >= mapped.base_address());
+        assert!(mapped.entry_address() >= mapped.base_address());\n        assert_eq!(mapped.read_byte(0).unwrap(), 0x7f);
         let bss_offset = bytes.len();
         for offset in bss_offset..bss_offset + 64 {
             assert_eq!(mapped.read_byte(offset).unwrap(), 0);
