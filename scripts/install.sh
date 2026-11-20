@@ -59,9 +59,11 @@ INSTALL_DIR="${CUSTOM_DIR:-$INSTALL_DIR}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 say "Downloading release with Python HTTPS (no curl/wget)..."
-"$PYTHON" - "$URL" "$CHECKSUM_URL" "$TMP_DIR/nelroot.tar.gz" <<'PY'
+RELEASE_READY=0
+if "$PYTHON" - "$URL" "$CHECKSUM_URL" "$TMP_DIR/nelroot.tar.gz" <<'PY'
 import hashlib
 import sys
+import urllib.error
 import urllib.request
 
 archive_url, checksum_url, archive_path = sys.argv[1:4]
@@ -73,8 +75,14 @@ def download(url):
 try:
     archive = download(archive_url)
     checksum_text = download(checksum_url).decode("utf-8", errors="strict")
+except urllib.error.HTTPError as exc:
+    if exc.code == 404:
+        print("No published binary release found (HTTP 404).", file=sys.stderr)
+        raise SystemExit(10)
+    print(f"NELRoot release download failed: HTTP {exc.code}", file=sys.stderr)
+    raise SystemExit(1)
 except Exception as exc:
-    print(f"NELRoot download failed: {exc}", file=sys.stderr)
+    print(f"NELRoot release download failed: {exc}", file=sys.stderr)
     raise SystemExit(1)
 
 expected = checksum_text.strip().split()[0].lower() if checksum_text.strip() else ""
@@ -87,6 +95,48 @@ with open(archive_path, "wb") as output:
     output.write(archive)
 print("Download complete; SHA-256 verified.")
 PY
+then
+  RELEASE_READY=1
+else
+  DOWNLOAD_STATUS=$?
+  if [[ "$DOWNLOAD_STATUS" -ne 10 ]]; then
+    fail "Release download failed. No files were installed."
+  fi
+  say "Falling back to a source build because no GitHub Release exists yet."
+  command -v cargo >/dev/null 2>&1 || fail "No published release exists and Cargo is not installed. Install Rust/Cargo first, then rerun this installer. Ubuntu: apt install cargo (or install stable Rust with rustup)."
+  "$PYTHON" - "$TMP_DIR/source.tar.gz" <<'PY'
+import json
+import sys
+import urllib.request
+
+output = sys.argv[1]
+headers = {"User-Agent": "NELRoot-Setup"}
+def get(url):
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=90) as response:
+        return response.read()
+
+try:
+    commit = json.loads(get("https://api.github.com/repos/Reaccionador2Jeje/NELRoot/commits/main"))["sha"]
+    archive = get(f"https://codeload.github.com/Reaccionador2Jeje/NELRoot/tar.gz/{commit}")
+    with open(output, "wb") as stream:
+        stream.write(archive)
+    print(f"Downloaded NELRoot source at commit {commit}.")
+except Exception as exc:
+    print(f"Could not download NELRoot source: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  mkdir -p "$TMP_DIR/source"
+  tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR/source"
+  SOURCE_DIR="$(find "$TMP_DIR/source" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  [[ -n "$SOURCE_DIR" && -f "$SOURCE_DIR/Cargo.toml" ]] || fail "Downloaded source archive is incomplete."
+  say "Compiling NELRoot from source. This can take several minutes..."
+  (cd "$SOURCE_DIR" && cargo build --release)
+  mkdir -p "$TMP_DIR/unpacked"
+  install -m 0755 "$SOURCE_DIR/target/release/nelroot" "$TMP_DIR/unpacked/nelroot"
+  RELEASE_READY=1
+fi
+
 mkdir -p "$TMP_DIR/unpacked"
 tar -xzf "$TMP_DIR/nelroot.tar.gz" -C "$TMP_DIR/unpacked"
 [[ -f "$TMP_DIR/unpacked/nelroot" ]] || fail "The release archive does not contain the nelroot executable."
