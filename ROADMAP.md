@@ -103,7 +103,8 @@ Official repository inclusion is a separate contribution and review process. Unt
 
 - [ ] Validate every supported release target in GitHub Actions.
 - [ ] Publish first tested GitHub Release with checksums.
-- [ ] Add automated .deb, .rpm, Pacman and APK packaging.
+- [x] Add automated `.deb` and `.rpm` package builds for Linux x86_64 and AArch64.
+- [ ] Add Pacman and APK packaging.
 - [ ] Validate package installation, upgrade and uninstall on clean distribution images.
 - [ ] Add signed repository publishing and key-rotation documentation.
 - [ ] Run integration tests against clean Ubuntu, Debian, Fedora and Arch environments.
