@@ -71,6 +71,8 @@ Milestones:
 4. Dynamic linker handoff and shared-object resolution.
 5. Relocations, TLS and architecture-specific ABI details.
 
+The first stack-construction stage is implemented in `src/core/stack.rs`. It builds a bounded ELF64 initial-stack byte image with argc, argv/envp pointer arrays, caller-provided auxv entries, AT_RANDOM and AT_EXECFN. The caller supplies the guest virtual stack top, executable pathname and 16 bytes of entropy. AT_EXECFN is kept distinct from argv[0]. The builder rejects embedded NULs, reserved auxv tags, excessive argument counts and images larger than 8 MiB. It does not map the bytes into a guest address space, populate architecture-specific register state, or transfer control to the ELF entry point.
+
 ### 4. Syscall compatibility
 
 Syscalls are dispatched through a versioned guest ABI table. Each syscall implementation must define argument validation, guest memory access, return/error translation, interruption behavior and tests. Unsupported syscalls return a documented guest error; they must never silently call an unrelated host operation.
