@@ -249,6 +249,62 @@ pub fn load_catalog(path: &Path) -> Result<HubCatalog, Box<dyn std::error::Error
     Ok(catalog)
 }
 
+/// Fetch and validate a first-party Hub catalog over HTTPS.
+pub fn fetch_remote_catalog(
+    hub_url: &str,
+) -> Result<HubCatalog, Box<dyn std::error::Error>> {
+    let base = reqwest::Url::parse(hub_url)?;
+    if base.scheme() != "https"
+        || base.host_str().is_none()
+        || !base.username().is_empty()
+        || base.password().is_some()
+        || base.query().is_some()
+        || base.fragment().is_some()
+    {
+        return Err("Hub URL must be an HTTPS base URL without credentials, query or fragment".into());
+    }
+
+    let endpoint = base.join("/v1/catalog")?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()?;
+    let mut response = client.get(endpoint).send()?.error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("Hub catalog redirected to a non-HTTPS URL".into());
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_METADATA_BYTES)
+    {
+        return Err("Hub catalog exceeds the 8 MiB metadata limit".into());
+    }
+
+    let mut bytes = Vec::new();
+    response
+        .take(MAX_METADATA_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_METADATA_BYTES {
+        return Err("Hub catalog exceeds the 8 MiB metadata limit".into());
+    }
+
+    let catalog: HubCatalog = serde_json::from_slice(&bytes)?;
+    validate_catalog(&catalog).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid remote NELRoot Hub catalog: {error}"),
+        )
+    })?;
+    Ok(catalog)
+}
+
 pub fn search_catalog(
     catalog: &HubCatalog,
     query: &str,
