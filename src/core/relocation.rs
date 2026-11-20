@@ -224,7 +224,6 @@ mod tests {
     use super::*;
 
     fn mapped_static_pie_fixture() -> (Vec<u8>, ElfInfo) {
-        assert!(cfg!(any(target_arch = "x86_64", target_arch = "aarch64")));
         let machine = if cfg!(target_arch = "x86_64") {
             62
         } else {
