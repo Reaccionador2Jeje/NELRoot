@@ -248,12 +248,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 runtime::supported(),
                 "host-kernel execution; Linux only",
             );
-            ui::state(
-                "Runtime privileges",
-                runtime::has_required_privileges(),
-                "root + chroot/setuid/setgid capabilities",
-            );
-            ui::state("Native executor", false, "not implemented");
+            if runtime::has_required_privileges() {
+                ui::good("Required chroot/setuid/setgid capabilities are present.");
+            } else {
+                ui::warn("Required chroot/setuid/setgid capabilities are unavailable to this process.");
+            }
+            ui::state("Independent ELF executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
             ui::state("Syscall layer", false, "not implemented");
             ui::state("CPU emulator", false, "not implemented");
@@ -569,7 +569,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "Linux host kernel",
                     );
                     ui::heading("Under development");
-                    ui::state("Native executor", false, "not implemented");
+                    ui::state("Independent ELF executor", false, "not implemented");
                     ui::state("ELF memory loader", false, "not implemented");
                     ui::state("Syscall layer", false, "not implemented");
                     ui::state("CPU emulator", false, "not implemented");
