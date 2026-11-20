@@ -72,6 +72,8 @@ nelroot config path
 nelroot config show
 
 nelroot image list
+nelroot image download <https-url> <archive.tar.gz> --sha256 <64-hex-digest>
+nelroot image import <name> <archive.tar.gz> --architecture aarch64
 nelroot image validate <rootfs-path>
 nelroot image inspect <name>
 nelroot image register <name> <rootfs-path> --architecture aarch64
@@ -94,7 +96,19 @@ nelroot image inspect ubuntu-rootfs
 nelroot image remove ubuntu-rootfs
 ```
 
-The directory must resemble a Linux root filesystem (for example, it contains `etc`, `usr`, `bin` or `sbin`). Removing an entry only unregisters it; it never deletes the root filesystem. This catalog feature does not yet boot or execute the registered image.
+The directory must resemble a Linux root filesystem (for example, it contains `etc`, `usr`, `bin` or `sbin`). Removing an entry only unregisters it; it never deletes the root filesystem.
+
+### Download and import an image
+
+Downloads require HTTPS and an expected SHA-256 checksum. NELRoot removes the downloaded file if the checksum does not match.
+
+```bash
+nelroot image download https://example.org/rootfs.tar.gz ./rootfs.tar.gz --sha256 <64-hex-digest>
+nelroot image import ubuntu ./rootfs.tar.gz --architecture aarch64
+nelroot image inspect ubuntu
+```
+
+Import currently accepts gzip-compressed tar archives (`.tar.gz` / `.tgz`). Extraction is performed into a staging directory and rejects archive paths that would escape that directory. Imported files are stored under `~/.nelroot/images/<name>`. This is image management only: imported root filesystems are not yet booted or executed by NELRoot.
 
 
 ## Build from source
