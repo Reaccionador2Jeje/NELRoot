@@ -84,3 +84,18 @@ host mount namespace.
 This primitive does not coordinate the parent/child mapping handshake, mount a
 root filesystem, perform `pivot_root`, or launch a guest process. It is a
 building block, not a complete runtime capability.
+
+
+## Synchronized user-to-mount namespace probe
+
+The Linux-only `probe_rootless_user_and_mount_namespaces()` exercises the
+parent/child handshake without starting a guest. A disposable child enters a
+user namespace and blocks on a synchronization pipe. The parent writes
+`setgroups=deny`, `uid_map`, and `gid_map`; only after all writes succeed
+does it release the child to create a mount namespace and set recursive-private
+propagation. The parent waits for and checks the child's exit status.
+
+This is a diagnostic probe, not the runtime launcher: it exits immediately,
+does not mount or pivot into an image rootfs, does not create a PID namespace,
+and does not supervise guest workloads. Kernel, container, seccomp, or LSM
+policy may deny any stage; failures are returned rather than bypassed.
