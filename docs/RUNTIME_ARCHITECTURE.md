@@ -54,12 +54,13 @@ The VFS maps guest absolute paths into an environment root and manages mount poi
 Initial filesystem milestones:
 
 1. Read-only rootfs inspection.
-2. [x] Guest path normalization and root confinement (src/core/vfs.rs).
-3. Read-only file open/stat/readdir.
+2. [x] Guest path normalization and root confinement.
+3. [x] Linux race-resistant file open/create using `openat2(2)`.
+4. Read-only stat/readdir and guest file-descriptor table.
+5. Writable overlay and persistent project mounts.
+6. Symlink, permissions, ownership and special-file compatibility.
 
-The initial GuestVfs resolves existing guest paths and new-file destinations beneath a canonical root, rejects lexical traversal above that root, and rejects symlinks whose resolved targets escape it. This is path-resolution groundwork only. It does not open files, emulate file descriptors, or eliminate time-of-check/time-of-use races; a future Linux backend must use directory-descriptor-relative, race-resistant operations such as openat2 with an appropriate resolve policy.
-4. Writable overlay and persistent project mounts.
-5. Symlink, permissions, ownership and special-file compatibility.
+`GuestVfs::open_existing` and `GuestVfs::create_new_file` anchor operations to a pinned root directory descriptor and use `RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS`. Absolute paths and symlinks are interpreted inside the guest root; traversal cannot escape to host paths. Creation is exclusive and uses mode 0600. These operations require Linux 5.6+; older kernels return the underlying `openat2` error rather than silently falling back to a racy path-based open. The path-resolution helpers remain inspection conveniences, not a security boundary for later opens.
 
 ### 3. ELF loader
 
