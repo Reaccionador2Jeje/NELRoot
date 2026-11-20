@@ -9,6 +9,7 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" engine status >/dev/null
 "$BINARY" engine status --help >/dev/null
 "$BINARY" elf inspect "$BINARY" >/dev/null
+"$BINARY" elf plan "$BINARY" >/dev/null
 
 STATUS_JSON="$("$BINARY" engine status --json)"
 printf '%s\n' "$STATUS_JSON" | python3 -c '
@@ -21,7 +22,7 @@ assert isinstance(data["host"]["os"], str) and data["host"]["os"]
 assert isinstance(data["host"]["architecture"], str) and data["host"]["architecture"]
 assert isinstance(data["components"], list)
 assert data["guest_execution"]["available"] is False
-required = {"core", "host_detection", "configuration", "image_catalog", "registry_client", "event_logging", "elf64_inspector"}
+required = {"core", "host_detection", "configuration", "image_catalog", "registry_client", "event_logging", "elf64_inspector", "elf_load_planner"}
 available = {item["name"] for item in data["components"] if item["status"] == "available"}
 assert required <= available
 print("NELRoot CLI and NEXORA JSON contract: OK")
