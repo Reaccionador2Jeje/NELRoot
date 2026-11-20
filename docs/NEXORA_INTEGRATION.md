@@ -12,7 +12,7 @@ This document defines the integration boundary for replacing NEXORA's PRoot-base
 
 ## Planned command contract
 
-The following commands are target interface, not currently implemented:
+The following environment lifecycle commands remain target interface, not currently implemented:
 
 ```text
 nelroot env create <name> --image <image>
@@ -27,7 +27,7 @@ nelroot port expose <name> <guest-port> [--host-port <port>]
 nelroot package <project-path> --output <artifact>
 ```
 
-The exact syntax may evolve before the runtime milestone. NEXORA can currently use `nelroot --version`, `nelroot doctor` and the versioned `nelroot engine status --json` response for capability detection. The JSON response reports that guest execution is unavailable until the runtime milestone is complete.
+The exact syntax may evolve before the full runtime milestone. A first Linux-only process launcher is now available through `nelroot run <image> -- <absolute-program> [args...]` and `nelroot shell <image>`. It requires effective root and `CAP_SYS_CHROOT`, supports same-architecture images only, and uses the host kernel for ELF loading and syscalls. It is not yet the independent guest ABI runtime or a secure sandbox. NEXORA can use `nelroot --version`, `nelroot doctor` and `nelroot engine status --json` for capability detection.
 
 ## Required machine-readable response
 
@@ -37,7 +37,7 @@ The first versioned machine-readable probe is implemented:
 nelroot engine status --json
 ```
 
-It returns `schema_version`, product/version, host OS and architecture, a component status array, and `guest_execution.available`. NEXORA should check `schema_version == 1` and treat `guest_execution.available == false` as a hard stop for guest operations.
+It returns `schema_version`, product/version, host OS and architecture, a component status array, and `guest_execution.available`, along with the native backend name and same-architecture requirement. NEXORA should check `schema_version == 1` and treat `guest_execution.available == false` as a hard stop for guest operations. A true value means the Linux chroot backend has a plausible privilege context; it does not mean the full independent runtime or a security sandbox is available.
 
 Before environment lifecycle integration, add versioned JSON responses for environment listing, inspection, process execution and errors. Each environment operation should report:
 
@@ -76,4 +76,4 @@ NEXORA must not switch its default provider until all of these are demonstrated:
 
 ## Current status
 
-NELRoot currently provides CLI, host diagnostics, configuration, local image catalog, HTTPS registry search/pull and image import. It does not yet execute a Linux guest. Therefore NEXORA integration is currently at the interface-design stage; production replacement is not ready.
+NELRoot provides CLI, host diagnostics, configuration, local image catalog, HTTPS registry search/pull and image import, plus an initial Linux chroot launcher for same-architecture commands. The host kernel still handles ELF loading and syscalls; process lifecycle management, VFS, namespace isolation, independent ELF loading and syscall compatibility are not implemented. Production replacement of NEXORA’s PRoot backend is not ready.
