@@ -54,7 +54,8 @@ pub fn apply_relative_relocations(
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
-    let dynamic_offset = mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
+    let dynamic_offset =
+        mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
     let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic_length)?;
 
     let mut rela_address = None;
@@ -121,7 +122,12 @@ pub fn apply_relative_relocations(
             return Err("ELF relative relocation target is not 8-byte aligned".into());
         }
 
-        let value = relative_relocation_value(info.machine, relocation_info, addend, mapped.load_bias())?;
+        let value = relative_relocation_value(
+            info.machine,
+            relocation_info,
+            addend,
+            mapped.load_bias(),
+        )?;
         let target_offset = mapped.virtual_address_offset(target_address, 8)?;
         mapped.validate_write_range(target_offset, 8)?;
         pending.push((target_offset, value.to_le_bytes()));
@@ -155,8 +161,8 @@ fn relative_relocation_value(
 ) -> Result<u64, Box<dyn Error>> {
     let symbol = relocation_info >> 32;
     let relocation_type = relocation_info as u32;
-    let expected_type = match machine {
-        62 => 8,    // R_X86_64_RELATIVE
+    let expected_type: u32 = match machine {
+        62 => 8,     // R_X86_64_RELATIVE
         183 => 1027, // R_AARCH64_RELATIVE
         _ => return Err("relative relocations are unsupported for this ELF machine".into()),
     };
