@@ -26,6 +26,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop (no namespace isolation or signal forwarding yet).
 - [x] Linux child-side primitive for a private mount namespace with recursive-private propagation (requires a mapped user namespace; launch handshake and rootfs setup remain pending).
 - [x] Linux child-side pivot_root primitive for a read-only mounted rootfs, using the existing empty /run directory on the rootfs mount as put_old (does not launch or supervise a guest process).
+- [x] First rootless guest launcher with synchronized UID/GID mapping, private mount namespace, read-only rootfs, same-mount pivot_root, writable tmpfs /tmp, no_new_privs and exit-status propagation (PID/network isolation and guest /proc,/dev remain pending).
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
