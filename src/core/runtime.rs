@@ -10,6 +10,66 @@ use std::{
 #[cfg(target_os = "linux")]
 use crate::core::images;
 
+/// Read-only diagnostics for Linux user-namespace prerequisites. This is a
+/// capability hint, not proof that namespace creation will pass seccomp or LSM policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RootlessNamespaceInfo {
+    pub current_user_namespace_visible: bool,
+    pub unprivileged_userns_clone: Option<bool>,
+    pub max_user_namespaces: Option<u64>,
+}
+
+impl RootlessNamespaceInfo {
+    /// Whether kernel settings appear to permit an unprivileged user namespace.
+    pub fn potentially_available(self) -> bool {
+        self.current_user_namespace_visible
+            && self.max_user_namespaces.is_none_or(|limit| limit > 0)
+            && self.unprivileged_userns_clone != Some(false)
+    }
+}
+
+fn parse_sysctl_bool(value: &str) -> Option<bool> {
+    match value.trim() {
+        "0" => Some(false),
+        "1" => Some(true),
+        _ => None,
+    }
+}
+
+fn parse_namespace_limit(value: &str) -> Option<u64> {
+    value.trim().parse().ok()
+}
+
+/// Inspect user-namespace policy without changing host state or requiring root.
+pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
+    #[cfg(target_os = "linux")]
+    {
+        let current_user_namespace_visible = Path::new("/proc/self/ns/user").exists();
+        let unprivileged_userns_clone =
+            std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
+                .ok()
+                .and_then(|value| parse_sysctl_bool(&value));
+        let max_user_namespaces =
+            std::fs::read_to_string("/proc/sys/user/max_user_namespaces")
+                .ok()
+                .and_then(|value| parse_namespace_limit(&value));
+
+        RootlessNamespaceInfo {
+            current_user_namespace_visible,
+            unprivileged_userns_clone,
+            max_user_namespaces,
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        RootlessNamespaceInfo {
+            current_user_namespace_visible: false,
+            unprivileged_userns_clone: None,
+            max_user_namespaces: None,
+        }
+    }
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
@@ -190,6 +250,38 @@ pub fn run_image(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_user_namespace_sysctl_values() {
+        assert_eq!(parse_sysctl_bool("1\n"), Some(true));
+        assert_eq!(parse_sysctl_bool("0"), Some(false));
+        assert_eq!(parse_sysctl_bool("enabled"), None);
+        assert_eq!(parse_namespace_limit(" 42\n"), Some(42));
+        assert_eq!(parse_namespace_limit("-1"), None);
+    }
+
+    #[test]
+    fn rootless_namespace_policy_requires_visible_namespace_and_nonzero_limit() {
+        let available = RootlessNamespaceInfo {
+            current_user_namespace_visible: true,
+            unprivileged_userns_clone: Some(true),
+            max_user_namespaces: Some(1024),
+        };
+        assert!(available.potentially_available());
+        assert!(!RootlessNamespaceInfo {
+            max_user_namespaces: Some(0),
+            ..available
+        }.potentially_available());
+        assert!(!RootlessNamespaceInfo {
+            unprivileged_userns_clone: Some(false),
+            ..available
+        }.potentially_available());
+        assert!(!RootlessNamespaceInfo {
+            current_user_namespace_visible: false,
+            ..available
+        }.potentially_available());
+    }
+
 
     #[test]
     fn architecture_aliases_are_explicit() {
