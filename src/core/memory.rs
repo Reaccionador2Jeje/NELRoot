@@ -69,6 +69,7 @@ pub struct MappedElf {
     length: usize,
     min_virtual_address: u64,
     load_bias: u64,
+    machine: u16,
     entry_offset: usize,
     page_size: usize,
     page_permissions: Vec<PagePermissions>,
@@ -270,6 +271,7 @@ impl MappedElf {
             length,
             min_virtual_address: min_page,
             load_bias: 0,
+            machine: info.machine,
             entry_offset,
             page_size,
             page_permissions,
@@ -343,6 +345,10 @@ impl MappedElf {
 
     pub fn load_bias(&self) -> u64 {
         self.load_bias
+    }
+
+    pub fn machine(&self) -> u16 {
+        self.machine
     }
 
     pub fn entry_address(&self) -> usize {
