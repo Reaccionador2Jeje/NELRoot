@@ -11,6 +11,14 @@ This document describes the implementation path for a genuinely independent Linu
 - A rootfs being imported or registered does not make it executable.
 - Runtime capability is reported explicitly per host and architecture.
 
+## Implemented initial execution backend
+
+The repository now contains a Linux-only native process launcher in `src/core/runtime.rs`. It resolves a registered image, rejects cross-architecture launches, starts a child, calls `chroot(2)`, changes to a validated guest working directory, drops supplementary groups and credentials to UID/GID 65534 by default, enables `no_new_privs`, and executes an absolute guest path. It propagates the child exit status.
+
+This is a genuine native process launch from the selected rootfs and does not invoke PRoot, QEMU or Docker. The host Linux kernel performs ELF loading and syscall handling. The initial implementation requires effective root and `CAP_SYS_CHROOT`, and is not available in ordinary unprivileged PRoot sessions or typical Termux installations.
+
+**Security limitation:** chroot alone is not a sandbox. This backend does not create mount, PID, user or network namespaces, mount virtual filesystems, filter networking, or isolate kernel attack surface. The explicit `--keep-root` option retains host root credentials and is unsafe for untrusted images. See [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md).
+
 ## Layered design
 
 ```text
