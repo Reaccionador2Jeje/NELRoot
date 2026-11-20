@@ -399,6 +399,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "image_catalog", "status": "available"},
                             {"name": "registry_client", "status": "available"},
                             {"name": "event_logging", "status": "available"},
+                            {"name": "elf64_inspector", "status": "available"},
                             {"name": "native_executor", "status": "not_implemented"},
                             {"name": "elf_loader", "status": "not_implemented"},
                             {"name": "syscall_layer", "status": "not_implemented"},
