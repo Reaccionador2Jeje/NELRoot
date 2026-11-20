@@ -95,6 +95,35 @@ A published image ID cannot be reused.
 The CLI does not yet provide account management, scoped credentials or
 credential rotation.
 
+## Ed25519 manifest signatures
+
+NELRoot supports detached Ed25519 signatures for validated schema-v1 manifests.
+The signature covers the exact bytes of the manifest file and records its
+SHA-256 digest plus the SHA-256 fingerprint (key ID) of the signing public key.
+Verification requires a public-key file obtained through an independently
+trusted channel; a signature document never establishes trust by itself.
+
+Generate a key pair. Existing output files are never overwritten; on Unix the
+private key is created with owner-only permissions:
+
+    nelroot image hub-keygen ./nelroot-signing.key ./nelroot-signing.pub
+
+Sign a validated manifest:
+
+    nelroot image hub-sign ./manifest.json --key ./nelroot-signing.key --output ./manifest.sig.json
+
+Verify it with the public key you have independently trusted:
+
+    nelroot image hub-verify ./manifest.json ./manifest.sig.json --key ./nelroot-signing.pub
+
+The private key is raw 32-byte data. Keep it out of Git repositories and do not
+share it. The public key is a 64-character hexadecimal file. Do not trust a key
+merely because it was downloaded from the same Hub as the image.
+
+This milestone implements local detached signing and verification only. Remote
+pull/update do not yet enforce signatures, and there is no automatic trust-on-
+first-use or server-provided trust mechanism.
+
 ## Existing archive-index registry
 
 The original generic HTTPS archive index remains supported for compatibility
@@ -115,7 +144,7 @@ URLs without embedded credentials are accepted. Schema v1 supports
 architecture identifiers `x86_64`, `aarch64`, `arm`, `armv7`, `i686`,
 `riscv64`, `ppc64le` and `s390x`. The first archive format is `tar.gz`.
 
-Future schema versions may add archive formats, signatures, provenance,
+Future schema versions may add integrated signature metadata, provenance,
 multiple rootfs variants and delta updates. They must remain explicit and
 versioned; clients must reject unknown schema versions rather than guessing.
 
