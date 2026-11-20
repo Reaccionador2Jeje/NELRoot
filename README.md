@@ -24,14 +24,21 @@ Download the latest installer from the [GitHub Releases](https://github.com/Reac
 
 ### Linux, macOS and Android (Termux)
 
-Run the setup wizard:
+Install the prerequisites and run the setup wizard:
 
 ```bash
-python3 -c "import urllib.request; open('nelroot-install.sh','wb').write(urllib.request.urlopen('https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.sh').read())"
+# Ubuntu / Debian
+sudo apt install wget
+
+# Termux
+pkg install wget coreutils tar
+
+# Then, on either platform:
+wget -O nelroot-install.sh https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.sh
 bash nelroot-install.sh
 ```
 
-The wizard detects the operating system and CPU architecture, downloads the matching release through Python's standard HTTPS library, verifies its SHA-256 checksum, asks where to install, and configures the user PATH. It does not call curl or wget. If no GitHub Release is published yet (HTTP 404), the wizard automatically downloads the current source snapshot and builds it with Cargo instead. For that fallback, install a current stable Rust toolchain (Rust 1.85 or newer) before running the wizard. Python 3 and tar are required on Unix-like systems. Choose system-wide installation when prompted to install for all local users; root can install directly, while a non-root user needs sudo. On Termux, install Python and tar with `pkg install python tar`, then run the wizard; it installs into the Termux prefix without root.
+The wizard detects the operating system and CPU architecture, downloads the matching release with `wget`, verifies its SHA-256 checksum using `sha256sum` or `shasum`, asks where to install, and configures the user PATH. If no GitHub Release asset exists (HTTP 404), the wizard downloads the current source snapshot with wget and builds it with Cargo instead. For that fallback, install a current stable Rust toolchain (Rust 1.85 or newer) before running the wizard. Unix-like systems need `wget`, `tar`, and a SHA-256 utility. macOS users can install wget with Homebrew. Choose system-wide installation when prompted to install for all local users; root can install directly, while a non-root user needs sudo. On Termux, the installer writes into the Termux prefix and does not require root.
 
 ### Windows (PowerShell)
 
