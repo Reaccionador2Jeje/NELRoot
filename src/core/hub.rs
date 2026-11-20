@@ -67,9 +67,7 @@ fn valid_identifier(value: &str) -> bool {
     let bytes = value.as_bytes();
     !bytes.is_empty()
         && bytes.len() <= 128
-        && bytes[0].is_ascii_lowercase().then_some(()).is_some()
-            .then_some(())
-            .is_some()
+        && bytes[0].is_ascii_lowercase()
         && bytes.iter().all(|byte| {
             byte.is_ascii_lowercase()
                 || byte.is_ascii_digit()
@@ -250,17 +248,21 @@ pub fn search_catalog<'a>(
         .images
         .iter()
         .filter(|entry| {
-            architecture.is_none_or(|arch| entry.architecture == arch)
-                && [
-                    entry.id.as_str(),
-                    entry.name.as_str(),
-                    entry.distribution.as_str(),
-                    entry.description.as_str(),
-                ]
+            let architecture_matches =
+                architecture.is_none_or(|arch| entry.architecture == arch);
+            let metadata_matches = [
+                entry.id.as_str(),
+                entry.name.as_str(),
+                entry.distribution.as_str(),
+                entry.description.as_str(),
+            ]
+            .iter()
+            .any(|field| field.to_ascii_lowercase().contains(&query));
+            let tag_matches = entry
+                .tags
                 .iter()
-                .any(|field| field.to_ascii_lowercase().contains(&query))
-                || architecture.is_none_or(|arch| entry.architecture == arch)
-                    && entry.tags.iter().any(|tag| tag.to_ascii_lowercase().contains(&query))
+                .any(|tag| tag.to_ascii_lowercase().contains(&query));
+            architecture_matches && (metadata_matches || tag_matches)
         })
         .collect())
 }
