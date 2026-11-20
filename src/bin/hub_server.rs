@@ -75,7 +75,10 @@ fn digest_hex(bytes: &[u8]) -> String {
 }
 
 fn valid_digest(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn artifact_path(state: &AppState, digest: &str) -> PathBuf {
@@ -407,8 +410,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/healthz", get(health))
         .route("/v1/catalog", get(get_catalog))
         .route("/v1/manifests/{digest}", get(get_manifest))
-        .route("/v1/artifacts/{digest}", get(get_artifact))
-        .route("/v1/artifacts/{digest}", post(upload_artifact))
+        .route(
+            "/v1/artifacts/{digest}",
+            get(get_artifact).post(upload_artifact),
+        )
         .route("/v1/manifests", post(publish_manifest))
         .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BYTES))
         .with_state(state);
