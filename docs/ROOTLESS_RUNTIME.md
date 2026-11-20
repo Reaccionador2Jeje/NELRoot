@@ -119,7 +119,7 @@ The Linux runtime now exposes `bind_mount_rootfs_read_only(rootfs, target)`
 for use inside a mapped user namespace with a private mount namespace already
 prepared. It validates the registered rootfs, requires an existing empty real
 directory as the destination, rejects overlapping source/target paths, and
-creates a recursive bind mount. The bind mount is then remounted read-only,
+creates a bind mount without importing nested submounts. The bind mount is then remounted read-only,
 with nosuid and nodev flags. If the remount fails, NELRoot detaches the bind
 mount and returns the original error.
 
