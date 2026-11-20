@@ -103,7 +103,7 @@ Official repository inclusion is a separate contribution and review process. Unt
 
 ## 5. Release engineering and quality
 
-- [ ] Validate every supported release target in GitHub Actions.
+- [ ] Validate every supported release target in GitHub Actions (including the corrected Android NDK C compiler configuration).
 - [ ] Publish first tested GitHub Release with checksums.
 - [x] Add automated `.deb` and `.rpm` package builds for Linux x86_64 and AArch64.
 - [ ] Add Pacman and APK packaging.
