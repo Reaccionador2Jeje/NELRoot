@@ -24,7 +24,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Non-executing ELF load-plan foundation with page-range, entry-point and W^X validation.
 - [x] Bounded Linux memory mapping for host-native static ET_DYN images, including PT_LOAD alignment validation, BSS zero-fill, W^X-safe page permissions, permission-checked memory reads/writes and RAII unmapping (mapping only; no execution).
 - [x] Initial static PIE RELATIVE RELA relocation support for x86_64 and AArch64, with bounded dynamic-table parsing and writable-target validation (no execution).
-- [ ] Full ELF loading, remaining relocation types, dynamic-linking and initial process-stack support.
+- [x] Initial ELF64 guest-stack image builder for argc/argv/envp/auxv, AT_RANDOM and AT_EXECFN (data construction only; not mapped or executed).\n- [ ] Full ELF loading, remaining relocation types, dynamic-linking and integration of the guest stack into an executing process.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
