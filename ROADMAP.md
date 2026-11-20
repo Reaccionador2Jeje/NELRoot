@@ -10,7 +10,11 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Validate, register, inspect and unregister existing root filesystem directories.
 - [x] HTTPS image archive download with mandatory SHA-256 verification.
 - [x] Safe gzip/tar rootfs import into NELRoot-managed image storage.
+- [x] Versioned HTTPS image registry index with search, architecture selection, verified pull and safe stale-cache cleanup.
+- [x] User-scoped data/cache/log/runtime directory initialization and local event log.
+- [x] Expanded host diagnostics with kernel and host-interface detection.
 - [ ] Support additional archive formats and distribution-specific image manifests.
+- [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [ ] Independent NELRoot runtime and process lifecycle.
 - [ ] ELF loader and dynamic-linking support.
 - [ ] Linux syscall compatibility layer.
@@ -97,11 +101,16 @@ Official repository inclusion is a separate contribution and review process. Unt
 - [ ] Validate every supported release target in GitHub Actions.
 - [ ] Publish first tested GitHub Release with checksums.
 - [ ] Add automated .deb, .rpm, Pacman and APK packaging.
+- [ ] Validate package installation, upgrade and uninstall on clean distribution images.
 - [ ] Add signed repository publishing and key-rotation documentation.
 - [ ] Run integration tests against clean Ubuntu, Debian, Fedora and Arch environments.
 - [ ] Publish support matrix, known limitations and upgrade guidance.
 
-## 6. Product principles
+## 6. NEXORA runtime interface preparation
+
+The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](docs/NEXORA_INTEGRATION.md). NEXORA must call a stable NELRoot interface and must not assume that image registration means an environment can already execute.
+
+## 7. Product principles
 
 1. **Independent runtime:** NELRoot is the engine, not a wrapper around PRoot, QEMU or Docker.
 2. **Developer-friendly:** common tasks should be simple, discoverable and consistent.
