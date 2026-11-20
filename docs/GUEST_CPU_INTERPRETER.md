@@ -21,7 +21,11 @@ instruction counter. The run loop accepts a mandatory instruction budget and
 returns when the guest process exits or the budget is exhausted. On Linux,
 `X86_64GuestRuntime::from_execution_context` wires a prepared loader context,
 byte-backed memory, initial RIP/RSP and syscall dispatcher into one runtime
-facade with `step()` and `run(max_steps)` methods.
+facade with `step()` and `run(max_steps)` methods. The convenience constructor
+`X86_64GuestRuntime::from_static_pie(path, stack_config)` runs the static-PIE
+preparation pipeline (`prepare_static_pie` → execution context → guest runtime)
+in one call. It accepts only the loader pipeline's static `ET_DYN` input and
+still executes only the documented instruction subset.
 
 ## Memory and syscall boundary
 
