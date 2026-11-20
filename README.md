@@ -6,7 +6,7 @@ NELRoot is an open-source systems project by **AtDev**. Its long-term goal is to
 
 NELRoot is designed as an independent engine. PRoot and QEMU are not execution backends or runtime requirements.
 
-> **Development status:** Early development. The current release provides the CLI, host diagnostics, configuration and image-catalog scaffolding. Guest Linux execution, ELF loading and CPU emulation are not implemented yet.
+> **Development status:** Early development. The current release provides the CLI, host diagnostics, configuration and image-catalog scaffolding. Guest Linux execution, ELF loading and CPU emulation are not implemented yet. The ELF64 inspection parser validates metadata but does not load or execute binaries.
 
 ## Product direction
 
@@ -83,6 +83,7 @@ nelroot image pull ubuntu-noble --registry https://example.org/nelroot/index.jso
 nelroot image clean
 
 nelroot logs --lines 50
+nelroot elf inspect /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
 ```
