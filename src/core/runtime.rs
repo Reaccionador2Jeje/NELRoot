@@ -293,20 +293,28 @@ mod tests {
             max_user_namespaces: Some(1024),
         };
         assert!(available.potentially_available());
-        assert!(!RootlessNamespaceInfo {
-            max_user_namespaces: Some(0),
-            ..available
-        }.potentially_available());
-        assert!(!RootlessNamespaceInfo {
-            unprivileged_userns_clone: Some(false),
-            ..available
-        }.potentially_available());
-        assert!(!RootlessNamespaceInfo {
-            current_user_namespace_visible: false,
-            ..available
-        }.potentially_available());
+        assert!(
+            !RootlessNamespaceInfo {
+                max_user_namespaces: Some(0),
+                ..available
+            }
+            .potentially_available()
+        );
+        assert!(
+            !RootlessNamespaceInfo {
+                unprivileged_userns_clone: Some(false),
+                ..available
+            }
+            .potentially_available()
+        );
+        assert!(
+            !RootlessNamespaceInfo {
+                current_user_namespace_visible: false,
+                ..available
+            }
+            .potentially_available()
+        );
     }
-
 
     #[test]
     fn architecture_aliases_are_explicit() {
