@@ -1,7 +1,7 @@
 use std::{
     ffi::CString,
     io,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, ExitStatus},
 };
 
@@ -94,7 +94,7 @@ pub fn run_image(
             .ok_or("registered image has no root filesystem path")?;
         let rootfs = images::validate_rootfs(Path::new(rootfs))?;
         let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
-        let root_for_child = rootfs.clone();
+        let root_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
 
         let mut command = Command::new(program);
         command
@@ -115,10 +115,7 @@ pub fn run_image(
         // or access shared Rust state.
         unsafe {
             command.pre_exec(move || {
-                let root = CString::new(root_for_child.as_os_str().as_encoded_bytes())
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-
-                if libc::chroot(root.as_ptr()) != 0 {
+                if libc::chroot(root_c.as_ptr()) != 0 {
                     return Err(io::Error::last_os_error());
                 }
                 if libc::chdir(c"/".as_ptr()) != 0 {
