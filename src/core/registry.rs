@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{core::{config, images}, host_architecture};
+use crate::core::{config, images};
 
 const MAX_INDEX_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -120,8 +120,4 @@ pub fn clean_staging() -> Result<usize, Box<dyn std::error::Error>> {
         }
     }
     Ok(removed)
-}
-
-pub fn host_architecture() -> &'static str {
-    std::env::consts::ARCH
 }
