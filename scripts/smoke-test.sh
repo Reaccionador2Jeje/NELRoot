@@ -11,9 +11,9 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
 
-PLAIN_OUTPUT="$(NO_COLOR=1 "$BINARY" info)"
+PLAIN_OUTPUT="$("$BINARY" info)"
 if printf '%s' "$PLAIN_OUTPUT" | grep -q $'\033'; then
-  echo "NO_COLOR did not disable terminal styling" >&2
+  echo "Redirected output unexpectedly contains ANSI styling" >&2
   exit 1
 fi
 
