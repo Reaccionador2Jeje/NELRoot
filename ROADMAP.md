@@ -8,7 +8,9 @@ This roadmap describes goals, not claims that the features are already implement
 
 - [x] CLI foundation, host diagnostics, configuration and local image catalog.
 - [x] Validate, register, inspect and unregister existing root filesystem directories.
-- [ ] Image download, import, extraction and integrity verification.
+- [x] HTTPS image archive download with mandatory SHA-256 verification.
+- [x] Safe gzip/tar rootfs import into NELRoot-managed image storage.
+- [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Independent NELRoot runtime and process lifecycle.
 - [ ] ELF loader and dynamic-linking support.
 - [ ] Linux syscall compatibility layer.
