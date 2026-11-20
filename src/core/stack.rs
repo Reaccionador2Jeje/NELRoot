@@ -206,7 +206,7 @@ mod tests {
     fn stores_strings_and_random_bytes_at_guest_addresses() {
         let stack = build_initial_stack(&config()).unwrap();
         let offset = (stack.argv_addresses()[0] - stack.stack_pointer()) as usize;
-        assert_eq!(&stack.bytes()[offset..offset + 10], b"/bin/demo\\0");
+        assert_eq!(&stack.bytes()[offset..offset + 10], b"/bin/demo\0");
         let random_offset = (stack.random_address() - stack.stack_pointer()) as usize;
         assert_eq!(&stack.bytes()[random_offset..random_offset + 16], &[0x5a; 16]);
     }
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn rejects_embedded_nul_and_reserved_auxv_tags() {
         let mut input = config();
-        input.argv[0] = b"bad\\0argument".to_vec();
+        input.argv[0] = b"bad\0argument".to_vec();
         assert!(build_initial_stack(&input).is_err());
         let mut input = config();
         input.auxv.push(AuxEntry { kind: AT_RANDOM, value: 1 });
