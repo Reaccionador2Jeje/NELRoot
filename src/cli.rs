@@ -60,6 +60,21 @@ enum ImageCommands {
         /// Image name from the local catalog.
         name: String,
     },
+    /// Register an existing Linux root filesystem directory (does not copy it).
+    Register {
+        /// Name to assign to this image.
+        name: String,
+        /// Path to an existing Linux root filesystem directory.
+        path: std::path::PathBuf,
+        /// CPU architecture of the root filesystem.
+        #[arg(long, default_value = "aarch64")]
+        architecture: String,
+    },
+    /// Remove an image from the catalog without deleting its files.
+    Remove {
+        /// Image name to unregister.
+        name: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -118,35 +133,51 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         },
-        Commands::Image { command } => {
-            let catalog = images::load_catalog()?;
-            match command {
-                ImageCommands::List => {
-                    if catalog.images.is_empty() {
-                        println!("No images registered.");
-                        println!("Image importing is planned for a future release.");
-                    } else {
-                        for image in catalog.images {
-                            println!("{}\t{}\t{}", image.name, image.architecture, image.format);
-                        }
-                    }
+        Commands::Image { command } => match command {
+            ImageCommands::Register {
+                name,
+                path,
+                architecture,
+            } => {
+                images::register_image(&name, &path, &architecture)?;
+                println!("Registered image '{name}'.");
+                println!("Root filesystem: {}", path.canonicalize()?.display());
+                println!("The source directory was not copied or modified.");
+            }
+            ImageCommands::Remove { name } => {
+                if images::unregister_image(&name)? {
+                    println!("Unregistered image '{name}'.");
+                    println!("Its files were left untouched.");
+                } else {
+                    return Err(format!("image '{name}' is not registered").into());
                 }
-                ImageCommands::Inspect { name } => {
-                    match catalog.images.iter().find(|image| image.name == name) {
-                        Some(image) => {
-                            println!("Image: {}", image.name);
-                            println!("Architecture: {}", image.architecture);
-                            println!("Format: {}", image.format);
-                            println!(
-                                "Source: {}",
-                                image.source.as_deref().unwrap_or("not specified")
-                            );
-                        }
-                        None => return Err(format!("image '{name}' is not registered").into()),
+            }
+            ImageCommands::List => {
+                let catalog = images::load_catalog()?;
+                if catalog.images.is_empty() {
+                    println!("No images registered.");
+                    println!("Register an existing root filesystem with: nelroot image register <name> <path>");
+                } else {
+                    for image in catalog.images {
+                        println!("{}\t{}\t{}", image.name, image.architecture, image.format);
                     }
                 }
             }
-        }
+            ImageCommands::Inspect { name } => {
+                let catalog = images::load_catalog()?;
+                match catalog.images.iter().find(|image| image.name == name) {
+                    Some(image) => {
+                        println!("Image: {}", image.name);
+                        println!("Architecture: {}", image.architecture);
+                        println!("Format: {}", image.format);
+                        let source = image.source.as_deref().unwrap_or("not specified");
+                        println!("Root filesystem: {source}");
+                        println!("Path exists: {}", std::path::Path::new(source).is_dir());
+                    }
+                    None => return Err(format!("image '{name}' is not registered").into()),
+                }
+            }
+        },
         Commands::Engine { command } => match command {
             EngineCommands::Status => {
                 println!("NELRoot engine status");
