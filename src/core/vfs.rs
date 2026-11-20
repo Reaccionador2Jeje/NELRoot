@@ -160,10 +160,12 @@ mod tests {
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("secret"), "outside").unwrap();
         symlink(&outside, root.join("escape")).unwrap();
+        symlink(outside.join("missing"), root.join("etc/dangling")).unwrap();
 
         let vfs = GuestVfs::new(&root).unwrap();
         assert!(vfs.resolve_existing(Path::new("/escape/secret")).is_err());
         assert!(vfs.resolve_new_file(Path::new("/escape/new-file")).is_err());
+        assert!(vfs.resolve_new_file(Path::new("/etc/dangling")).is_err());
 
         fs::remove_dir_all(root).unwrap();
         fs::remove_dir_all(outside).unwrap();
