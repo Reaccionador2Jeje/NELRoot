@@ -18,7 +18,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [ ] Independent NELRoot runtime and process lifecycle.
 - [ ] ELF64 inspection/parser module (first bounded runtime milestone).
-- [ ] ELF loader and dynamic-linking support.
+- [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
+- [ ] ELF loading and dynamic-linking support.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
