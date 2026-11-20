@@ -93,7 +93,6 @@ pub fn run_image(
             .as_deref()
             .ok_or("registered image has no root filesystem path")?;
         let rootfs = images::validate_rootfs(Path::new(rootfs))?;
-        let rootfs_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
         let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
         let root_for_child = rootfs.clone();
 
@@ -161,21 +160,6 @@ pub fn run_image(
         let status = command.status()?;
         Ok(status)
     }
-}
-
-/// Resolve the image's root filesystem path for display and diagnostics.
-pub fn image_rootfs(image_name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let catalog = images::load_catalog()?;
-    let image = catalog
-        .images
-        .iter()
-        .find(|image| image.name == image_name)
-        .ok_or_else(|| format!("image '{image_name}' is not registered"))?;
-    let source = image
-        .source
-        .as_deref()
-        .ok_or("registered image has no root filesystem path")?;
-    Ok(images::validate_rootfs(Path::new(source))?)
 }
 
 #[cfg(test)]
