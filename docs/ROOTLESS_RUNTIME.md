@@ -1,6 +1,6 @@
 # Rootless Linux runtime: implementation contract
 
-This document defines the next execution backend. It is a design and test contract; it does not claim that rootless execution is implemented yet.
+This document defines the rootless execution backend and its test contract. An initial user/mount-namespace launcher now exists, but PID supervision, networking isolation, guest device mounts and distribution compatibility remain incomplete.
 
 ## Goal
 
