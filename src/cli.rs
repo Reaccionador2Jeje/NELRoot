@@ -484,6 +484,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Event logging    : available");
                     println!("Native executor  : not implemented");
                     println!("ELF64 parser     : available (inspection only)");
+                    println!("ELF load planner : available (planning only)");
                     println!("ELF loader       : not implemented");
                     println!("Syscall layer    : not implemented");
                     println!("CPU emulator     : not implemented");
