@@ -4,7 +4,6 @@ Release:        1%{?dist}
 Summary:        Independent Linux execution and virtualization engine
 License:        MIT
 URL:            https://github.com/Reaccionador2Jeje/NELRoot
-BuildArch:      %{_arch}
 
 %description
 NELRoot is an independent systems project by AtDev. The current CLI
@@ -22,5 +21,5 @@ install -D -m 0644 %{_sourcedir}/LICENSE %{buildroot}%{_docdir}/nelroot/LICENSE
 %{_docdir}/nelroot/LICENSE
 
 %changelog
-* Thu Nov 19 2026 AtDev <packages@atdev.dev> - 0.1.0-1
+* Thu Nov 19 2026 AtDev - 0.1.0-1
 - Initial packaging specification.
