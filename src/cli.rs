@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::core::{host, images, config};
+use crate::core::{config, host, images};
 
 #[derive(Debug, Parser)]
 #[command(
