@@ -190,6 +190,12 @@ enum ElfCommands {
         #[arg(long, default_value_t = 0)]
         load_bias: u64,
     },
+    /// Map a static host-native ET_DYN image into memory without executing it (Linux only).
+    #[cfg(target_os = "linux")]
+    Map {
+        /// Path to the ELF file.
+        path: std::path::PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -242,7 +248,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
-            ui::state("ELF load planner", true, "mapping plan only");
+            ui::state("ELF load planner", true, "mapping plan only");\n            ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
             ui::state(
                 "Native chroot runner",
                 runtime::supported(),
@@ -506,6 +512,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             }
+            #[cfg(target_os = "linux")]
+            ElfCommands::Map { path } => {
+                let mapped = crate::core::memory::MappedElf::map_file(&path)?;
+                ui::banner("ELF memory mapping");
+                ui::good("Image mapped into this process; entry point was NOT executed.");
+                ui::key("File", path.display());
+                ui::key("Reservation", format!("{:#x} bytes", mapped.length()));
+                ui::key("Base address", format!("{:#018x}", mapped.base_address()));
+                ui::key("Load bias", format!("{:#018x}", mapped.load_bias()));
+                ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
+                ui::key("Lowest virtual page", format!("{:#018x}", mapped.min_virtual_address()));
+                ui::muted("The mapping is released automatically when this command exits.");
+            }
         },
         Commands::Engine { command } => match command {
             EngineCommands::Status { json } => {
@@ -523,7 +542,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "registry_client", "status": "available"},
                             {"name": "event_logging", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
-                            {"name": "elf_load_planner", "status": "available"},
+                            {"name": "elf_load_planner", "status": "available"},\n                            {"name": "elf_memory_mapper", "status": if cfg!(target_os = "linux") { "available" } else { "not_implemented" }},
                             {
                                 "name": "native_chroot_runtime",
                                 "status": if runtime::supported() {
@@ -564,7 +583,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Registry client", true, "HTTPS + SHA-256");
                     ui::state("Event logging", true, "local event log");
                     ui::state("ELF64 inspector", true, "metadata only");
-                    ui::state("ELF load planner", true, "planning only");
+                    ui::state("ELF load planner", true, "planning only");\n                    ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
                     ui::state(
                         "Native chroot runner",
                         runtime::supported(),
