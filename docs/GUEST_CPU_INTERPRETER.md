@@ -46,3 +46,26 @@ smoke-test instruction streams only.
 
 No guest instruction is executed natively by the host CPU, and no privileged
 operation or host filesystem access is provided by this interpreter.
+
+
+## Experimental CLI entry point
+
+On Linux x86_64, the bounded pipeline can be invoked with:
+
+```sh
+nelroot elf emulate ./static-program --max-steps 100000 -- arg1 arg2
+```
+
+The command accepts a static `ET_DYN` image without `PT_INTERP`, prepares its
+load mappings and supported relative relocations, creates a guest stack, copies
+the prepared image into bounded `GuestMemory`, and interprets instructions
+until guest exit, an unsupported instruction, a memory fault, or the step
+budget is reached. Guest `write` output is captured first and only forwarded
+to the terminal after the interpreter stops.
+
+This is an experimental smoke-test path, not a general-purpose Linux loader.
+The generated stack currently has an empty environment and minimal auxiliary
+vector; dynamic linking, normal libc startup, most x86_64 instructions, and
+most Linux syscalls are unsupported. Do not expect ordinary compiled programs
+to run. Use a purpose-built static test ELF containing only supported
+instructions. The step budget is mandatory and bounded by the CLI option.
