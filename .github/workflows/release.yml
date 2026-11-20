@@ -94,7 +94,7 @@ jobs:
           from pathlib import Path
           archive = next(Path("dist").glob("nelroot-${{ matrix.name }}.*"))
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-          Path(f"dist/nelroot-${{ matrix.name }}.sha256").write_text(f"{digest}  {archive.name}\\n")
+          Path(f"dist/nelroot-${{ matrix.name }}.sha256").write_text(f"{digest}  {archive.name}\n")
           PY
       - uses: actions/upload-artifact@v4
         with:
