@@ -421,6 +421,91 @@ pub fn prepare_private_mount_namespace() -> io::Result<()> {
     Ok(())
 }
 
+/// Validate a rootfs bind-mount destination without changing the filesystem.
+#[cfg(target_os = "linux")]
+fn validate_rootfs_mount_target(rootfs: &Path, target: &Path) -> io::Result<(CString, CString)> {
+    let root = images::validate_rootfs(rootfs)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error.to_string()))?;
+    let target_meta = std::fs::symlink_metadata(target)?;
+    if target_meta.file_type().is_symlink() || !target_meta.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs mount target must be an existing real directory, not a symlink",
+        ));
+    }
+    let target = target.canonicalize()?;
+    if target == root || target.starts_with(&root) || root.starts_with(&target) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs and mount target must not contain one another",
+        ));
+    }
+    if std::fs::read_dir(&target)?.next().is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::DirectoryNotEmpty,
+            "rootfs mount target must be empty",
+        ));
+    }
+
+    Ok((
+        CString::new(root.as_os_str().as_encoded_bytes())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "rootfs path contains NUL"))?,
+        CString::new(target.as_os_str().as_encoded_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "mount target path contains NUL")
+        })?,
+    ))
+}
+
+/// Bind-mount a validated rootfs read-only inside the caller's private mount namespace.
+///
+/// The destination must be an existing, empty directory outside the rootfs.
+/// The caller is responsible for entering a mapped user namespace and making
+/// mount propagation private first. On remount failure, the new bind mount is
+/// detached before returning the original error. This does not pivot_root or
+/// start a guest process.
+#[cfg(target_os = "linux")]
+pub fn bind_mount_rootfs_read_only(rootfs: &Path, target: &Path) -> io::Result<()> {
+    let (root, target) = validate_rootfs_mount_target(rootfs, target)?;
+
+    // SAFETY: both paths are canonicalized NUL-free C strings; bind mount is
+    // confined to the caller's current mount namespace.
+    if unsafe {
+        libc::mount(
+            root.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            (libc::MS_BIND | libc::MS_REC) as libc::c_ulong,
+            std::ptr::null(),
+        )
+    } != 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+
+    // Keep the imported image immutable by default. A later runtime stage can
+    // provide explicit writable tmpfs mounts for /tmp and other guest paths.
+    let remount_result = unsafe {
+        libc::mount(
+            std::ptr::null(),
+            target.as_ptr(),
+            std::ptr::null(),
+            (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV)
+                as libc::c_ulong,
+            std::ptr::null(),
+        )
+    };
+    if remount_result != 0 {
+        let error = io::Error::last_os_error();
+        // SAFETY: target is the mount point created above.
+        unsafe {
+            libc::umount2(target.as_ptr(), libc::MNT_DETACH);
+        }
+        return Err(error);
+    }
+
+    Ok(())
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
