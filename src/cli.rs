@@ -72,6 +72,18 @@ enum Commands {
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
     },
+    /// Run a host-native program with rootless user and mount namespace isolation.
+    #[cfg(target_os = "linux")]
+    RunRootless {
+        /// Registered image name.
+        image: String,
+        /// Guest working directory.
+        #[arg(long, default_value = "/")]
+        cwd: std::path::PathBuf,
+        /// Absolute guest executable and its arguments after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
+    },
     /// Open an interactive shell inside a registered image.
     Shell {
         /// Registered image name.
@@ -843,6 +855,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::good("Child credentials will be dropped to uid/gid 65534.");
             }
             let status = runtime::run_image(&image, program, arguments, &cwd, keep_root)?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(128));
+            }
+        }
+        #[cfg(target_os = "linux")]
+        Commands::RunRootless { image, cwd, command } => {
+            let program = command.first().ok_or("missing guest executable")?;
+            let arguments = &command[1..];
+            ui::banner("Rootless Linux runtime");
+            ui::key("Image", &image);
+            ui::key("Executable", program);
+            ui::good("Host UID/GID remain unprivileged; rootfs is read-only except /tmp.");
+            ui::warn("PID/network namespaces and /proc and /dev mounts are not implemented yet.");
+            let status = runtime::run_rootless_image(&image, program, arguments, &cwd)?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
