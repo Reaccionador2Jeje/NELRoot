@@ -174,7 +174,8 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
         if !valid_text(&entry.name, 128)
             || !valid_text(&entry.version, 64)
             || !valid_text(&entry.distribution, 64)
-            || !valid_text(&entry.description, 2048)
+            || entry.description.len() > 2048
+            || entry.description.contains('\0')
         {
             return Err(format!("catalog entry '{}' has invalid text metadata", entry.id));
         }
