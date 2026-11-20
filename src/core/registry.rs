@@ -62,6 +62,9 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
         }))
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("registry index redirected to a non-HTTPS URL".into());
+    }
     if response
         .content_length()
         .is_some_and(|size| size > MAX_INDEX_BYTES)
