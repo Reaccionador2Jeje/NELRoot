@@ -25,10 +25,9 @@ pub fn kernel_release() -> Option<String> {
 }
 
 /// Whether the current process appears to have administrative privileges.
-pub fn has_elevated_privileges() -> bool {
-    #[cfg(unix)]
+pub fn has_elevated_privileges() -> Option<bool> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        // Android and Unix hosts expose effective UID through /proc/self/status.
         fs::read_to_string("/proc/self/status")
             .ok()
             .and_then(|status| {
@@ -38,11 +37,11 @@ pub fn has_elevated_privileges() -> bool {
                         .and_then(|uid| uid.parse::<u32>().ok())
                 })
             })
-            .is_some_and(|uid| uid == 0)
+            .map(|uid| uid == 0)
     }
-    #[cfg(windows)]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
-        false
+        None
     }
 }
 
