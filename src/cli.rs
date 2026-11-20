@@ -75,7 +75,7 @@ enum ImageCommands {
         #[arg(long)]
         registry: String,
         /// Guest CPU architecture.
-        #[arg(long, default_value = std::env::consts::ARCH)]
+        #[arg(long, default_value_t = std::env::consts::ARCH)]
         architecture: String,
     },
     /// Download an HTTPS image archive and verify its SHA-256 checksum.
