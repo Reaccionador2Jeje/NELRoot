@@ -1,0 +1,16 @@
+pkgname=nelroot
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Independent Linux execution and virtualization engine"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Reaccionador2Jeje/NELRoot"
+license=('MIT')
+depends=('gcc-libs')
+source=("nelroot")
+sha256sums=('SKIP')
+
+package() {
+  install -Dm755 "$srcdir/nelroot" "$pkgdir/usr/bin/nelroot"
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/nelroot/README.md"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/nelroot/LICENSE"
+}
