@@ -500,7 +500,7 @@ mod tests {
     fn reads_checked_byte_ranges() {
         let (bytes, info) = static_pie();
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
-        assert_eq!(mapped.read_bytes(0, 4).unwrap(), b"\\x7fELF");
+        assert_eq!(mapped.read_bytes(0, 4).unwrap(), b"\x7fELF");
         assert!(mapped.read_bytes(mapped.length(), 1).is_err());
         assert!(mapped.read_bytes(usize::MAX, 2).is_err());
         assert!(mapped.read_bytes(0, 0).unwrap().is_empty());
