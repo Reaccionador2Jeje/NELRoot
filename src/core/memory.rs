@@ -365,15 +365,15 @@ impl MappedElf {
         Ok(source.to_vec())
     }
 
-    /// Write a byte range only when every covered page has PF_W permission.
-    pub fn write_bytes(&mut self, offset: usize, bytes: &[u8]) -> Result<(), &'static str> {
+    /// Check that a byte range is inside the mapping and every page has PF_W.
+    pub fn validate_write_range(&self, offset: usize, length: usize) -> Result<(), &'static str> {
         let end = offset
-            .checked_add(bytes.len())
+            .checked_add(length)
             .ok_or("mapped ELF write range overflows")?;
         if end > self.length {
             return Err("mapped ELF write range is outside the reservation");
         }
-        if bytes.is_empty() {
+        if length == 0 {
             return Ok(());
         }
         let first_page = offset / self.page_size;
@@ -384,8 +384,17 @@ impl MappedElf {
         {
             return Err("mapped ELF write range includes a non-writable page");
         }
-        // SAFETY: the checked destination range is inside the owned mapping,
-        // every covered page has PF_W, and the input cannot alias this mapping.
+        Ok(())
+    }
+
+    /// Write a byte range only when every covered page has PF_W permission.
+    pub fn write_bytes(&mut self, offset: usize, bytes: &[u8]) -> Result<(), &'static str> {
+        self.validate_write_range(offset, bytes.len())?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        // SAFETY: validate_write_range checked the destination bounds and PF_W
+        // permissions; the input cannot alias this mapping.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 bytes.as_ptr(),
@@ -394,6 +403,26 @@ impl MappedElf {
             );
         }
         Ok(())
+    }
+
+    /// Translate a guest virtual address range into an offset in this mapping.
+    pub fn virtual_address_offset(
+        &self,
+        virtual_address: u64,
+        length: usize,
+    ) -> Result<usize, &'static str> {
+        let offset = virtual_address
+            .checked_sub(self.min_virtual_address)
+            .ok_or("guest virtual address precedes the mapped image")?;
+        let offset = usize::try_from(offset)
+            .map_err(|_| "guest virtual address does not fit host address space")?;
+        let end = offset
+            .checked_add(length)
+            .ok_or("guest virtual address range overflows")?;
+        if end > self.length {
+            return Err("guest virtual address range is outside the mapped image");
+        }
+        Ok(offset)
     }
 
     pub fn read_byte(&self, offset: usize) -> Result<u8, &'static str> {
