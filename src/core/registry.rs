@@ -31,12 +31,18 @@ struct RegistryIndex {
 fn valid_image(image: &RegistryImage) -> bool {
     !image.name.is_empty()
         && image.name.len() <= 64
-        && image.name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        && image
+            .name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
         && !image.architecture.is_empty()
-        && image.architecture.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && image
+            .architecture
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
         && image.url.starts_with("https://")
         && image.sha256.len() == 64
-        && image.sha256.chars().all(|c| c.is_ascii_hexdigit())
+        && image.sha256.chars().all(|character| character.is_ascii_hexdigit())
 }
 
 fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
@@ -49,23 +55,35 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
         .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
-    if response.content_length().is_some_and(|size| size > MAX_INDEX_BYTES) {
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_INDEX_BYTES)
+    {
         return Err("registry index exceeds the 4 MiB size limit".into());
     }
 
     let mut bytes = Vec::new();
-    response.by_ref().take(MAX_INDEX_BYTES + 1).read_to_end(&mut bytes)?;
+    response
+        .by_ref()
+        .take(MAX_INDEX_BYTES + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_INDEX_BYTES {
         return Err("registry index exceeds the 4 MiB size limit".into());
     }
 
     let index: RegistryIndex = serde_json::from_slice(&bytes)?;
     if index.schema_version != 1 {
-        return Err(format!("unsupported registry schema version: {}", index.schema_version).into());
+        return Err(
+            format!("unsupported registry schema version: {}", index.schema_version).into(),
+        );
     }
     for image in &index.images {
         if !valid_image(image) {
-            return Err(format!("registry contains an invalid entry for image '{}'", image.name).into());
+            return Err(format!(
+                "registry contains an invalid entry for image '{}'",
+                image.name
+            )
+            .into());
         }
     }
     for (position, image) in index.images.iter().enumerate() {
@@ -119,7 +137,11 @@ pub fn pull(
     let downloads = config::cache_dir().join("downloads");
     fs::create_dir_all(&downloads)?;
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-    let archive = downloads.join(format!("{}-{}-{nonce}.tar.gz", image.name, std::process::id()));
+    let archive = downloads.join(format!(
+        "{}-{}-{nonce}.tar.gz",
+        image.name,
+        std::process::id()
+    ));
 
     let result: Result<PathBuf, Box<dyn std::error::Error>> = (|| {
         images::download_archive(&image.url, &archive, &image.sha256)?;
