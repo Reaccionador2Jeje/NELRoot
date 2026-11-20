@@ -132,7 +132,11 @@ enum ImageCommands {
 #[derive(Debug, Subcommand)]
 enum EngineCommands {
     /// Show implementation status of engine components.
-    Status,
+    Status {
+        /// Emit a versioned JSON document for integrations such as NEXORA.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -295,20 +299,47 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Engine { command } => match command {
-            EngineCommands::Status => {
-                println!("NELRoot engine status");
-                println!("---------------------");
-                println!("Core             : available");
-                println!("Host detection   : available");
-                println!("Configuration    : available");
-                println!("Image catalog    : available");
-                println!("Registry client  : available");
-                println!("Event logging    : available");
-                println!("Native executor  : not implemented");
-                println!("ELF loader       : not implemented");
-                println!("Syscall layer    : not implemented");
-                println!("CPU emulator     : not implemented");
-                println!("Linux guest boot : not available");
+            EngineCommands::Status { json } => {
+                if json {
+                    let status = serde_json::json!({
+                        "schema_version": 1,
+                        "product": "NELRoot",
+                        "version": env!("CARGO_PKG_VERSION"),
+                        "host": {"os": host::os_name(), "architecture": host::architecture()},
+                        "components": [
+                            {"name": "core", "status": "available"},
+                            {"name": "host_detection", "status": "available"},
+                            {"name": "configuration", "status": "available"},
+                            {"name": "image_catalog", "status": "available"},
+                            {"name": "registry_client", "status": "available"},
+                            {"name": "event_logging", "status": "available"},
+                            {"name": "native_executor", "status": "not_implemented"},
+                            {"name": "elf_loader", "status": "not_implemented"},
+                            {"name": "syscall_layer", "status": "not_implemented"},
+                            {"name": "cpu_emulator", "status": "not_implemented"}
+                        ],
+                        "guest_execution": {
+                            "available": false,
+                            "reason": "The independent guest runtime is not implemented yet."
+                        }
+                    });
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                } else {
+                    println!("NELRoot engine status");
+                    println!("---------------------");
+                    println!("Core             : available");
+                    println!("Host detection   : available");
+                    println!("Configuration    : available");
+                    println!("Image catalog    : available");
+                    println!("Registry client  : available");
+                    println!("Event logging    : available");
+                    println!("Native executor  : not implemented");
+                    println!("ELF loader       : not implemented");
+                    println!("Syscall layer    : not implemented");
+                    println!("CPU emulator     : not implemented");
+                    println!("Linux guest boot : not available");
+                    println!("Machine interface: nelroot engine status --json");
+                }
             }
         },
     }
