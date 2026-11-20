@@ -109,7 +109,7 @@ Run `nelroot <command> --help` for command-specific help.
 
 ### Native Linux runtime
 
-On Linux hosts with effective root and `CAP_SYS_CHROOT`, NELRoot can launch a native same-architecture program from a registered root filesystem:
+On Linux hosts with effective UID 0 and the effective `CAP_SYS_CHROOT`, `CAP_SETUID` and `CAP_SETGID` capabilities, NELRoot can launch a native same-architecture program from a registered root filesystem:
 
 ```bash
 nelroot run ubuntu -- /bin/uname -a
