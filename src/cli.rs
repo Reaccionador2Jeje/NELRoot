@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::core::{config, host, images};
+use crate::core::{config, host, images, logging, registry};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -26,6 +26,12 @@ enum Commands {
     Init,
     /// Show important NELRoot directories.
     Paths,
+    /// Show recent NELRoot event log entries.
+    Logs {
+        /// Number of recent lines to display.
+        #[arg(long, default_value_t = 50)]
+        lines: usize,
+    },
     /// Manage local configuration.
     Config {
         #[command(subcommand)]
@@ -53,6 +59,25 @@ enum ConfigCommands {
 
 #[derive(Debug, Subcommand)]
 enum ImageCommands {
+    /// Search a remote HTTPS image registry index.
+    Search {
+        /// Search term matched against image names and descriptions.
+        query: String,
+        /// HTTPS URL of the registry index.json.
+        #[arg(long)]
+        registry: String,
+    },
+    /// Download, verify and import an image from a registry.
+    Pull {
+        /// Image name in the registry.
+        name: String,
+        /// HTTPS URL of the registry index.json.
+        #[arg(long)]
+        registry: String,
+        /// Guest CPU architecture.
+        #[arg(long, default_value = std::env::consts::ARCH)]
+        architecture: String,
+    },
     /// Download an HTTPS image archive and verify its SHA-256 checksum.
     Download {
         /// HTTPS URL of a .tar.gz image archive.
@@ -100,6 +125,8 @@ enum ImageCommands {
         /// Image name to unregister.
         name: String,
     },
+    /// Remove abandoned image extraction staging directories.
+    Clean,
 }
 
 #[derive(Debug, Subcommand)]
@@ -117,6 +144,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("Independent Linux execution & virtualization engine");
             println!("Project: AtDev");
             println!("Host: {} ({})", host::os_name(), host::architecture());
+            if let Some(kernel) = host::kernel_release() {
+                println!("Kernel: {kernel}");
+            }
         }
         Commands::Doctor => {
             println!("NELRoot host diagnostics");
@@ -124,33 +154,54 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("Operating system : {}", host::os_name());
             println!("Architecture     : {}", host::architecture());
             println!("Pointer width    : {}-bit", usize::BITS);
-            println!("Config directory : {}", config::data_dir().display());
-            println!("Execution engine : under development");
-            println!("CPU emulator     : under development");
-            println!("Note             : host detection does not imply guest compatibility");
+            println!("Elevated process : {}", host::has_elevated_privileges());
+            println!("Data directory   : {}", config::data_dir().display());
+            if let Some(kernel) = host::kernel_release() {
+                println!("Kernel release   : {kernel}");
+            } else {
+                println!("Kernel release   : unavailable");
+            }
+            println!("Host interfaces:");
+            for (name, available) in host::host_interfaces() {
+                println!("  {:24} {}", name, if available { "available" } else { "unavailable" });
+            }
+            println!("Execution engine : not implemented yet");
+            println!("ELF loader       : not implemented yet");
+            println!("Syscall layer    : not implemented yet");
+            println!("CPU emulator     : not implemented yet");
+            println!("Note             : host interfaces do not imply guest compatibility");
         }
         Commands::Setup | Commands::Init => {
             let path = config::initialize()?;
+            let _ = logging::record("info", "user environment initialized");
             println!("NELRoot environment initialized.");
             println!("Configuration: {}", path.display());
             println!("Image catalog: {}", images::catalog_path().display());
+            println!("Image storage: {}", images::image_store_dir().display());
+            println!("Cache: {}", config::cache_dir().display());
+            println!("Logs: {}", config::logs_dir().display());
+            println!("Runtime state: {}", config::runtime_dir().display());
         }
         Commands::Paths => {
             println!("NELRoot paths");
             println!("-------------");
             println!("Data directory : {}", config::data_dir().display());
-            println!(
-                "Configuration : {}",
-                config::data_dir().join("config.toml").display()
-            );
-            println!("Image catalog : {}", images::catalog_path().display());
+            println!("Configuration  : {}", config::config_path().display());
+            println!("Image catalog  : {}", images::catalog_path().display());
+            println!("Image storage  : {}", images::image_store_dir().display());
+            println!("Cache          : {}", config::cache_dir().display());
+            println!("Logs           : {}", config::logs_dir().display());
+            println!("Runtime state  : {}", config::runtime_dir().display());
+        }
+        Commands::Logs { lines } => {
+            for line in logging::tail(lines)? {
+                println!("{line}");
+            }
         }
         Commands::Config { command } => match command {
-            ConfigCommands::Path => {
-                println!("{}", config::data_dir().join("config.toml").display());
-            }
+            ConfigCommands::Path => println!("{}", config::config_path().display()),
             ConfigCommands::Show => {
-                let path = config::data_dir().join("config.toml");
+                let path = config::config_path();
                 if !path.exists() {
                     println!("Configuration not initialized. Run nelroot setup first.");
                 } else {
@@ -159,22 +210,33 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
-            ImageCommands::Download {
-                url,
-                output,
-                sha256,
-            } => {
+            ImageCommands::Search { query, registry: registry_url } => {
+                let matches = registry::search(&registry_url, &query)?;
+                if matches.is_empty() {
+                    println!("No images matched '{query}'.");
+                } else {
+                    for image in matches {
+                        println!("{}\t{}\t{}", image.name, image.architecture, image.description);
+                    }
+                }
+            }
+            ImageCommands::Pull { name, registry: registry_url, architecture } => {
+                let rootfs = registry::pull(&registry_url, &name, &architecture)?;
+                let _ = logging::record("info", &format!("image pulled: {name} ({architecture})"));
+                println!("Image '{name}' downloaded, SHA-256 verified and imported.");
+                println!("Root filesystem: {}", rootfs.display());
+                println!("Architecture: {architecture}");
+            }
+            ImageCommands::Download { url, output, sha256 } => {
                 let digest = images::download_archive(&url, &output, &sha256)?;
+                let _ = logging::record("info", &format!("image archive downloaded: {}", output.display()));
                 println!("Image archive downloaded and verified.");
                 println!("File: {}", output.display());
                 println!("SHA-256: {digest}");
             }
-            ImageCommands::Import {
-                name,
-                archive,
-                architecture,
-            } => {
+            ImageCommands::Import { name, archive, architecture } => {
                 let rootfs = images::import_archive(&name, &archive, &architecture)?;
+                let _ = logging::record("info", &format!("image imported: {name} ({architecture})"));
                 println!("Imported image '{name}'.");
                 println!("Root filesystem: {}", rootfs.display());
                 println!("Architecture: {architecture}");
@@ -184,18 +246,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Root filesystem validation: passed");
                 println!("Path: {}", rootfs.display());
             }
-            ImageCommands::Register {
-                name,
-                path,
-                architecture,
-            } => {
+            ImageCommands::Register { name, path, architecture } => {
                 images::register_image(&name, &path, &architecture)?;
+                let _ = logging::record("info", &format!("image registered: {name} ({architecture})"));
                 println!("Registered image '{name}'.");
                 println!("Root filesystem: {}", path.canonicalize()?.display());
                 println!("The source directory was not copied or modified.");
             }
             ImageCommands::Remove { name } => {
                 if images::unregister_image(&name)? {
+                    let _ = logging::record("info", &format!("image unregistered: {name}"));
                     println!("Unregistered image '{name}'.");
                     println!("Its files were left untouched.");
                 } else {
@@ -206,9 +266,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let catalog = images::load_catalog()?;
                 if catalog.images.is_empty() {
                     println!("No images registered.");
-                    println!(
-                        "Register an existing root filesystem with: nelroot image register <name> <path>"
-                    );
+                    println!("Search a registry with: nelroot image search ubuntu --registry <https-index-url>");
                 } else {
                     for image in catalog.images {
                         println!("{}\t{}\t{}", image.name, image.architecture, image.format);
@@ -229,18 +287,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     None => return Err(format!("image '{name}' is not registered").into()),
                 }
             }
+            ImageCommands::Clean => {
+                let removed = registry::clean_staging()?;
+                let _ = logging::record("info", &format!("image cleanup removed {removed} staging directories"));
+                println!("Removed {removed} abandoned staging directories.");
+                println!("Registered images and root filesystems were not modified.");
+            }
         },
         Commands::Engine { command } => match command {
             EngineCommands::Status => {
                 println!("NELRoot engine status");
                 println!("---------------------");
-                println!("Core             : initialized");
+                println!("Core             : available");
                 println!("Host detection   : available");
+                println!("Configuration    : available");
                 println!("Image catalog    : available");
-                println!("Native executor  : planned");
-                println!("ELF loader       : planned");
-                println!("Syscall layer    : planned");
-                println!("CPU emulator     : planned");
+                println!("Registry client  : available");
+                println!("Event logging    : available");
+                println!("Native executor  : not implemented");
+                println!("ELF loader       : not implemented");
+                println!("Syscall layer    : not implemented");
+                println!("CPU emulator     : not implemented");
+                println!("Linux guest boot : not available");
             }
         },
     }
