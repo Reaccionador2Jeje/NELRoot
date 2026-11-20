@@ -1,17 +1,16 @@
-use std::{fs, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 pub fn data_dir() -> PathBuf {
-    if let Some(root) = std::env::var_os("NELROOT_HOME") {
+    if let Some(root) = env::var_os("NELROOT_HOME") {
         return PathBuf::from(root);
     }
 
-    if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home).join(".nelroot");
-    }
+    let home = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".nelroot")
+    home.join(".nelroot")
 }
 
 pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -22,7 +21,7 @@ pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
     if !config_path.exists() {
         fs::write(
             &config_path,
-            "# NELRoot configuration\n             data_dir = \"~/.nelroot\"\n             image_catalog = \"images.toml\"\n",
+            "# NELRoot configuration\ndata_dir = \"~/.nelroot\"\nimage_catalog = \"images.toml\"\n",
         )?;
     }
 
@@ -32,4 +31,14 @@ pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
     }
 
     Ok(config_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_directory_has_nelroot_suffix() {
+        assert!(data_dir().ends_with(".nelroot"));
+    }
 }
