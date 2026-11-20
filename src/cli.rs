@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::core::{config, elf, host, images, logging, registry};
+use crate::ui;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -177,64 +178,65 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Info => {
-            println!("NELRoot {}", env!("CARGO_PKG_VERSION"));
-            println!("Independent Linux execution & virtualization engine");
-            println!("Project: AtDev");
-            println!("Host: {} ({})", host::os_name(), host::architecture());
+            ui::banner("Independent Linux execution & virtualization engine");
+            ui::key("Version", env!("CARGO_PKG_VERSION"));
+            ui::key("Project", "AtDev");
+            ui::key("Host", format!("{} ({})", host::os_name(), host::architecture()));
             if let Some(kernel) = host::kernel_release() {
-                println!("Kernel: {kernel}");
+                ui::key("Kernel", kernel);
             }
+            ui::muted("Run 'nelroot doctor' to inspect host capabilities.");
         }
         Commands::Doctor => {
-            println!("NELRoot host diagnostics");
-            println!("------------------------");
-            println!("Operating system : {}", host::os_name());
-            println!("Architecture     : {}", host::architecture());
-            println!("Pointer width    : {}-bit", usize::BITS);
+            ui::banner("Host diagnostics");
+            ui::heading("System");
+            ui::key("Operating system", host::os_name());
+            ui::key("Architecture", host::architecture());
+            ui::key("Pointer width", format!("{}-bit", usize::BITS));
             let privilege_state = match host::has_elevated_privileges() {
                 Some(true) => "yes",
                 Some(false) => "no",
                 None => "unknown",
             };
-            println!("Elevated process : {privilege_state}");
-            println!("Data directory   : {}", config::data_dir().display());
+            ui::key("Elevated process", privilege_state);
+            ui::key("Data directory", config::data_dir().display());
             if let Some(kernel) = host::kernel_release() {
-                println!("Kernel release   : {kernel}");
-            } else {
-                println!("Kernel release   : unavailable");
+                ui::key("Kernel release", kernel);
             }
-            println!("Host interfaces:");
+            ui::heading("Host interfaces");
             for (name, available) in host::host_interfaces() {
-                let state = if available { "available" } else { "unavailable" };
-                println!("  {name:24} {state}");
+                if available { ui::good(&format!("{name}: available")); }
+                else { ui::warn(&format!("{name}: unavailable")); }
             }
-            println!("Execution engine : not implemented yet");
-            println!("ELF loader       : not implemented yet");
-            println!("Syscall layer    : not implemented yet");
-            println!("CPU emulator     : not implemented yet");
-            println!("Note             : host interfaces do not imply guest compatibility");
+            ui::heading("NELRoot runtime");
+            ui::state("ELF64 inspector", true, "metadata only");
+            ui::state("ELF load planner", true, "mapping plan only");
+            ui::state("Native executor", false, "not implemented");
+            ui::state("ELF memory loader", false, "not implemented");
+            ui::state("Syscall layer", false, "not implemented");
+            ui::state("CPU emulator", false, "not implemented");
+            ui::warn("Host interfaces do not imply guest Linux compatibility.");
         }
         Commands::Setup | Commands::Init => {
             let path = config::initialize()?;
             let _ = logging::record("info", "user environment initialized");
-            println!("NELRoot environment initialized.");
-            println!("Configuration: {}", path.display());
-            println!("Image catalog: {}", images::catalog_path().display());
-            println!("Image storage: {}", images::image_store_dir().display());
-            println!("Cache: {}", config::cache_dir().display());
-            println!("Logs: {}", config::logs_dir().display());
-            println!("Runtime state: {}", config::runtime_dir().display());
+            ui::good("NELRoot environment initialized.");
+            ui::key("Configuration", path.display());
+            ui::key("Image catalog", images::catalog_path().display());
+            ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Cache", config::cache_dir().display());
+            ui::key("Logs", config::logs_dir().display());
+            ui::key("Runtime state", config::runtime_dir().display());
         }
         Commands::Paths => {
-            println!("NELRoot paths");
-            println!("-------------");
-            println!("Data directory : {}", config::data_dir().display());
-            println!("Configuration  : {}", config::config_path().display());
-            println!("Image catalog  : {}", images::catalog_path().display());
-            println!("Image storage  : {}", images::image_store_dir().display());
-            println!("Cache          : {}", config::cache_dir().display());
-            println!("Logs           : {}", config::logs_dir().display());
-            println!("Runtime state  : {}", config::runtime_dir().display());
+            ui::banner("Directories and persistent state");
+            ui::key("Data directory", config::data_dir().display());
+            ui::key("Configuration", config::config_path().display());
+            ui::key("Image catalog", images::catalog_path().display());
+            ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Cache", config::cache_dir().display());
+            ui::key("Logs", config::logs_dir().display());
+            ui::key("Runtime state", config::runtime_dir().display());
         }
         Commands::Logs { lines } => {
             for line in logging::tail(lines)? {
