@@ -6,20 +6,98 @@ NELRoot is an open-source systems project by **AtDev**. Its long-term goal is to
 
 NELRoot is designed as an independent engine. PRoot and QEMU are not execution backends or runtime requirements.
 
-> **Status:** Early development. The current code is project scaffolding and host diagnostics; it does not yet execute guest Linux programs or boot virtual machines.
+> **Development status:** Early development. The current release provides the CLI, host diagnostics, configuration and image-catalog scaffolding. Guest Linux execution, ELF loading and CPU emulation are not implemented yet.
 
-## Project goals
+## Install
 
-- Native host and architecture detection
-- Operating-system image catalog and lifecycle management
+Download the latest installer from the [GitHub Releases](https://github.com/Reaccionador2Jeje/NELRoot/releases/latest) page.
+
+### Linux, macOS and Android (Termux)
+
+Run the setup wizard:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.sh | bash
+```
+
+The wizard detects the operating system and CPU architecture, downloads the matching release, asks where to install, and configures the user PATH. Choose system-wide installation when prompted if you want the executable available to all local users; this requires sudo permissions. On Termux, it installs into the Termux prefix without root.
+
+### Windows (PowerShell)
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/Reaccionador2Jeje/NELRoot/main/scripts/install.ps1 | iex
+```
+
+The wizard installs into the current user's Programs directory and adds it to the user's PATH.
+
+### Supported release targets
+
+| Platform | Architecture | Package |
+|---|---|---|
+| Linux | x86_64 | `nelroot-linux-x86_64.tar.gz` |
+| Linux | ARM64 | `nelroot-linux-aarch64.tar.gz` |
+| Android / Termux | ARM64 | `nelroot-android-aarch64.tar.gz` |
+| Windows | x86_64 | `nelroot-windows-x86_64.zip` |
+| macOS | Intel x86_64 | `nelroot-macos-x86_64.tar.gz` |
+| macOS | Apple Silicon ARM64 | `nelroot-macos-aarch64.tar.gz` |
+
+## CLI commands
+
+After installation, open a new terminal:
+
+```bash
+nelroot --help
+nelroot --version
+
+nelroot info
+nelroot doctor
+nelroot setup
+nelroot paths
+
+nelroot config path
+nelroot config show
+
+nelroot image list
+nelroot image inspect <name>
+
+nelroot engine status
+```
+
+Run `nelroot <command> --help` for command-specific help.
+
+## Build from source
+
+Requirements: stable Rust toolchain and Cargo.
+
+```bash
+cargo build --release
+cargo test
+cargo run -- --help
+cargo run -- info
+```
+
+## Release automation
+
+Pushing a version tag such as `v0.1.0` triggers GitHub Actions to build the platform packages, generate SHA-256 checksum files, and publish a GitHub Release with the archives and setup scripts.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+## Architecture goals
+
+- Independent execution engine
 - Custom ELF executable loader
-- Independent Linux userspace execution runtime
 - Guest-to-host syscall compatibility layer
-- CPU instruction emulation for supported architectures
+- Independent CPU instruction emulator
+- Multi-format operating-system image management
 - Android support without requiring root, within Android's security and kernel constraints
-- Linux and Windows host support, subject to platform capabilities
+- Linux, Windows and macOS host support, subject to platform capabilities
 
-## Architecture
+## Components
 
 | Component | Responsibility |
 |---|---|
@@ -33,25 +111,11 @@ NELRoot is designed as an independent engine. PRoot and QEMU are not execution b
 | NEL Syscall | Planned syscall compatibility |
 | NEL Emulator | Planned CPU emulator |
 
-## Build
-
-Requirements: Rust toolchain (stable) and Cargo.
-
-```bash
-cargo build
-cargo test
-cargo run -- info
-cargo run -- doctor
-cargo run -- image list
-cargo run -- engine status
-cargo run -- init
-```
-
 ## Development principles
 
-- Independent implementation of the execution and emulation engines.
+- Independent implementation of execution and emulation engines.
 - Explicit capability detection; never claim compatibility without tests.
-- No root requirement as a design goal on Android, while respecting host OS restrictions.
+- No root requirement as a design goal on Android, respecting host OS restrictions.
 - Modular architecture and documented platform limitations.
 - Open development and reproducible tests.
 
