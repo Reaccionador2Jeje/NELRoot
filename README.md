@@ -63,11 +63,27 @@ nelroot config show
 
 nelroot image list
 nelroot image inspect <name>
+nelroot image register <name> <rootfs-path> --architecture aarch64
+nelroot image remove <name>
 
 nelroot engine status
 ```
 
 Run `nelroot <command> --help` for command-specific help.
+
+### Local image catalog
+
+NELRoot can register an existing Linux root filesystem directory without copying it:
+
+```bash
+nelroot image register ubuntu-rootfs /path/to/rootfs --architecture aarch64
+nelroot image list
+nelroot image inspect ubuntu-rootfs
+nelroot image remove ubuntu-rootfs
+```
+
+The directory must resemble a Linux root filesystem (for example, it contains `etc`, `usr`, `bin` or `sbin`). Removing an entry only unregisters it; it never deletes the root filesystem. This catalog feature does not yet boot or execute the registered image.
+
 
 ## Build from source
 
