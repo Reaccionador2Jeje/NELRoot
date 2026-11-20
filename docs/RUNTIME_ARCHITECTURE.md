@@ -115,6 +115,10 @@ These interfaces should return typed errors with stable codes. CLI text is for h
 - Linux x86_64 and AArch64 compatibility suites.
 - Network port lifecycle and isolation tests.
 
+## Rootless namespace preparation
+
+The runtime now exposes a read-only `rootless_namespace_info()` probe. It reports visibility of the current user, mount, PID and network namespace interfaces, readability of UID/GID maps, and the available user-namespace sysctl hints. The CLI surfaces these values in `nelroot doctor`. This is diagnostic information only: procfs visibility and sysctl values cannot prove that seccomp, an LSM or container policy will allow creating a new namespace. The rootless backend remains unimplemented; see [ROOTLESS_RUNTIME.md](ROOTLESS_RUNTIME.md) for its implementation contract.
+
 ## First implementation milestone
 
 The ELF64 inspection parser is implemented in `src/core/elf.rs`; the non-executing planner is in `src/core/loader.rs`. A first Linux memory mapper is now implemented in `src/core/memory.rs` and exposed as `nelroot elf map <file>`. It maps bounded, host-native static ET_DYN images into the current process, populates PT_LOAD bytes, relies on anonymous zero pages for BSS, applies per-page permissions, rejects W+X pages and overlapping segment byte ranges, validates PT_LOAD alignment, and unmaps through RAII. Its `read_bytes` and `write_bytes` APIs check PF_R/PF_W permissions across the complete requested range before accessing mapped memory. It deliberately does not execute the entry point, load PT_INTERP, or establish a guest stack. A separate Linux-only relocation stage now applies a narrow set of static PIE RELATIVE RELA relocations for x86_64 and AArch64 after validating the dynamic table and writable targets. Symbol resolution, other relocation types, dynamic linking, mapping the stack into a guest address space, CPU register initialization, and the syscall ABI remain future milestones.
