@@ -49,9 +49,13 @@ impl GuestMemory {
             if total_bytes > MAX_GUEST_MEMORY_BYTES {
                 return Err("guest memory exceeds the 512 MiB allocation limit".into());
             }
+            let mut bytes = Vec::new();
+            bytes.try_reserve_exact(length)
+                .map_err(|_| "could not reserve host memory for guest region")?;
+            bytes.resize(length, 0);
             regions.push(BackedRegion {
                 metadata: region.clone(),
-                bytes: vec![0; length],
+                bytes,
             });
         }
 
