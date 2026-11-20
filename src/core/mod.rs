@@ -12,3 +12,4 @@ pub mod memory;
 #[cfg(target_os = "linux")]
 pub mod relocation;
 pub mod stack;
+pub mod address_space;
