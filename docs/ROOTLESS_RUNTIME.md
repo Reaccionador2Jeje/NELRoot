@@ -23,7 +23,7 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 
 - [x] Read-only policy probe for user namespace sysctls and visible procfs namespace interfaces.
 - [ ] Add a small Linux-only namespace backend with typed errors and explicit feature flags.
-- [ ] Create and configure user namespace mappings with strict parent/child synchronization.
+- [x] Add a fail-closed single-ID UID/GID mapping writer for a paused child already inside a user namespace (parent/child synchronization and launch protocol remain unimplemented).
 - [ ] Create private mount namespace and make propagation private.
 - [x] Add an owned child-process supervisor with polling, wait, exit-status propagation and best-effort cleanup (process primitive only; no namespaces or guest root setup).
 - [ ] Enter the validated rootfs and start a supervised child process.
@@ -63,3 +63,10 @@ A distribution is not "supported" because its rootfs imports successfully. The m
 - cleanup leaves no mount or process behind.
 
 Package-manager tests (`apt`, `apk`, `dnf`) come only after the basic process, filesystem, networking and certificate-store requirements are met.
+
+
+## UID/GID mapping primitive
+
+The Linux runtime exposes `configure_user_namespace_mappings(child_pid)` for the parent side of a future launch protocol. It maps namespace UID/GID 0 to the caller's effective host UID/GID, writes `setgroups=deny` before `gid_map`, and fails closed if any procfs write fails. The child must already have entered its new user namespace and remain blocked while the parent performs these writes.
+
+This is only a mapping primitive: NELRoot does not yet create and synchronize that paused child, so this function is not a complete rootless launcher and is not called by the CLI. Tests cover map formatting without requiring namespace privileges.
