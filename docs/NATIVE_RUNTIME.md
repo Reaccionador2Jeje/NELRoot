@@ -28,13 +28,13 @@ On Linux hosts, NELRoot starts a child process, calls the kernel's `chroot(2)` i
 This backend:
 - Does not invoke PRoot, QEMU or Docker.
 - Supports native same-architecture images only.
-- Requires effective root and the `CAP_SYS_CHROOT` capability.
+- Requires effective UID 0 and effective `CAP_SYS_CHROOT`, `CAP_SETUID` and `CAP_SETGID` capabilities for the default credential-dropping mode.
 - Drops supplementary groups and changes the child to UID/GID 65534 by default.
 - Sets `no_new_privs` after dropping credentials.
 - Uses a minimal environment and inherits the terminal's standard input/output/error.
 - Preserves the child exit code.
 
-Ordinary unprivileged PRoot sessions and typical Android/Termux installations cannot use this backend. A root-looking UID inside PRoot does not grant the host `CAP_SYS_CHROOT` capability.
+Ordinary unprivileged PRoot sessions and typical Android/Termux installations cannot use this backend. A root-looking UID inside PRoot does not grant these host capabilities. NELRoot checks the effective capability mask in `/proc/self/status` rather than trusting the UID alone.
 
 ## Important security boundary
 
