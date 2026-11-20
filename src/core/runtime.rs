@@ -201,11 +201,6 @@ pub fn configure_user_namespace_mappings(
     Ok(mapping)
 }
 
-#[cfg(test)]
-fn format_id_map_for_test(host_id: u32) -> String {
-    format!("0 {host_id} 1\n")
-}
-
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
@@ -432,10 +427,11 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn user_namespace_id_map_format_is_single_id_and_newline_terminated() {
-        assert_eq!(format_id_map_for_test(1000), "0 1000 1\n");
-        assert_eq!(format_id_map_for_test(0), "0 0 1\n");
+        assert_eq!(format_id_map(1000), "0 1000 1\n");
+        assert_eq!(format_id_map(0), "0 0 1\n");
     }
 
     #[test]
