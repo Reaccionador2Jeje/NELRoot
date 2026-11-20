@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use nelroot::core::{config, elf, host, images, logging, registry, runtime};
 #[cfg(target_os = "linux")]
-use nelroot::core::{memory, relocation};
+use nelroot::core::{cpu, memory, relocation, stack};
 use crate::ui;
 
 #[derive(Debug, Parser)]
@@ -203,6 +203,18 @@ enum ElfCommands {
     Relocate {
         /// Path to the ELF file.
         path: std::path::PathBuf,
+    },
+    /// Interpret a static x86_64 PIE with the bounded experimental guest CPU.
+    #[cfg(target_os = "linux")]
+    Emulate {
+        /// Path to a static ET_DYN ELF without PT_INTERP.
+        path: std::path::PathBuf,
+        /// Maximum guest instructions to interpret.
+        #[arg(long, default_value_t = 100_000)]
+        max_steps: u64,
+        /// Additional guest argv entries, after --.
+        #[arg(trailing_var_arg = true)]
+        arguments: Vec<String>,
     },
 }
 
@@ -562,6 +574,41 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Load bias", format!("{:#018x}", mapped.load_bias()));
                 ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
                 ui::warn("Relocations applied in memory only; the ELF entry point was not executed.");
+            }
+            #[cfg(target_os = "linux")]
+            ElfCommands::Emulate { path, max_steps, arguments } => {
+                use std::io::Read;
+                let executable = path.to_string_lossy().into_owned();
+                let mut random = [0_u8; 16];
+                std::fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
+                let mut argv = vec![executable.as_bytes().to_vec()];
+                argv.extend(arguments.iter().map(|argument| argument.as_bytes().to_vec()));
+                let stack_config = stack::GuestStackConfig {
+                    stack_top: 0x0000_7fff_ffff_f000,
+                    argv,
+                    envp: Vec::new(),
+                    execfn: executable.as_bytes().to_vec(),
+                    random,
+                    auxv: Vec::new(),
+                };
+                let mut guest = cpu::X86_64GuestRuntime::from_static_pie(&path, &stack_config)?;
+                ui::banner("Experimental NELRoot guest interpreter");
+                ui::key("ELF", path.display());
+                ui::key("Entry point", format!("{:#018x}", guest.cpu.registers.rip));
+                ui::key("Guest memory", format!("{} bytes", guest.context.memory.allocated_bytes()));
+                ui::key("Instruction budget", max_steps);
+                ui::warn("Experimental static x86_64 subset only; not a complete Linux runtime or security sandbox.");
+                let reason = guest.run(max_steps)?;
+                let stdout = guest.context.output.stdout();
+                let stderr = guest.context.output.stderr();
+                let mut host_stdout = std::io::stdout().lock();
+                let mut host_stderr = std::io::stderr().lock();
+                host_stdout.write_all(stdout)?;
+                host_stderr.write_all(stderr)?;
+                host_stdout.flush()?;
+                host_stderr.flush()?;
+                ui::key("Guest stop reason", format!("{reason:?}"));
+                ui::key("Instructions interpreted", guest.cpu.instructions_executed);
             }
         },
         Commands::Engine { command } => match command {
