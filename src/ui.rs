@@ -13,10 +13,22 @@ fn paint(value: &str, code: &str) -> String {
 }
 
 pub fn banner(subtitle: &str) {
-    println!("{}", paint("╭──────────────────────────────────────────────╮", "36"));
-    println!("{}", paint("│                 NELRoot                      │", "1;36"));
-    println!("{}", paint("│       Independent Linux Runtime              │", "36"));
-    println!("{}", paint("╰──────────────────────────────────────────────╯", "36"));
+    println!(
+        "{}",
+        paint("╭──────────────────────────────────────────────╮", "36")
+    );
+    println!(
+        "{}",
+        paint("│                 NELRoot                      │", "1;36")
+    );
+    println!(
+        "{}",
+        paint("│       Independent Linux Runtime              │", "36")
+    );
+    println!(
+        "{}",
+        paint("╰──────────────────────────────────────────────╯", "36")
+    );
     if !subtitle.is_empty() {
         println!("  {}", paint(subtitle, "2"));
     }
@@ -24,7 +36,10 @@ pub fn banner(subtitle: &str) {
 
 pub fn heading(value: &str) {
     println!("\n{}", paint(value, "1;36"));
-    println!("{}", paint("─".repeat(value.chars().count().min(60)).as_str(), "2;36"));
+    println!(
+        "{}",
+        paint("─".repeat(value.chars().count().min(60)).as_str(), "2;36")
+    );
 }
 
 pub fn key(label: &str, value: impl std::fmt::Display) {
@@ -48,7 +63,20 @@ pub fn muted(value: &str) {
 }
 
 pub fn state(label: &str, available: bool, detail: &str) {
-    let marker = if available { paint("●", "32") } else { paint("○", "33") };
-    let status = if available { paint("available", "32") } else { paint("not implemented", "33") };
-    println!("  {marker} {:24} {:20} {}", label, status, paint(detail, "2"));
+    let marker = if available {
+        paint("●", "32")
+    } else {
+        paint("○", "33")
+    };
+    let status = if available {
+        paint("available", "32")
+    } else {
+        paint("not implemented", "33")
+    };
+    println!(
+        "  {marker} {:24} {:20} {}",
+        label,
+        status,
+        paint(detail, "2")
+    );
 }
