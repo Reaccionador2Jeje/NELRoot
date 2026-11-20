@@ -388,6 +388,27 @@ fn required_env(name: &str) -> Result<String, Box<dyn std::error::Error>> {
     env::var(name).map_err(|_| format!("required environment variable {name} is not set").into())
 }
 
+/// Resolve the listener address, preferring the platform-assigned PORT.
+///
+/// Platforms such as Railway route health checks and traffic to PORT. Keeping
+/// a hard-coded application port when PORT is injected can leave a healthy
+/// process unreachable by the platform.
+fn resolve_bind_address(
+    platform_port: Option<&str>,
+    configured_bind: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(port) = platform_port {
+        let port = port
+            .parse::<u16>()
+            .map_err(|_| format!("PORT must be a valid TCP port, received '{port}'"))?;
+        if port == 0 {
+            return Err("PORT must be greater than zero".into());
+        }
+        return Ok(format!("0.0.0.0:{port}"));
+    }
+    Ok(configured_bind.unwrap_or("127.0.0.1:8787").to_owned())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(
@@ -409,7 +430,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if publish_token.len() < 32 {
         return Err("NELROOT_HUB_PUBLISH_TOKEN must contain at least 32 bytes".into());
     }
-    let bind = env::var("NELROOT_HUB_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
+    let bind = resolve_bind_address(
+        env::var("PORT").ok().as_deref(),
+        env::var("NELROOT_HUB_BIND").ok().as_deref(),
+    )?;
 
     fs::create_dir_all(root.join("artifacts")).await?;
     fs::create_dir_all(root.join("manifests")).await?;
@@ -452,4 +476,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod bind_address_tests {
+    use super::resolve_bind_address;
+
+    #[test]
+    fn platform_port_takes_precedence_over_custom_bind() {
+        assert_eq!(
+            resolve_bind_address(Some("49152"), Some("0.0.0.0:8787")).unwrap(),
+            "0.0.0.0:49152"
+        );
+    }
+
+    #[test]
+    fn configured_bind_is_used_without_platform_port() {
+        assert_eq!(
+            resolve_bind_address(None, Some("0.0.0.0:8787")).unwrap(),
+            "0.0.0.0:8787"
+        );
+    }
+
+    #[test]
+    fn invalid_platform_port_is_rejected() {
+        assert!(resolve_bind_address(Some("not-a-port"), None).is_err());
+        assert!(resolve_bind_address(Some("0"), None).is_err());
+    }
 }
