@@ -84,6 +84,7 @@ nelroot image clean
 
 nelroot logs --lines 50
 nelroot engine status
+nelroot engine status --json
 ```
 
 Run `nelroot <command> --help` for command-specific help.
@@ -97,7 +98,9 @@ nelroot image search ubuntu --registry https://example.org/nelroot/index.json
 nelroot image pull ubuntu --registry https://example.org/nelroot/index.json --architecture aarch64
 ```
 
-The registry client verifies the archive SHA-256 before importing it. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
+The registry client verifies the archive SHA-256 before importing it.
+
+For application integrations such as NEXORA, use `nelroot engine status --json`. It returns schema version `1`, host identity, component availability and an explicit `guest_execution.available` boolean. NEXORA can parse this JSON without relying on human-readable terminal output; the current response correctly reports guest execution as unavailable. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
 
 ### Local image catalog
 
