@@ -16,7 +16,7 @@ A major integration objective is to replace the PRoot-based Ubuntu backend in **
 
 NELRoot is also planned for native package-manager distribution: APT (`.deb`), DNF/Zypper (`.rpm`), Pacman (`.pkg.tar.zst`), APK and Termux packages. AtDev-maintained signed repositories are the initial target; inclusion in official distribution repositories requires their separate maintainer review and acceptance.
 
-See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
+See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. The first-party image distribution service is implemented as a separate `nelroot-hub` binary; see [docs/IMAGE_REGISTRIES.md](docs/IMAGE_REGISTRIES.md) for its API, storage layout and publishing workflow. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
 
 ## Install
 
