@@ -15,8 +15,14 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Expanded host diagnostics with kernel and host-interface detection.
 - [x] Versioned JSON engine capability probe for NEXORA (`nelroot engine status --json`).
 - [x] Adaptive terminal UI with color-safe banners, capability indicators, diagnostics and errors.
-- [x] Docker Hub repository search, tag listing, anonymous bearer-token flow and platform-aware OCI/Docker manifest inspection (remote metadata only).\n- [ ] OCI layer download, digest verification, whiteout handling and transactional rootfs reconstruction.\n- [ ] Support additional archive formats and distribution-specific image manifests.
-- [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
+- [x] First-party NELRoot Image Hub schema v1 for catalogs and per-image manifests, including strict metadata validation, HTTPS-only artifact URLs and SHA-256 requirements.
+- [x] Local first-party Hub catalog validation and metadata search CLI.
+- [ ] Build the hosted NELRoot Image Hub API, catalog publishing workflow and immutable manifest storage.
+- [ ] Add authenticated maintainer publishing, image review and provenance/signature verification.
+- [ ] Add remote Hub catalog/manifest retrieval and verified rootfs pulls.
+- [ ] OCI layer download, digest verification, whiteout handling and transactional rootfs reconstruction for optional OCI sources.
+- [ ] Support additional archive formats and distribution-specific image manifests.
+- [ ] Publish and operate official AtDev images for Ubuntu, Debian and Alpine.
 - [x] First native Linux process-launch backend using chroot(2), same-architecture ELF execution and child exit-code propagation.
 - [x] Read-only Linux user-namespace policy and procfs namespace-interface diagnostics.
 - [x] Disposable-child CLONE_NEWUSER creation probe that leaves the parent process unchanged (does not configure UID/GID maps or create a guest runtime).
