@@ -97,6 +97,16 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/package/
           cp README.md LICENSE dist/package/
           tar -czf dist/nelroot-${{ matrix.name }}.tar.gz -C dist/package .
+      - name: Build Debian package
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then
+            VERSION="${{ inputs.release_tag }}"
+            VERSION="${VERSION#v}"
+          fi
+          bash packaging/build-deb.sh "$VERSION" "${{ matrix.target }}" "target/${{ matrix.target }}/release/nelroot" dist
       - name: Package Windows archive
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -105,15 +115,28 @@ jobs:
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist/package/
           Copy-Item README.md,LICENSE dist/package/
           Compress-Archive -Path dist/package/* -DestinationPath "dist/nelroot-${{ matrix.name }}.zip"
-      - name: Generate checksum
+      - name: Generate checksums
         shell: bash
         run: |
           python - <<'PY'
           import hashlib
           from pathlib import Path
-          archive = next(Path("dist").glob("nelroot-${{ matrix.name }}.*"))
-          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-          Path(f"dist/nelroot-${{ matrix.name }}.sha256").write_text(f"{digest}  {archive.name}\n")
+
+          dist = Path("dist")
+          archives = sorted(
+              path for path in dist.glob("nelroot-${{ matrix.name }}.*")
+              if path.is_file() and not path.name.endswith(".sha256")
+          )
+          if not archives:
+              raise SystemExit("No release archives were produced")
+          for archive in archives:
+              digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+              checksum_name = (
+                  f"nelroot-${{ matrix.name }}.sha256"
+                  if archive.name.endswith(".tar.gz") or archive.suffix == ".zip"
+                  else f"{archive.name}.sha256"
+              )
+              (dist / checksum_name).write_text(f"{digest}  {archive.name}\n")
           PY
       - uses: actions/upload-artifact@v4
         with:
