@@ -13,7 +13,7 @@ pub fn record(level: &str, message: &str) -> Result<(), Box<dyn std::error::Erro
     let path = log_path();
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let safe_message = message.replace('\n', " ").replace('\r', " ");
+    let safe_message = message.replace(['\n', '\r'], " ");
     writeln!(file, "{timestamp} [{level}] {safe_message}")?;
     Ok(())
 }
