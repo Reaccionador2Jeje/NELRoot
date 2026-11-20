@@ -77,12 +77,13 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
                     .into(),
             );
         }
-        let segment_end = header
+        let executable_file_end = header
             .virtual_address
-            .checked_add(header.memory_size)
-            .ok_or("PT_LOAD virtual address range overflows")?;
-        if executable && info.entry_point >= header.virtual_address
-            && info.entry_point < segment_end
+            .checked_add(header.file_size)
+            .ok_or("PT_LOAD executable file range overflows")?;
+        if executable
+            && info.entry_point >= header.virtual_address
+            && info.entry_point < executable_file_end
         {
             executable_entry_contains = true;
         }
