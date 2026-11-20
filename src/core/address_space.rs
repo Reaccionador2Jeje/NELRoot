@@ -124,18 +124,16 @@ impl GuestAddressSpace {
 
         let mut space = Self::new();
         let mut iter = pages.into_iter();
-        let (mut start, mut previous, mut permissions) = iter.next().ok_or("empty ELF page map")?;
+        let (mut start, mut permissions) = iter.next().ok_or("empty ELF page map")?;
         let mut end = start.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
         for (address, next_permissions) in iter {
             if address == end && next_permissions == permissions {
-                previous = address;
-                end = previous.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
+                end = address.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
             } else {
                 space.reserve_region(start, end, permissions, GuestRegionKind::ElfImage)?;
                 start = address;
-                previous = address;
                 permissions = next_permissions;
-                end = previous.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
+                end = address.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
             }
         }
         space.reserve_region(start, end, permissions, GuestRegionKind::ElfImage)?;
