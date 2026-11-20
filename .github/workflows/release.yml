@@ -70,7 +70,17 @@ jobs:
         run: |
           if [ "${{ matrix.target }}" = "aarch64-linux-android" ]; then
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
-            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+            export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+            TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+            # Rust linker para Android API 24.
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
+
+            # El crate ring compila código C y necesita CC explícito.
+            # cc-rs busca también la variante con guiones bajos del target.
+            export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang"
+            export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+            export PATH="$TOOLCHAIN:$PATH"
           fi
           cargo build --release --target ${{ matrix.target }}
       - name: Package Unix archive
