@@ -121,7 +121,7 @@ pub fn pull(
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let archive = downloads.join(format!("{}-{}-{nonce}.tar.gz", image.name, std::process::id()));
 
-    let result = (|| {
+    let result: Result<PathBuf, Box<dyn std::error::Error>> = (|| {
         images::download_archive(&image.url, &archive, &image.sha256)?;
         images::import_archive(&image.name, &archive, &image.architecture)
     })();
