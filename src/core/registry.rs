@@ -377,13 +377,15 @@ fn normalize_docker_repository(repository: &str) -> Result<String, Box<dyn std::
     if parts.next().is_some()
         || [namespace, name].iter().any(|part| {
             part.is_empty()
+                || *part == "."
+                || *part == ".."
                 || part.len() > 255
                 || !part
                     .bytes()
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte))
         })
     {
-        return Err("Docker Hub repository must be [namespace/]name using lowercase ASCII letters, digits, '.', '_' or '-'".into());
+        return Err("Repository must be [namespace/]name using lowercase ASCII letters, digits, '.', '_' or '-', without traversal segments".into());
     }
     Ok(normalized)
 }
