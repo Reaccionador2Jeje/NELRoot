@@ -263,6 +263,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn docker_hub_repository_names_are_normalized_and_validated() {
+        assert_eq!(normalize_docker_repository("alpine").unwrap(), "library/alpine");
+        assert_eq!(normalize_docker_repository("ubuntu/nginx").unwrap(), "ubuntu/nginx");
+        assert!(normalize_docker_repository("../alpine").is_err());
+        assert!(normalize_docker_repository("one/two/three").is_err());
+        assert!(normalize_docker_repository("UPPER/alpine").is_err());
+    }
+
+    #[test]
+    fn docker_architecture_aliases_map_to_registry_platforms() {
+        assert_eq!(docker_architecture("x86_64").unwrap(), "amd64");
+        assert_eq!(docker_architecture("aarch64").unwrap(), "arm64");
+        assert_eq!(docker_architecture("riscv64").unwrap(), "riscv64");
+        assert!(docker_architecture("mips").is_err());
+    }
+
+    #[test]
     fn registry_entries_require_safe_names_https_and_sha256() {
         let valid = RegistryImage {
             name: "ubuntu-24_04".into(),
@@ -396,7 +413,8 @@ pub fn docker_hub_search(
     let client = docker_http_client()?;
     let response = client
         .get(format!("{DOCKER_HUB_API}/search/repositories/"))
-        .query(&[("query", query.trim()), ("page_size", &limit.to_string())])
+        .query(&[("query", query.trim())])
+        .query(&[("page_size", limit.to_string())])
         .send()?
         .error_for_status()?;
     if response.url().scheme() != "https" {
