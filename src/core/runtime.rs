@@ -15,6 +15,11 @@ use crate::core::images;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RootlessNamespaceInfo {
     pub current_user_namespace_visible: bool,
+    pub uid_map_readable: bool,
+    pub gid_map_readable: bool,
+    pub mount_namespace_visible: bool,
+    pub pid_namespace_visible: bool,
+    pub network_namespace_visible: bool,
     pub unprivileged_userns_clone: Option<bool>,
     pub max_user_namespaces: Option<u64>,
 }
@@ -45,6 +50,11 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
     #[cfg(target_os = "linux")]
     {
         let current_user_namespace_visible = Path::new("/proc/self/ns/user").exists();
+        let uid_map_readable = std::fs::read_to_string("/proc/self/uid_map").is_ok();
+        let gid_map_readable = std::fs::read_to_string("/proc/self/gid_map").is_ok();
+        let mount_namespace_visible = Path::new("/proc/self/ns/mnt").exists();
+        let pid_namespace_visible = Path::new("/proc/self/ns/pid").exists();
+        let network_namespace_visible = Path::new("/proc/self/ns/net").exists();
         let unprivileged_userns_clone =
             std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
                 .ok()
@@ -56,6 +66,11 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
 
         RootlessNamespaceInfo {
             current_user_namespace_visible,
+            uid_map_readable,
+            gid_map_readable,
+            mount_namespace_visible,
+            pid_namespace_visible,
+            network_namespace_visible,
             unprivileged_userns_clone,
             max_user_namespaces,
         }
@@ -64,6 +79,11 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
     {
         RootlessNamespaceInfo {
             current_user_namespace_visible: false,
+            uid_map_readable: false,
+            gid_map_readable: false,
+            mount_namespace_visible: false,
+            pid_namespace_visible: false,
+            network_namespace_visible: false,
             unprivileged_userns_clone: None,
             max_user_namespaces: None,
         }
@@ -264,6 +284,11 @@ mod tests {
     fn rootless_namespace_policy_requires_visible_namespace_and_nonzero_limit() {
         let available = RootlessNamespaceInfo {
             current_user_namespace_visible: true,
+            uid_map_readable: true,
+            gid_map_readable: true,
+            mount_namespace_visible: true,
+            pid_namespace_visible: true,
+            network_namespace_visible: true,
             unprivileged_userns_clone: Some(true),
             max_user_namespaces: Some(1024),
         };
