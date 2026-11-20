@@ -1,6 +1,6 @@
 name: Build and publish releases
 
-on:
+'on':
   push:
     tags:
       - "v*"
