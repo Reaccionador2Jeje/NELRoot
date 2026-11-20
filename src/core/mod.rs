@@ -17,3 +17,4 @@ pub mod guest_memory;
 pub mod abi;
 
 pub mod cpu;
+pub mod vfs;
