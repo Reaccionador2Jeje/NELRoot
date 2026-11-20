@@ -513,7 +513,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ElfCommands::Plan { path, load_bias } => {
                 let info = elf::inspect_file(&path)?;
-                let plan = crate::core::loader::plan_load(&info, load_bias)?;
+                let plan = nelroot::core::loader::plan_load(&info, load_bias)?;
                 ui::banner("ELF load plan");
                 ui::warn("Inspection only: no memory mapped and no code executed.");
                 ui::key("Architecture", plan.architecture);
@@ -538,7 +538,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             #[cfg(target_os = "linux")]
             ElfCommands::Map { path } => {
-                let mapped = crate::core::memory::MappedElf::map_file(&path)?;
+                let mapped = nelroot::core::memory::MappedElf::map_file(&path)?;
                 ui::banner("ELF memory mapping");
                 ui::good("Image mapped into this process; entry point was NOT executed.");
                 ui::key("File", path.display());
