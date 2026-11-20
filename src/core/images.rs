@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
+#[allow(dead_code)] // Public image metadata schema reserved for the upcoming image importer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemImage {
     pub name: String,
