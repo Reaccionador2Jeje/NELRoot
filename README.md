@@ -99,6 +99,7 @@ nelroot elf plan /path/to/elf-binary
 nelroot elf map /path/to/static-pie
 # Linux only: apply supported RELATIVE RELA relocations in memory; no execution
 nelroot elf relocate /path/to/static-pie
+# Core API: prepare_static_pie() sequences map + RELATIVE RELA + load plan + stack image
 nelroot engine status
 nelroot engine status --json
 
@@ -157,7 +158,7 @@ NELRoot includes a bounded ELF64 little-endian metadata inspector. It validates 
 nelroot elf inspect ./program
 ```
 
-The non-executing `nelroot elf plan <file>` command validates supported ELF load segments, computes page-aligned virtual ranges and checks entry-point placement under a default W^X policy. On Linux x86_64/AArch64, `nelroot elf map <static-pie>` maps a bounded host-native static PIE into the NELRoot process without executing it. `nelroot elf relocate <static-pie>` additionally applies only supported RELATIVE RELA relocations (x86_64 type 8; AArch64 type 1027), after validating the dynamic table and writable targets. REL, PLT, symbol resolution, dynamic linking, stack construction and guest execution are not implemented. This is loader groundwork, not a complete process loader.
+The non-executing `nelroot elf plan <file>` command validates supported ELF load segments, computes page-aligned virtual ranges and checks entry-point placement under a default W^X policy. On Linux x86_64/AArch64, `nelroot elf map <static-pie>` maps a bounded host-native static PIE into the NELRoot process without executing it. `nelroot elf relocate <static-pie>` additionally applies only supported RELATIVE RELA relocations (x86_64 type 8; AArch64 type 1027), after validating the dynamic table and writable targets. REL, RELR, PLT, symbol resolution and dynamic linking remain unsupported. The `prepare_static_pie` core pipeline now sequences mapping, supported relocations, load planning and initial-stack image construction for host-native static PIE files. The stack remains a separate byte image: it is not mapped into a guest address space, CPU registers are not initialized, and no guest code is executed. This is loader preparation, not a complete process loader.
 
 ### Download and import an image
 
