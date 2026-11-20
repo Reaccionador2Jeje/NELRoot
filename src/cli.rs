@@ -266,6 +266,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "static ET_DYN; no execution",
             );
             ui::state(
+                "ELF relative relocator",
+                cfg!(all(
+                    target_os = "linux",
+                    any(target_arch = "x86_64", target_arch = "aarch64")
+                )),
+                "RELATIVE RELA only; no execution",
+            );
+            ui::state(
                 "Native chroot runner",
                 runtime::supported(),
                 "host-kernel execution; Linux only",
@@ -576,6 +584,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "elf_load_planner", "status": "available"},
                             {
                                 "name": "elf_memory_mapper",
+                                "status": if cfg!(all(
+                                    target_os = "linux",
+                                    any(target_arch = "x86_64", target_arch = "aarch64")
+                                )) {
+                                    "available"
+                                } else {
+                                    "not_implemented"
+                                }
+                            },
+                            {
+                                "name": "elf_relative_relocator",
                                 "status": if cfg!(all(
                                     target_os = "linux",
                                     any(target_arch = "x86_64", target_arch = "aarch64")
