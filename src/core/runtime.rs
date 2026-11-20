@@ -1136,13 +1136,34 @@ mod tests {
                 .as_nanos()
         );
         let root = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(root.join("tmp")).expect("test rootfs should be created");
+        std::fs::create_dir_all(root.join("tmp")).expect("test /tmp should be created");
+        std::fs::create_dir(root.join("run")).expect("test /run should be created");
 
         let (validated_root, validated_tmp) =
-            validate_pivot_root_target(&root).expect("real rootfs /tmp should validate");
+            validate_pivot_root_target(&root).expect("real /run and /tmp should validate");
         assert_eq!(validated_root, root.canonicalize().unwrap());
         assert_eq!(validated_tmp, validated_root.join("tmp"));
 
+        std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pivot_root_validation_rejects_nonempty_run_directory() {
+        let unique = format!(
+            "nelroot-pivot-nonempty-run-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(root.join("tmp")).expect("test /tmp should be created");
+        std::fs::create_dir_all(root.join("run")).expect("test /run should be created");
+        std::fs::write(root.join("run/occupied"), "x").expect("test file should be created");
+
+        assert!(validate_pivot_root_target(&root).is_err());
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
     }
 
