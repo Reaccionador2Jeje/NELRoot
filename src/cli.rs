@@ -172,7 +172,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("Operating system : {}", host::os_name());
             println!("Architecture     : {}", host::architecture());
             println!("Pointer width    : {}-bit", usize::BITS);
-            println!("Elevated process : {}", host::has_elevated_privileges());
+            let privilege_state = match host::has_elevated_privileges() {
+                Some(true) => "yes",
+                Some(false) => "no",
+                None => "unknown",
+            };
+            println!("Elevated process : {privilege_state}");
             println!("Data directory   : {}", config::data_dir().display());
             if let Some(kernel) = host::kernel_release() {
                 println!("Kernel release   : {kernel}");
@@ -181,7 +186,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("Host interfaces:");
             for (name, available) in host::host_interfaces() {
-                println!("  {:24} {}", name, if available { "available" } else { "unavailable" });
+                let state = if available { "available" } else { "unavailable" };
+                println!("  {name:24} {state}");
             }
             println!("Execution engine : not implemented yet");
             println!("ELF loader       : not implemented yet");
@@ -228,33 +234,60 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
-            ImageCommands::Search { query, registry: registry_url } => {
+            ImageCommands::Search {
+                query,
+                registry: registry_url,
+            } => {
                 let matches = registry::search(&registry_url, &query)?;
                 if matches.is_empty() {
                     println!("No images matched '{query}'.");
                 } else {
                     for image in matches {
-                        println!("{}\t{}\t{}", image.name, image.architecture, image.description);
+                        println!(
+                            "{}\t{}\t{}",
+                            image.name, image.architecture, image.description
+                        );
                     }
                 }
             }
-            ImageCommands::Pull { name, registry: registry_url, architecture } => {
+            ImageCommands::Pull {
+                name,
+                registry: registry_url,
+                architecture,
+            } => {
                 let rootfs = registry::pull(&registry_url, &name, &architecture)?;
-                let _ = logging::record("info", &format!("image pulled: {name} ({architecture})"));
+                let _ = logging::record(
+                    "info",
+                    &format!("image pulled: {name} ({architecture})"),
+                );
                 println!("Image '{name}' downloaded, SHA-256 verified and imported.");
                 println!("Root filesystem: {}", rootfs.display());
                 println!("Architecture: {architecture}");
             }
-            ImageCommands::Download { url, output, sha256 } => {
+            ImageCommands::Download {
+                url,
+                output,
+                sha256,
+            } => {
                 let digest = images::download_archive(&url, &output, &sha256)?;
-                let _ = logging::record("info", &format!("image archive downloaded: {}", output.display()));
+                let _ = logging::record(
+                    "info",
+                    &format!("image archive downloaded: {}", output.display()),
+                );
                 println!("Image archive downloaded and verified.");
                 println!("File: {}", output.display());
                 println!("SHA-256: {digest}");
             }
-            ImageCommands::Import { name, archive, architecture } => {
+            ImageCommands::Import {
+                name,
+                archive,
+                architecture,
+            } => {
                 let rootfs = images::import_archive(&name, &archive, &architecture)?;
-                let _ = logging::record("info", &format!("image imported: {name} ({architecture})"));
+                let _ = logging::record(
+                    "info",
+                    &format!("image imported: {name} ({architecture})"),
+                );
                 println!("Imported image '{name}'.");
                 println!("Root filesystem: {}", rootfs.display());
                 println!("Architecture: {architecture}");
@@ -264,16 +297,26 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Root filesystem validation: passed");
                 println!("Path: {}", rootfs.display());
             }
-            ImageCommands::Register { name, path, architecture } => {
+            ImageCommands::Register {
+                name,
+                path,
+                architecture,
+            } => {
                 images::register_image(&name, &path, &architecture)?;
-                let _ = logging::record("info", &format!("image registered: {name} ({architecture})"));
+                let _ = logging::record(
+                    "info",
+                    &format!("image registered: {name} ({architecture})"),
+                );
                 println!("Registered image '{name}'.");
                 println!("Root filesystem: {}", path.canonicalize()?.display());
                 println!("The source directory was not copied or modified.");
             }
             ImageCommands::Remove { name } => {
                 if images::unregister_image(&name)? {
-                    let _ = logging::record("info", &format!("image unregistered: {name}"));
+                    let _ = logging::record(
+                        "info",
+                        &format!("image unregistered: {name}"),
+                    );
                     println!("Unregistered image '{name}'.");
                     println!("Its files were left untouched.");
                 } else {
@@ -284,7 +327,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let catalog = images::load_catalog()?;
                 if catalog.images.is_empty() {
                     println!("No images registered.");
-                    println!("Search a registry with: nelroot image search ubuntu --registry <https-index-url>");
+                    println!(
+                        "Search a registry with: nelroot image search ubuntu --registry <https-index-url>"
+                    );
                 } else {
                     for image in catalog.images {
                         println!("{}\t{}\t{}", image.name, image.architecture, image.format);
@@ -307,8 +352,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ImageCommands::Clean => {
                 let removed = registry::clean_staging()?;
-                let _ = logging::record("info", &format!("image cleanup removed {removed} staging directories"));
-                println!("Removed {removed} stale temporary entries (staging directories and cached downloads).");
+                let _ = logging::record(
+                    "info",
+                    &format!("image cleanup removed {removed} temporary entries"),
+                );
+                println!(
+                    "Removed {removed} stale temporary entries (staging directories and cached downloads)."
+                );
                 println!("Registered images and root filesystems were not modified.");
             }
         },
@@ -371,7 +421,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Event logging    : available");
                     println!("Native executor  : not implemented");
                     println!("ELF64 parser     : available (inspection only)");
-                println!("ELF loader       : not implemented");
+                    println!("ELF loader       : not implemented");
                     println!("Syscall layer    : not implemented");
                     println!("CPU emulator     : not implemented");
                     println!("Linux guest boot : not available");
