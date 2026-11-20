@@ -206,3 +206,49 @@ mod tests {
         assert!(plan_load(&info, 0x2000).is_err());
     }
 }
+
+
+/// Result of preparing a host-native static PIE for a future guest executor.
+///
+/// The ELF image is mapped and relocated in this process. The initial stack is
+/// only materialized as a byte image; it is not mapped into the ELF address
+/// space, and no guest instructions are executed.
+#[cfg(target_os = "linux")]
+pub struct PreparedStaticPie {
+    pub info: ElfInfo,
+    pub plan: LoadPlan,
+    pub mapped: super::memory::MappedElf,
+    pub stack: super::stack::GuestStack,
+    pub relocations_applied: usize,
+}
+
+/// Run the non-executing static-PIE preparation pipeline:
+/// inspect one file snapshot, map PT_LOAD, apply supported RELATIVE RELA,
+/// compute the load plan and construct the requested initial stack image.
+///
+/// This is loader preparation only. It does not create a separate guest
+/// address space, map the stack, load an interpreter, set CPU registers or
+/// transfer control to the ELF entry point.
+#[cfg(target_os = "linux")]
+pub fn prepare_static_pie(
+    path: &std::path::Path,
+    stack_config: &super::stack::GuestStackConfig,
+) -> Result<PreparedStaticPie, Box<dyn std::error::Error>> {
+    let (mut mapped, info) = super::memory::MappedElf::map_file_with_info(path)?;
+    if info.file_type != ET_DYN || info.interpreter.is_some() {
+        return Err("preparation pipeline currently accepts static ET_DYN images without PT_INTERP".into());
+    }
+
+    let plan = plan_load(&info, mapped.load_bias())?;
+    let relocations_applied =
+        super::relocation::apply_relative_relocations(&mut mapped, &info)?;
+    let stack = super::stack::build_initial_stack(stack_config)?;
+
+    Ok(PreparedStaticPie {
+        info,
+        plan,
+        mapped,
+        stack,
+        relocations_applied,
+    })
+}
