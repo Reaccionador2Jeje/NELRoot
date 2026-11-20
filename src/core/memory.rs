@@ -128,6 +128,9 @@ impl MappedElf {
         let mut min_page = u64::MAX;
         let mut max_page = 0_u64;
         for header in &load_segments {
+            if header.alignment > page_size_u64 {
+                return Err("PT_LOAD alignment exceeds the host page size supported by this mapper".into());
+            }
             if header.file_size > header.memory_size {
                 return Err("PT_LOAD file size exceeds memory size".into());
             }
@@ -196,7 +199,11 @@ impl MappedElf {
         if raw == libc::MAP_FAILED {
             return Err(std::io::Error::last_os_error().into());
         }
-        let base = NonNull::new(raw.cast::<u8>()).ok_or("mmap returned a null address")?;
+        if raw.is_null() {
+            unsafe { libc::munmap(raw, length); }
+            return Err("mmap returned a null address".into());
+        }
+        let base = NonNull::new(raw.cast::<u8>()).expect("non-null mmap address checked above");
 
         let entry_offset = usize::try_from(
             info.entry_point
