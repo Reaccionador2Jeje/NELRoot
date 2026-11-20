@@ -6,7 +6,7 @@ NELRoot is an open-source systems project by **AtDev**. Its long-term goal is to
 
 NELRoot is designed as an independent engine. PRoot and QEMU are not execution backends or runtime requirements.
 
-> **Development status:** Early development. NELRoot has a Linux-only native chroot launcher and an experimental memory mapper for bounded, host-native static PIE images. The mapper does not execute code or perform relocations; the chroot launcher still relies on the host kernel for ELF loading and syscalls. Neither is a complete independent guest runtime or secure sandbox. See [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md) for implementation boundaries.
+> **Development status:** Early development. NELRoot has a Linux-only native chroot launcher, a bounded memory mapper for host-native static PIE images, and an initial RELATIVE RELA relocation stage for x86_64/AArch64. These ELF tools prepare images in memory but do not execute guest code; the chroot launcher still relies on the host kernel for ELF loading and syscalls. Neither is a complete independent guest runtime or secure sandbox. See [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md) for implementation boundaries.
 
 ## Product direction
 
@@ -16,7 +16,7 @@ A major integration objective is to replace the PRoot-based Ubuntu backend in **
 
 NELRoot is also planned for native package-manager distribution: APT (`.deb`), DNF/Zypper (`.rpm`), Pacman (`.pkg.tar.zst`), APK and Termux packages. AtDev-maintained signed repositories are the initial target; inclusion in official distribution repositories requires their separate maintainer review and acceptance.
 
-See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its restrictions are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
+See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
 
 ## Install
 
@@ -97,6 +97,8 @@ nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 # Linux only: map a static host-native PIE into memory, without executing it
 nelroot elf map /path/to/static-pie
+# Linux only: apply supported RELATIVE RELA relocations in memory; no execution
+nelroot elf relocate /path/to/static-pie
 nelroot engine status
 nelroot engine status --json
 
