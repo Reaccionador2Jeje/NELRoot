@@ -27,7 +27,10 @@ impl GuestVfs {
     ///
     /// Symlinks are resolved by the host filesystem and the final canonical
     /// path must remain beneath the configured guest root.
-    pub fn resolve_existing(&self, guest_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    pub fn resolve_existing(
+        &self,
+        guest_path: &Path,
+    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
         let relative = normalize_guest_path(guest_path)?;
         let candidate = self.root.join(relative);
         let resolved = candidate.canonicalize()?;
@@ -54,7 +57,9 @@ impl GuestVfs {
             .ok_or("guest file path has no parent directory")?;
         let canonical_parent = self.root.join(parent).canonicalize()?;
         if !canonical_parent.starts_with(&self.root) {
-            return Err("guest file parent resolves outside the configured root filesystem".into());
+            return Err(
+                "guest file parent resolves outside the configured root filesystem".into(),
+            );
         }
         let destination = canonical_parent.join(name);
         match std::fs::symlink_metadata(&destination) {
@@ -106,10 +111,7 @@ mod tests {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "nelroot-vfs-{}-{nonce}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("nelroot-vfs-{}-{nonce}", std::process::id()));
         fs::create_dir_all(root.join("etc")).unwrap();
         fs::write(root.join("etc/os-release"), "NAME=Test\n").unwrap();
         root
@@ -119,7 +121,9 @@ mod tests {
     fn resolves_existing_guest_files_under_root() {
         let root = test_root();
         let vfs = GuestVfs::new(&root).unwrap();
-        let resolved = vfs.resolve_existing(Path::new("/etc/os-release")).unwrap();
+        let resolved = vfs
+            .resolve_existing(Path::new("/etc/os-release"))
+            .unwrap();
         assert_eq!(resolved, root.join("etc/os-release"));
         fs::remove_dir_all(root).unwrap();
     }
@@ -138,7 +142,9 @@ mod tests {
     fn resolves_new_file_only_inside_existing_guest_directory() {
         let root = test_root();
         let vfs = GuestVfs::new(&root).unwrap();
-        let destination = vfs.resolve_new_file(Path::new("/etc/nelroot.conf")).unwrap();
+        let destination = vfs
+            .resolve_new_file(Path::new("/etc/nelroot.conf"))
+            .unwrap();
         assert_eq!(destination, root.join("etc/nelroot.conf"));
         assert!(vfs.resolve_new_file(Path::new("/missing/file")).is_err());
         fs::remove_dir_all(root).unwrap();
