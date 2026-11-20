@@ -487,25 +487,29 @@ pub fn publish_image(
         .build()?;
     let artifact_url = base.join(&format!("/v1/artifacts/{digest}"))?;
     let upload = reqwest::blocking::Body::new(fs::File::open(archive_path)?);
-    client
+    let upload_response = client
         .post(artifact_url)
         .bearer_auth(token)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-        .header(reqwest::header::CONTENT_LENGTH, metadata.len())
+        .header(reqwest::header::CONTENT_LENGTH, metadata.len().to_string())
         .body(upload)
-        .send()?
-        .error_for_status()?;
+        .send()?;
+    if !upload_response.status().is_success() {
+        return Err(format!("Hub artifact upload failed with HTTP {}", upload_response.status()).into());
+    }
 
     let manifest_url = base.join("/v1/manifests")?;
     let manifest_bytes = serde_json::to_vec(&manifest)?;
-    let response: serde_json::Value = client
+    let publish_response = client
         .post(manifest_url)
         .bearer_auth(token)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(manifest_bytes)
-        .send()?
-        .error_for_status()?
-        .json()?;
+        .send()?;
+    if !publish_response.status().is_success() {
+        return Err(format!("Hub manifest publication failed with HTTP {}", publish_response.status()).into());
+    }
+    let response: serde_json::Value = publish_response.json()?;
     let published_url = response
         .get("manifest_url")
         .and_then(serde_json::Value::as_str)
