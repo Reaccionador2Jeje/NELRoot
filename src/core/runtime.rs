@@ -623,6 +623,323 @@ pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct RootlessChildFailure {
+    stage: i32,
+    errno: i32,
+}
+
+#[cfg(target_os = "linux")]
+fn validate_rootless_launch(
+    rootfs: &Path,
+    target: &Path,
+    program: &str,
+    guest_cwd: &Path,
+) -> io::Result<()> {
+    if unsafe { libc::geteuid() } == 0 {
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+            "rootless launch must be started by an unprivileged host user, not host UID 0"));
+    }
+    if !program.starts_with('/') || program.as_bytes().contains(&0) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "guest executable must be an absolute path such as /bin/sh"));
+    }
+    validate_guest_cwd(guest_cwd).map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let tmp = rootfs.join("tmp");
+    let metadata = std::fs::symlink_metadata(&tmp)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "rootfs must contain a real /tmp directory for the isolated writable tmpfs"));
+    }
+    let root = rootfs.canonicalize()?;
+    let target_meta = std::fs::symlink_metadata(target)?;
+    if target_meta.file_type().is_symlink() || !target_meta.is_dir() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "runtime mount target must be an existing real directory"));
+    }
+    let target = target.canonicalize()?;
+    if root == target || root.starts_with(&target) || target.starts_with(&root) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "runtime mount target and rootfs must not contain one another"));
+    }
+    if std::fs::read_dir(&target)?.next().is_some() {
+        return Err(io::Error::new(io::ErrorKind::DirectoryNotEmpty,
+            "runtime mount target must be empty"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn rootless_child_fail(error_fd: libc::c_int, stage: i32) -> ! {
+    let failure = RootlessChildFailure {
+        stage,
+        errno: unsafe { *libc::__errno_location() },
+    };
+    unsafe {
+        libc::write(error_fd, (&failure as *const RootlessChildFailure).cast(),
+            std::mem::size_of::<RootlessChildFailure>());
+        libc::_exit(127);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure>> {
+    let mut failure = std::mem::MaybeUninit::<RootlessChildFailure>::uninit();
+    let mut received = 0_usize;
+    while received < std::mem::size_of::<RootlessChildFailure>() {
+        let result = unsafe {
+            libc::read(fd,
+                failure.as_mut_ptr().cast::<u8>().add(received).cast(),
+                std::mem::size_of::<RootlessChildFailure>() - received)
+        };
+        if result == 0 { break; }
+        if result < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted { continue; }
+            return Err(error);
+        }
+        received += result as usize;
+    }
+    if received == 0 { Ok(None) }
+    else if received == std::mem::size_of::<RootlessChildFailure>() {
+        Ok(Some(unsafe { failure.assume_init() }))
+    } else {
+        Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+            "rootless child returned a truncated setup error"))
+    }
+}
+
+/// Launch a same-architecture program in a rootless user and private mount namespace.
+///
+/// The parent pauses a child while installing its single-ID UID/GID maps. The
+/// child then creates a private mount namespace, bind-mounts the image read-only,
+/// mounts a bounded tmpfs over /tmp, pivots into the image, detaches the old
+/// root, enables no_new_privs, and execs the guest program. The image is not
+/// modified. PID and network namespace isolation are not implemented yet.
+#[cfg(target_os = "linux")]
+pub fn run_rootless_image(
+    image_name: &str,
+    program: &str,
+    arguments: &[String],
+    guest_cwd: &Path,
+) -> Result<ExitStatus, Box<dyn std::error::Error>> {
+    use std::os::unix::process::ExitStatusExt;
+
+    let catalog = images::load_catalog()?;
+    let image = catalog.images.iter().find(|image| image.name == image_name)
+        .ok_or_else(|| format!("image '{image_name}' is not registered"))?;
+    if !host_architecture_matches(&image.architecture) {
+        return Err(format!("image architecture '{}' does not match host architecture '{}'; cross-architecture execution is not implemented",
+            image.architecture, std::env::consts::ARCH).into());
+    }
+    let rootfs = images::validate_rootfs(Path::new(
+        image.source.as_deref().ok_or("registered image has no root filesystem path")?
+    ))?;
+
+    std::fs::create_dir_all(crate::core::config::runtime_dir())?;
+    let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
+    let unique = format!("rootfs-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos());
+    let target = runtime_root.join(unique);
+    std::fs::create_dir(&target)?;
+    if let Err(error) = validate_rootless_launch(&rootfs, &target, program, guest_cwd) {
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+
+    let root_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
+    let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
+    let target_tmp_c = CString::new(target.join("tmp").as_os_str().as_encoded_bytes())?;
+    let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
+    let program_c = CString::new(program)?;
+    let mut argv = Vec::with_capacity(arguments.len() + 2);
+    argv.push(program_c.clone());
+    for argument in arguments { argv.push(CString::new(argument.as_bytes())?); }
+    let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|value| value.as_ptr()).collect();
+    argv_ptrs.push(std::ptr::null());
+
+    let env = [
+        CString::new("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")?,
+        CString::new("HOME=/tmp")?,
+        CString::new("USER=root")?,
+        CString::new("LOGNAME=root")?,
+    ];
+    let mut env_ptrs: Vec<*const libc::c_char> = env.iter().map(|value| value.as_ptr()).collect();
+    env_ptrs.push(std::ptr::null());
+
+    let mut ready_pipe = [0; 2];
+    let mut release_pipe = [0; 2];
+    let mut error_pipe = [0; 2];
+    if unsafe { libc::pipe2(ready_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        let error = io::Error::last_os_error();
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+    if unsafe { libc::pipe2(release_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        let error = io::Error::last_os_error();
+        unsafe { libc::close(ready_pipe[0]); libc::close(ready_pipe[1]); }
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+    if unsafe { libc::pipe2(error_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        let error = io::Error::last_os_error();
+        unsafe {
+            libc::close(ready_pipe[0]); libc::close(ready_pipe[1]);
+            libc::close(release_pipe[0]); libc::close(release_pipe[1]);
+        }
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        let error = io::Error::last_os_error();
+        unsafe {
+            libc::close(ready_pipe[0]); libc::close(ready_pipe[1]);
+            libc::close(release_pipe[0]); libc::close(release_pipe[1]);
+            libc::close(error_pipe[0]); libc::close(error_pipe[1]);
+        }
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+
+    if pid == 0 {
+        unsafe {
+            libc::close(ready_pipe[0]);
+            libc::close(release_pipe[1]);
+            libc::close(error_pipe[0]);
+
+            if libc::unshare(libc::CLONE_NEWUSER) != 0 {
+                let errno = *libc::__errno_location();
+                let value = errno.clamp(1, 255) as u8;
+                libc::write(ready_pipe[1], (&value as *const u8).cast(), 1);
+                libc::_exit(125);
+            }
+            let ready = 0_u8;
+            if libc::write(ready_pipe[1], (&ready as *const u8).cast(), 1) != 1 {
+                libc::_exit(125);
+            }
+            libc::close(ready_pipe[1]);
+
+            let mut release = 0_u8;
+            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1 || release != 1 {
+                libc::_exit(125);
+            }
+            libc::close(release_pipe[0]);
+
+            if libc::unshare(libc::CLONE_NEWNS) != 0 { rootless_child_fail(error_pipe[1], 1); }
+            if libc::mount(std::ptr::null(), c"/".as_ptr(), std::ptr::null(),
+                (libc::MS_REC | libc::MS_PRIVATE) as libc::c_ulong, std::ptr::null()) != 0 {
+                rootless_child_fail(error_pipe[1], 2);
+            }
+            if libc::mount(root_c.as_ptr(), target_c.as_ptr(), std::ptr::null(),
+                libc::MS_BIND as libc::c_ulong, std::ptr::null()) != 0 {
+                rootless_child_fail(error_pipe[1], 3);
+            }
+            if libc::mount(std::ptr::null(), target_c.as_ptr(), std::ptr::null(),
+                (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                std::ptr::null()) != 0 {
+                rootless_child_fail(error_pipe[1], 4);
+            }
+            if libc::mount(c"tmpfs".as_ptr(), target_tmp_c.as_ptr(), c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                c"mode=1777,size=16m".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 5);
+            }
+            if libc::chdir(target_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 6); }
+            if libc::mkdir(c"tmp/.nelroot-oldroot".as_ptr(), 0o700) != 0 {
+                rootless_child_fail(error_pipe[1], 7);
+            }
+            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"tmp/.nelroot-oldroot".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 8);
+            }
+            if libc::chdir(c"/".as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 9); }
+            if libc::umount2(c"/tmp/.nelroot-oldroot".as_ptr(), libc::MNT_DETACH) != 0 {
+                rootless_child_fail(error_pipe[1], 10);
+            }
+            if libc::rmdir(c"/tmp/.nelroot-oldroot".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 11);
+            }
+            if libc::chdir(cwd_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 12); }
+            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+                rootless_child_fail(error_pipe[1], 13);
+            }
+            libc::execve(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
+            rootless_child_fail(error_pipe[1], 14);
+        }
+    }
+
+    unsafe {
+        libc::close(ready_pipe[1]);
+        libc::close(release_pipe[0]);
+        libc::close(error_pipe[1]);
+    }
+    let mut ready = 0_u8;
+    let ready_result = loop {
+        let result = unsafe { libc::read(ready_pipe[0], (&mut ready as *mut u8).cast(), 1) };
+        if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted { continue; }
+        break result;
+    };
+    unsafe { libc::close(ready_pipe[0]); }
+    if ready_result != 1 || ready != 0 {
+        unsafe { libc::close(release_pipe[1]); libc::kill(pid, libc::SIGKILL); }
+        let _ = wait_for_child(pid);
+        let _ = std::fs::remove_dir(&target);
+        return Err(if ready_result == 1 {
+            io::Error::from_raw_os_error(ready as i32).into()
+        } else { io::Error::last_os_error().into() });
+    }
+
+    if let Err(error) = configure_user_namespace_mappings(pid) {
+        unsafe { libc::close(release_pipe[1]); libc::kill(pid, libc::SIGKILL); }
+        let _ = wait_for_child(pid);
+        unsafe { libc::close(error_pipe[0]); }
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+    let release = 1_u8;
+    let released = unsafe { libc::write(release_pipe[1], (&release as *const u8).cast(), 1) };
+    unsafe { libc::close(release_pipe[1]); }
+    if released != 1 {
+        let error = io::Error::last_os_error();
+        unsafe { libc::kill(pid, libc::SIGKILL); }
+        let _ = wait_for_child(pid);
+        unsafe { libc::close(error_pipe[0]); }
+        let _ = std::fs::remove_dir(&target);
+        return Err(error.into());
+    }
+
+    let child_failure = read_child_failure(error_pipe[0]);
+    unsafe { libc::close(error_pipe[0]); }
+    let status = wait_for_child(pid)?;
+    let _ = std::fs::remove_dir(&target);
+    if let Some(failure) = child_failure? {
+        let stage = match failure.stage {
+            1 => "create private mount namespace",
+            2 => "make mount propagation private",
+            3 => "bind-mount rootfs",
+            4 => "remount rootfs read-only",
+            5 => "mount writable /tmp",
+            6 => "enter rootfs mount",
+            7 => "create temporary old-root directory",
+            8 => "pivot_root",
+            9 => "change to guest root",
+            10 => "detach old root",
+            11 => "remove old-root mountpoint",
+            12 => "change guest working directory",
+            13 => "enable no_new_privs",
+            14 => "execute guest program",
+            _ => "configure guest process",
+        };
+        let source = io::Error::from_raw_os_error(failure.errno);
+        return Err(io::Error::new(source.kind(), format!("rootless runtime failed to {stage}: {source}")).into());
+    }
+    Ok(ExitStatus::from_raw(status))
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
