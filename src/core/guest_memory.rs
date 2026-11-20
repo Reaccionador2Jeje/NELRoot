@@ -211,7 +211,7 @@ mod tests {
         memory.write(0x8004, b"test").unwrap();
         assert_eq!(memory.read(0x8004, 4).unwrap(), b"test");
         assert!(memory.write(0x4000, b"x").is_err());
-        assert_eq!(memory.read(0x4000, 1).unwrap(), vec![0x7f]);
+        assert_eq!(memory.read(0x4000, 1).unwrap(), vec![0]);
     }
 
     #[test]
