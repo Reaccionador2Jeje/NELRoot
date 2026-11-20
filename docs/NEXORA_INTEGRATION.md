@@ -27,7 +27,7 @@ nelroot port expose <name> <guest-port> [--host-port <port>]
 nelroot package <project-path> --output <artifact>
 ```
 
-The exact syntax may evolve before the full runtime milestone. A first Linux-only process launcher is now available through `nelroot run <image> -- <absolute-program> [args...]` and `nelroot shell <image>`. It requires effective root and `CAP_SYS_CHROOT`, supports same-architecture images only, and uses the host kernel for ELF loading and syscalls. It is not yet the independent guest ABI runtime or a secure sandbox. NEXORA can use `nelroot --version`, `nelroot doctor` and `nelroot engine status --json` for capability detection.
+The exact syntax may evolve before the full runtime milestone. A first Linux-only process launcher is now available through `nelroot run <image> -- <absolute-program> [args...]` and `nelroot shell <image>`. It requires effective UID 0 plus effective `CAP_SYS_CHROOT`, `CAP_SETUID` and `CAP_SETGID` capabilities, supports same-architecture images only, and uses the host kernel for ELF loading and syscalls. It is not yet the independent guest ABI runtime or a secure sandbox. NEXORA can use `nelroot --version`, `nelroot doctor` and `nelroot engine status --json` for capability detection.
 
 ## Required machine-readable response
 
