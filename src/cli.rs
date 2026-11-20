@@ -377,7 +377,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Program headers: {}", info.program_headers.len());
                 for (index, header) in info.program_headers.iter().enumerate() {
                     println!(
-                        "  [{index}] type={} flags={:#x} off={:#x} va={:#x} file={} mem={} align={}",
+                        "  [{index}] t={} f={:#x} o={:#x} va={:#x} fs={} ms={} a={}",
                         header.kind,
                         header.flags,
                         header.offset,
