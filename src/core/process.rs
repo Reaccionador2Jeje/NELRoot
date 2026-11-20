@@ -4,7 +4,10 @@
 //! isolation. It provides the process lifecycle building block used by the
 //! future namespace-backed runtime.
 
-use std::{io, process::{Child, Command, ExitStatus}};
+use std::{
+    io,
+    process::{Child, Command, ExitStatus},
+};
 
 /// Observable lifecycle state of a supervised child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
