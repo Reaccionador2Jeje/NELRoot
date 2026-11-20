@@ -13,3 +13,4 @@ pub mod memory;
 pub mod relocation;
 pub mod stack;
 pub mod address_space;
+pub mod guest_memory;
