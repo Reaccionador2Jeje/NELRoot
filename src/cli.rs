@@ -2,7 +2,9 @@ use clap::{Parser, Subcommand};
 
 use nelroot::core::{config, elf, host, images, logging, registry, runtime};
 #[cfg(target_os = "linux")]
-use nelroot::core::{cpu, memory, relocation, stack};
+use nelroot::core::{memory, relocation};
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use nelroot::core::{cpu, stack};
 use crate::ui;
 
 #[derive(Debug, Parser)]
@@ -205,7 +207,7 @@ enum ElfCommands {
         path: std::path::PathBuf,
     },
     /// Interpret a static x86_64 PIE with the bounded experimental guest CPU.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     Emulate {
         /// Path to a static ET_DYN ELF without PT_INTERP.
         path: std::path::PathBuf,
@@ -298,7 +300,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             ui::state("Independent ELF executor", false, "experimental subset; not general Linux compatibility");
-            ui::state("Static PIE preparation", cfg!(target_os = "linux"), "loader → guest memory pipeline; x86_64 interpreter");
+            ui::state("Static PIE preparation", cfg!(all(target_os = "linux", target_arch = "x86_64")), "loader → guest memory pipeline; x86_64 interpreter");
             ui::state("Syscall integration", true, "bounded write/exit ABI connected to guest interpreter");
             ui::state("Guest CPU interpreter", cfg!(all(target_os = "linux", target_arch = "x86_64")), "bounded x86_64 subset; instruction budget required");
             ui::warn("Host interfaces do not imply guest Linux compatibility.");
@@ -575,7 +577,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
                 ui::warn("Relocations applied in memory only; the ELF entry point was not executed.");
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
             ElfCommands::Emulate { path, max_steps, arguments } => {
                 use std::io::{Read, Write};
                 let executable = path.to_string_lossy().into_owned();
@@ -640,7 +642,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             },
                             {"name": "guest_memory_backing", "status": "model_available_not_execution"},
-                            {"name": "guest_syscall_abi", "status": "model_available_not_connected"},
+                            {"name": "guest_syscall_abi", "status": "model_available_connected_to_guest_interpreter"},
                             {
                                 "name": "elf_relative_relocator",
                                 "status": if cfg!(all(
@@ -711,9 +713,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "Linux host kernel",
                     );
                     ui::heading("Under development");
-                    ui::state("Independent ELF executor", false, "not implemented");
-                    ui::state("ELF memory loader", false, "not implemented");
-                    ui::state("Guest CPU interpreter", true, "bounded x86_64 instruction subset; smoke tests only");
+                    ui::state("Independent ELF executor", false, "experimental subset; not general Linux compatibility");
+                    ui::state("Static PIE preparation", cfg!(all(target_os = "linux", target_arch = "x86_64")), "loader → guest memory pipeline");
+                    ui::state("Guest CPU interpreter", cfg!(all(target_os = "linux", target_arch = "x86_64")), "bounded x86_64 instruction subset; instruction budget required");
                     ui::state("Full Linux CPU compatibility", false, "not implemented");
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
