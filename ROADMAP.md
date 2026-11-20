@@ -23,7 +23,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
 - [x] Non-executing ELF load-plan foundation with page-range, entry-point and W^X validation.
 - [x] Bounded Linux memory mapping for host-native static ET_DYN images, including PT_LOAD alignment validation, BSS zero-fill, W^X-safe page permissions, permission-checked memory reads/writes and RAII unmapping (mapping only; no execution).
-- [ ] Full ELF loading, relocation processing, dynamic-linking and initial process-stack support.
+- [x] Initial static PIE RELATIVE RELA relocation support for x86_64 and AArch64, with bounded dynamic-table parsing and writable-target validation (no execution).
+- [ ] Full ELF loading, remaining relocation types, dynamic-linking and initial process-stack support.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
