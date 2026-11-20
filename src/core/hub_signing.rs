@@ -120,7 +120,7 @@ pub fn sign_manifest(manifest_path: &Path, private_path: &Path, output_path: &Pa
     let mut output = fs::OpenOptions::new().write(true).create_new(true).open(output_path)?;
     use std::io::Write;
     output.write_all(&encoded)?;
-    output.write_all(b"\\n")?;
+    output.write_all(b"\n")?;
     output.sync_all()?;
     Ok(document)
 }
@@ -153,8 +153,6 @@ pub fn verify_manifest(manifest_path: &Path, signature_path: &Path, public_path:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     #[test]
     fn hex_round_trip_and_rejects_invalid_input() {
         let bytes = [0_u8, 1, 127, 128, 255];
