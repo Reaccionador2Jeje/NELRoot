@@ -110,6 +110,33 @@ enum ConfigCommands {
 
 #[derive(Debug, Subcommand)]
 enum ImageCommands {
+    /// Search public Docker Hub repositories.
+    HubSearch {
+        /// Search text.
+        query: String,
+        /// Maximum number of repositories (1-100).
+        #[arg(long, default_value_t = 20)]
+        limit: u16,
+    },
+    /// List tags published for a Docker Hub repository.
+    HubTags {
+        /// Repository name, for example alpine or library/ubuntu.
+        repository: String,
+        /// Maximum number of tags (1-100).
+        #[arg(long, default_value_t = 50)]
+        limit: u16,
+    },
+    /// Inspect a Docker Hub tag and select its Linux platform manifest.
+    HubInspect {
+        /// Repository name, for example alpine or library/ubuntu.
+        repository: String,
+        /// Tag or manifest digest.
+        #[arg(default_value = "latest")]
+        reference: String,
+        /// Target architecture (x86_64, aarch64, etc.).
+        #[arg(long, default_value_t = std::env::consts::ARCH.to_string())]
+        architecture: String,
+    },
     /// Search a remote HTTPS image registry index.
     Search {
         /// Search term matched against image names and descriptions.
@@ -400,6 +427,44 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
+            ImageCommands::HubSearch { query, limit } => {
+                let matches = registry::docker_hub_search(&query, limit)?;
+                ui::banner(&format!("Docker Hub repositories: {query}"));
+                if matches.is_empty() {
+                    ui::warn("No Docker Hub repositories matched the query.");
+                } else {
+                    for repository in matches {
+                        let official = if repository.is_official { "official" } else { "community" };
+                        ui::key(
+                            &repository.repo_name,
+                            format!("{official} · {} stars · {} pulls · {}", repository.star_count, repository.pull_count, repository.short_description),
+                        );
+                    }
+                }
+            }
+            ImageCommands::HubTags { repository, limit } => {
+                let tags = registry::docker_hub_tags(&repository, limit)?;
+                ui::banner(&format!("Docker Hub tags: {repository}"));
+                if tags.is_empty() {
+                    ui::warn("No tags were returned.");
+                } else {
+                    for tag in tags {
+                        ui::key(&tag.name, format!("{} bytes · updated {}", tag.full_size, tag.last_updated));
+                    }
+                }
+            }
+            ImageCommands::HubInspect { repository, reference, architecture } => {
+                let manifest = registry::docker_hub_inspect(&repository, &reference, &architecture)?;
+                ui::banner("Docker Hub image manifest");
+                ui::key("Repository", &manifest.repository);
+                ui::key("Reference", &manifest.reference);
+                ui::key("Digest", if manifest.digest.is_empty() { "not supplied" } else { &manifest.digest });
+                ui::key("Platform", format!("{}/{}", manifest.os, manifest.architecture));
+                ui::key("Media type", &manifest.media_type);
+                ui::key("Layers", manifest.layer_count);
+                ui::key("Compressed layer bytes", manifest.total_layer_bytes);
+                ui::muted("Inspection only: image layers have not been downloaded or extracted.");
+            }
             ImageCommands::Search {
                 query,
                 registry: registry_url,
