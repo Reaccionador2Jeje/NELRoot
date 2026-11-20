@@ -5,9 +5,9 @@
 
 use std::{
     fs,
+    io::Read,
     path::Path,
     ptr::NonNull,
-    slice,
 };
 
 use super::elf::{self, ElfInfo, ProgramHeader};
@@ -83,7 +83,13 @@ impl MappedElf {
         if metadata.len() > MAX_IMAGE_SIZE as u64 {
             return Err("ELF image exceeds the 256 MiB mapping input limit".into());
         }
-        let bytes = fs::read(path)?;
+        let mut bytes = Vec::new();
+        fs::File::open(path)?
+            .take((MAX_IMAGE_SIZE + 1) as u64)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > MAX_IMAGE_SIZE {
+            return Err("ELF image grew beyond the 256 MiB mapping input limit".into());
+        }
         let info = elf::inspect_elf_bytes(&bytes)?;
         Self::map_bytes(&bytes, &info)
     }
@@ -192,13 +198,18 @@ impl MappedElf {
         }
         let base = NonNull::new(raw.cast::<u8>()).ok_or("mmap returned a null address")?;
 
-        let entry_offset = usize::try_from(\n            info.entry_point\n                .checked_sub(min_page)\n                .ok_or("ELF entry point precedes the mapped image")?,\n        )?;\n\n        let mut mapped = Self {
+        let entry_offset = usize::try_from(
+            info.entry_point
+                .checked_sub(min_page)
+                .ok_or("ELF entry point precedes the mapped image")?,
+        )?;
+
+        let mut mapped = Self {
             base,
             length,
             min_virtual_address: min_page,
             load_bias: 0,
-            entry_offset: usize::try_from(info.entry_point.checked_sub(min_page)
-                .ok_or("ELF entry point precedes the mapped image")?)?,
+            entry_offset,
             page_size,
             page_permissions,
         };
@@ -360,7 +371,8 @@ mod tests {
         let (bytes, info) = static_pie();
         let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
         assert!(mapped.length() >= 8192);
-        assert!(mapped.entry_address() >= mapped.base_address());\n        assert_eq!(mapped.read_byte(0).unwrap(), 0x7f);
+        assert!(mapped.entry_address() >= mapped.base_address());
+        assert_eq!(mapped.read_byte(0).unwrap(), 0x7f);\n        assert_eq!(mapped.read_byte(0).unwrap(), 0x7f);
         let bss_offset = bytes.len();
         for offset in bss_offset..bss_offset + 64 {
             assert_eq!(mapped.read_byte(offset).unwrap(), 0);
