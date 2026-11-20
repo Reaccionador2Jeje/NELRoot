@@ -40,6 +40,31 @@ impl GuestSyscallRegisters {
     }
 }
 
+/// x86_64 register frame at the Linux `syscall` ABI boundary.
+///
+/// Linux passes the syscall number in RAX and arguments in RDI, RSI, RDX,
+/// R10, R8 and R9. This is a data adapter only; it does not execute a
+/// `syscall` instruction or capture a real CPU trap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct X86_64SyscallFrame {
+    pub rax: u64,
+    pub rdi: u64,
+    pub rsi: u64,
+    pub rdx: u64,
+    pub r10: u64,
+    pub r8: u64,
+    pub r9: u64,
+}
+
+impl X86_64SyscallFrame {
+    pub fn syscall_registers(self) -> GuestSyscallRegisters {
+        GuestSyscallRegisters::new(
+            self.rax,
+            [self.rdi, self.rsi, self.rdx, self.r10, self.r8, self.r9],
+        )
+    }
+}
+
 /// Modeled lifecycle state of one guest process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuestProcessState {
@@ -119,6 +144,18 @@ impl SyscallContext {
 pub struct SyscallDispatcher;
 
 impl SyscallDispatcher {
+    /// Dispatch one modeled x86_64 syscall frame and write the signed Linux
+    /// result back to RAX using its two's-complement register representation.
+    pub fn dispatch_x86_64_frame(
+        &self,
+        context: &mut SyscallContext,
+        frame: &mut X86_64SyscallFrame,
+    ) -> i64 {
+        let result = self.dispatch(context, frame.syscall_registers());
+        frame.rax = result as u64;
+        result
+    }
+
     pub fn dispatch(
         &self,
         context: &mut SyscallContext,
@@ -181,6 +218,41 @@ mod tests {
         let mut memory = GuestMemory::from_address_space(&layout).unwrap();
         memory.write(0x1100, b"hello NELRoot").unwrap();
         SyscallContext::new(memory)
+    }
+
+    #[test]
+    fn x86_64_frame_uses_linux_argument_register_order_and_returns_in_rax() {
+        let mut context = context();
+        let mut frame = X86_64SyscallFrame {
+            rax: x86_64::WRITE,
+            rdi: 1,
+            rsi: 0x1100,
+            rdx: 5,
+            r10: 0,
+            r8: 0,
+            r9: 0,
+        };
+        let result = SyscallDispatcher.dispatch_x86_64_frame(&mut context, &mut frame);
+        assert_eq!(result, 5);
+        assert_eq!(frame.rax, 5);
+        assert_eq!(context.output.stdout(), b"hello");
+    }
+
+    #[test]
+    fn x86_64_frame_encodes_negative_errno_in_rax() {
+        let mut context = context();
+        let mut frame = X86_64SyscallFrame {
+            rax: 9999,
+            rdi: 0,
+            rsi: 0,
+            rdx: 0,
+            r10: 0,
+            r8: 0,
+            r9: 0,
+        };
+        let result = SyscallDispatcher.dispatch_x86_64_frame(&mut context, &mut frame);
+        assert_eq!(result, -errno::ENOSYS);
+        assert_eq!(frame.rax, (-errno::ENOSYS) as u64);
     }
 
     #[test]
