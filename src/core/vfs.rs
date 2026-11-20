@@ -1,7 +1,9 @@
 //! Root-confined guest filesystem path resolution.
 //!
 //! This module does not mount filesystems or emulate Linux file descriptors.
-//! It provides a safe path-resolution foundation for a future guest VFS.
+//! It provides a root-confined path-resolution foundation for a future guest
+//! VFS. Callers must still use race-resistant openat/openat2-style operations
+//! when opening files; resolving a path and opening it later is not atomic.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -55,8 +57,10 @@ impl GuestVfs {
             return Err("guest file parent resolves outside the configured root filesystem".into());
         }
         let destination = canonical_parent.join(name);
-        if destination.exists() {
-            return Err("guest destination already exists".into());
+        match std::fs::symlink_metadata(&destination) {
+            Ok(_) => return Err("guest destination already exists".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
         Ok(destination)
     }
