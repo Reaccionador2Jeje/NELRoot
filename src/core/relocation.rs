@@ -223,11 +223,84 @@ fn relative_relocation_value(
 mod tests {
     use super::*;
 
+    fn mapped_static_pie_fixture() -> (Vec<u8>, ElfInfo) {
+        let machine = if cfg!(target_arch = "x86_64") {
+            62
+        } else {
+            183
+        };
+        let mut bytes = vec![0_u8; 4096 + 8];
+
+        let mut dynamic = Vec::new();
+        dynamic.extend_from_slice(&dynamic_entry(DT_RELA, 0x1200));
+        dynamic.extend_from_slice(&dynamic_entry(DT_RELASZ, 24));
+        dynamic.extend_from_slice(&dynamic_entry(DT_RELAENT, 24));
+        dynamic.extend_from_slice(&dynamic_entry(DT_NULL, 0));
+        bytes[0x100..0x100 + dynamic.len()].copy_from_slice(&dynamic);
+
+        let relocation_type = if machine == 62 { 8_u32 } else { 1027_u32 };
+        bytes[0x200..0x208].copy_from_slice(&0x2000_u64.to_le_bytes());
+        bytes[0x208..0x210].copy_from_slice(&(relocation_type as u64).to_le_bytes());
+        bytes[0x210..0x218].copy_from_slice(&0x1234_i64.to_le_bytes());
+
+        let info = ElfInfo {
+            file_type: 3,
+            machine,
+            architecture: if machine == 62 { "x86_64" } else { "AArch64" },
+            entry_point: 0x1000,
+            interpreter: None,
+            program_headers: vec![
+                ProgramHeader {
+                    kind: 1,
+                    flags: 5,
+                    offset: 0,
+                    virtual_address: 0x1000,
+                    file_size: 4096,
+                    memory_size: 4096,
+                    alignment: 4096,
+                },
+                ProgramHeader {
+                    kind: 1,
+                    flags: 6,
+                    offset: 4096,
+                    virtual_address: 0x2000,
+                    file_size: 8,
+                    memory_size: 4096,
+                    alignment: 4096,
+                },
+                ProgramHeader {
+                    kind: PT_DYNAMIC,
+                    flags: 4,
+                    offset: 0x100,
+                    virtual_address: 0x1100,
+                    file_size: dynamic.len() as u64,
+                    memory_size: dynamic.len() as u64,
+                    alignment: 8,
+                },
+            ],
+        };
+        (bytes, info)
+    }
+
     fn dynamic_entry(tag: i64, value: u64) -> [u8; ELF64_DYNAMIC_ENTRY_SIZE] {
         let mut entry = [0_u8; ELF64_DYNAMIC_ENTRY_SIZE];
         entry[..8].copy_from_slice(&tag.to_le_bytes());
         entry[8..].copy_from_slice(&value.to_le_bytes());
         entry
+    }
+
+    #[test]
+    fn applies_relative_relocation_to_writable_guest_memory() {
+        let (bytes, info) = mapped_static_pie_fixture();
+        let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+
+        assert_eq!(apply_relative_relocations(&mut mapped, &info).unwrap(), 1);
+
+        let target_offset = mapped.virtual_address_offset(0x2000, 8).unwrap();
+        let relocated = u64::from_le_bytes(
+            mapped.read_bytes(target_offset, 8).unwrap().try_into().unwrap(),
+        );
+        assert_eq!(relocated, mapped.load_bias() + 0x1234);
     }
 
     #[test]
