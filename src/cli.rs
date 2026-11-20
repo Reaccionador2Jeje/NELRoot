@@ -159,13 +159,21 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
-            ImageCommands::Download {\n                url,\n                output,\n                sha256,\n            } => {
+            ImageCommands::Download {
+                url,
+                output,
+                sha256,
+            } => {
                 let digest = images::download_archive(&url, &output, &sha256)?;
                 println!("Image archive downloaded and verified.");
                 println!("File: {}", output.display());
                 println!("SHA-256: {digest}");
             }
-            ImageCommands::Import {\n                name,\n                archive,\n                architecture,\n            } => {
+            ImageCommands::Import {
+                name,
+                archive,
+                architecture,
+            } => {
                 let rootfs = images::import_archive(&name, &archive, &architecture)?;
                 println!("Imported image '{name}'.");
                 println!("Root filesystem: {}", rootfs.display());
