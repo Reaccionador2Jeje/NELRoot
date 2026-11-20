@@ -3,12 +3,14 @@ use std::{
     fs,
     io::Read,
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use crate::core::{config, images};
 
 const MAX_INDEX_BYTES: u64 = 4 * 1024 * 1024;
+const STAGING_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+const DOWNLOAD_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RegistryImage {
@@ -26,13 +28,24 @@ struct RegistryIndex {
     images: Vec<RegistryImage>,
 }
 
+fn valid_image(image: &RegistryImage) -> bool {
+    !image.name.is_empty()
+        && image.name.len() <= 64
+        && image.name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        && !image.architecture.is_empty()
+        && image.architecture.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && image.url.starts_with("https://")
+        && image.sha256.len() == 64
+        && image.sha256.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
     if !url.starts_with("https://") {
         return Err("registry index must use HTTPS".into());
     }
 
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(Duration::from_secs(30))
         .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
@@ -41,10 +54,7 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
     }
 
     let mut bytes = Vec::new();
-    response
-        .by_ref()
-        .take(MAX_INDEX_BYTES + 1)
-        .read_to_end(&mut bytes)?;
+    response.by_ref().take(MAX_INDEX_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_INDEX_BYTES {
         return Err("registry index exceeds the 4 MiB size limit".into());
     }
@@ -52,6 +62,23 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
     let index: RegistryIndex = serde_json::from_slice(&bytes)?;
     if index.schema_version != 1 {
         return Err(format!("unsupported registry schema version: {}", index.schema_version).into());
+    }
+    for image in &index.images {
+        if !valid_image(image) {
+            return Err(format!("registry contains an invalid entry for image '{}'", image.name).into());
+        }
+    }
+    for (position, image) in index.images.iter().enumerate() {
+        if index.images[position + 1..]
+            .iter()
+            .any(|other| other.name == image.name && other.architecture == image.architecture)
+        {
+            return Err(format!(
+                "registry contains duplicate entry '{} ({})'",
+                image.name, image.architecture
+            )
+            .into());
+        }
     }
     Ok(index)
 }
@@ -102,22 +129,73 @@ pub fn pull(
     result
 }
 
-/// Remove abandoned extraction staging directories without touching registered images.
+fn is_older_than(path: &std::path::Path, age: Duration) -> bool {
+    path.metadata()
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+        .is_some_and(|elapsed| elapsed > age)
+}
+
+/// Remove old abandoned staging directories and stale cached downloads.
+/// Active or recent work and all registered images are left untouched.
 pub fn clean_staging() -> Result<usize, Box<dyn std::error::Error>> {
+    let mut removed = 0;
     let store = images::image_store_dir();
-    if !store.exists() {
-        return Ok(0);
+    if store.exists() {
+        for entry in fs::read_dir(store)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.')
+                && name.contains(".staging-")
+                && entry.path().is_dir()
+                && is_older_than(&entry.path(), STAGING_MAX_AGE)
+            {
+                fs::remove_dir_all(entry.path())?;
+                removed += 1;
+            }
+        }
     }
 
-    let mut removed = 0;
-    for entry in fs::read_dir(store)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with('.') && name.contains(".staging-") && entry.path().is_dir() {
-            fs::remove_dir_all(entry.path())?;
-            removed += 1;
+    let downloads = config::cache_dir().join("downloads");
+    if downloads.exists() {
+        for entry in fs::read_dir(downloads)? {
+            let entry = entry?;
+            if entry.path().is_file() && is_older_than(&entry.path(), DOWNLOAD_MAX_AGE) {
+                fs::remove_file(entry.path())?;
+                removed += 1;
+            }
         }
     }
     Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_entries_require_safe_names_https_and_sha256() {
+        let valid = RegistryImage {
+            name: "ubuntu-24_04".into(),
+            description: "Ubuntu root filesystem".into(),
+            architecture: "aarch64".into(),
+            url: "https://example.org/ubuntu.tar.gz".into(),
+            sha256: "a".repeat(64),
+        };
+        assert!(valid_image(&valid));
+
+        let mut invalid = valid.clone();
+        invalid.name = "../escape".into();
+        assert!(!valid_image(&invalid));
+
+        let mut invalid = valid.clone();
+        invalid.url = "http://example.org/ubuntu.tar.gz".into();
+        assert!(!valid_image(&invalid));
+
+        let mut invalid = valid;
+        invalid.sha256 = "not-a-checksum".into();
+        assert!(!valid_image(&invalid));
+    }
 }
