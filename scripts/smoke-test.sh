@@ -8,6 +8,30 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" --help >/dev/null
 "$BINARY" engine status >/dev/null
 "$BINARY" engine status --help >/dev/null
+PLAIN_OUTPUT="$(NO_COLOR=1 "$BINARY" info)"
+if printf '%s' "$PLAIN_OUTPUT" | grep -q "$BINARY" elf inspect "$BINARY" >/dev/null
+"$BINARY" elf plan "$BINARY" >/dev/null
+
+STATUS_JSON="$("$BINARY" engine status --json)"
+printf '%s\n' "$STATUS_JSON" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data["schema_version"] == 1
+assert data["product"] == "NELRoot"
+assert isinstance(data["version"], str) and data["version"]
+assert isinstance(data["host"]["os"], str) and data["host"]["os"]
+assert isinstance(data["host"]["architecture"], str) and data["host"]["architecture"]
+assert isinstance(data["components"], list)
+assert data["guest_execution"]["available"] is False
+required = {"core", "host_detection", "configuration", "image_catalog", "registry_client", "event_logging", "elf64_inspector", "elf_load_planner"}
+available = {item["name"] for item in data["components"] if item["status"] == "available"}
+assert required <= available
+print("NELRoot CLI and NEXORA JSON contract: OK")
+'
+\\033'; then
+  echo "NO_COLOR did not disable terminal styling" >&2
+  exit 1
+fi
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
 
