@@ -137,8 +137,10 @@ PY
   RELEASE_READY=1
 fi
 
-mkdir -p "$TMP_DIR/unpacked"
-tar -xzf "$TMP_DIR/nelroot.tar.gz" -C "$TMP_DIR/unpacked"
+if [[ ! -f "$TMP_DIR/unpacked/nelroot" ]]; then
+  mkdir -p "$TMP_DIR/unpacked"
+  tar -xzf "$TMP_DIR/nelroot.tar.gz" -C "$TMP_DIR/unpacked"
+fi
 [[ -f "$TMP_DIR/unpacked/nelroot" ]] || fail "The release archive does not contain the nelroot executable."
 
 if [[ "$NEED_SUDO" -eq 1 ]]; then
