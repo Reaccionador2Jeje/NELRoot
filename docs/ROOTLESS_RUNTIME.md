@@ -37,7 +37,7 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 
 A visible `/proc/self/ns/user` entry, readable UID/GID maps, or permissive sysctl values are only hints. They do not prove that namespace creation is allowed: seccomp, AppArmor, SELinux, container policy, kernel configuration and namespace quotas can still reject it.
 
-The actual backend must attempt namespace creation in a disposable child and report the kernel error without changing the parent process. Do not advertise rootless execution as available until that end-to-end probe succeeds.
+NELRoot now attempts `unshare(CLONE_NEWUSER)` in a disposable forked child and reports the result and errno. This confirms only user-namespace creation; it does not configure UID/GID maps, test mount/PID namespaces, or start a guest process. Do not advertise rootless execution as available until the complete namespace and rootfs startup transaction succeeds.
 
 ## Safety and correctness rules
 
