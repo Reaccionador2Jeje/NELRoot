@@ -446,4 +446,19 @@ mod tests {
         info.program_headers[0].flags = PF_R | PF_W | PF_X;
         assert!(MappedElf::map_bytes(&bytes, &info).is_err());
     }
+
+    #[test]
+    fn rejects_dynamic_interpreter_images() {
+        let (bytes, mut info) = static_pie();
+        info.interpreter = Some("/lib/ld-linux.so".to_owned());
+        assert!(MappedElf::map_bytes(&bytes, &info).is_err());
+    }
+
+    #[test]
+    fn refuses_reads_from_pages_without_pf_r() {
+        let (bytes, mut info) = static_pie();
+        info.program_headers[0].flags = PF_X;
+        let mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
+        assert!(mapped.read_byte(0).is_err());
+    }
 }
