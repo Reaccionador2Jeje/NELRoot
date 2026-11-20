@@ -513,7 +513,7 @@ mod tests {
         info.program_headers.push(ProgramHeader {
             kind: PT_LOAD,
             flags: PF_R | PF_W,
-            offset: bytes.len() as u64,
+            offset: 0,
             virtual_address: 4096,
             file_size: 0,
             memory_size: 4096,
