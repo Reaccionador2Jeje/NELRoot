@@ -141,7 +141,7 @@ enum ImageCommands {
         /// Image name to unregister.
         name: String,
     },
-    /// Remove abandoned image extraction staging directories.
+    /// Remove stale image staging directories and cached downloads.
     Clean,
 }
 
@@ -376,7 +376,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             ImageCommands::Clean => {
-                let removed = registry::clean_staging()?;
+                let removed = registry::clean_temporary()?;
                 let _ = logging::record(
                     "info",
                     &format!("image cleanup removed {removed} temporary entries"),
