@@ -252,3 +252,70 @@ pub fn prepare_static_pie(
         relocations_applied,
     })
 }
+
+
+/// Architecture-specific entry registers currently modeled by the preparation
+/// layer. These are descriptive values only; no CPU state is installed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InitialCpuState {
+    X86_64 { instruction_pointer: u64, stack_pointer: u64 },
+    AArch64 { program_counter: u64, stack_pointer: u64 },
+}
+
+/// Owns all prepared artifacts required by a future execution backend.
+///
+/// The mapped image remains alive for the lifetime of this context. The stack
+/// is still a separate byte image and its virtual range is not mapped yet.
+#[cfg(target_os = "linux")]
+pub struct GuestExecutionContext {
+    pub architecture: &'static str,
+    pub load_bias: u64,
+    pub entry_point: u64,
+    pub stack_pointer: u64,
+    pub stack_end: u64,
+    pub cpu_state: InitialCpuState,
+    pub mapped: super::memory::MappedElf,
+    pub stack: super::stack::GuestStack,
+    pub relocations_applied: usize,
+}
+
+#[cfg(target_os = "linux")]
+impl PreparedStaticPie {
+    /// Convert prepared loader artifacts into a validated, non-executing
+    /// initial CPU context. This does not map the stack or enter guest mode.
+    pub fn into_execution_context(
+        self,
+    ) -> Result<GuestExecutionContext, Box<dyn std::error::Error>> {
+        let stack_pointer = self.stack.stack_pointer();
+        let stack_end = self.stack.stack_end();
+        if stack_end <= stack_pointer {
+            return Err("guest stack range is empty or overflows".into());
+        }
+        if self.plan.entry_point == 0 || self.mapped.entry_address() == 0 {
+            return Err("guest entry point is invalid".into());
+        }
+        let cpu_state = match self.info.machine {
+            EM_X86_64 => InitialCpuState::X86_64 {
+                instruction_pointer: self.plan.entry_point,
+                stack_pointer,
+            },
+            EM_AARCH64 => InitialCpuState::AArch64 {
+                program_counter: self.plan.entry_point,
+                stack_pointer,
+            },
+            _ => return Err("unsupported architecture for initial CPU context".into()),
+        };
+
+        Ok(GuestExecutionContext {
+            architecture: self.info.architecture,
+            load_bias: self.mapped.load_bias(),
+            entry_point: self.plan.entry_point,
+            stack_pointer,
+            stack_end,
+            cpu_state,
+            mapped: self.mapped,
+            stack: self.stack,
+            relocations_applied: self.relocations_applied,
+        })
+    }
+}
