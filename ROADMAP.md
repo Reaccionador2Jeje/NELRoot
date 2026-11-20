@@ -113,7 +113,7 @@ Official repository inclusion is a separate contribution and review process. Unt
 
 ## 6. Runtime architecture preparation
 
-The independent runtime design and first implementation milestone are documented in [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md). The first code milestone is an ELF64 inspection/parser that does not execute guest code.
+The independent runtime design is documented in [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md). Implemented groundwork now includes a bounded ELF64 metadata inspector and a non-executing load planner for x86_64/AArch64, with page-range, entry-point and W^X checks. Actual memory mapping, dynamic linking and guest execution remain future milestones.
 
 ## 7. NEXORA runtime interface preparation
 
