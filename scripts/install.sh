@@ -46,7 +46,11 @@ if [[ "$PLATFORM" == "android" ]]; then
   NEED_SUDO=0
 elif [[ "$SCOPE" =~ ^[Ss]$ ]]; then
   INSTALL_DIR="/usr/local/bin"
-  NEED_SUDO=1
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    NEED_SUDO=0
+  else
+    NEED_SUDO=1
+  fi
 else
   INSTALL_DIR="${NELROOT_INSTALL_DIR:-$HOME/.local/bin}"
   NEED_SUDO=0
