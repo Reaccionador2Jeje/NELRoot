@@ -279,7 +279,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::state(
                 "User namespace creation",
                 namespace_creation.is_ok(),
-                namespace_creation
+                &namespace_creation
                     .as_ref()
                     .err()
                     .map(|error| error.to_string())
@@ -770,7 +770,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state(
                         "User namespace creation",
                         namespace_creation.is_ok(),
-                        namespace_creation
+                        &namespace_creation
                             .as_ref()
                             .err()
                             .map(|error| error.to_string())
