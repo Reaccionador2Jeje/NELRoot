@@ -554,8 +554,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             #[cfg(target_os = "linux")]
             ElfCommands::Relocate { path } => {
-                let info = elf::inspect_file(&path)?;
-                let mut mapped = memory::MappedElf::map_file(&path)?;
+                let (mut mapped, info) = memory::MappedElf::map_file_with_info(&path)?;
                 let count = relocation::apply_relative_relocations(&mut mapped, &info)?;
                 ui::banner("ELF relative relocations");
                 ui::key("File", path.display());
