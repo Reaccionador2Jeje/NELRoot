@@ -22,6 +22,7 @@ const DT_JMPREL: i64 = 23;
 const ELF64_DYNAMIC_ENTRY_SIZE: usize = 16;
 const ELF64_RELA_ENTRY_SIZE: usize = 24;
 const MAX_RELOCATIONS: usize = 1_000_000;
+const MAX_DYNAMIC_TABLE_SIZE: usize = 16 * 1024 * 1024;
 
 /// Apply supported relative relocations to an already mapped static PIE.
 ///
@@ -32,6 +33,10 @@ pub fn apply_relative_relocations(
     mapped: &mut MappedElf,
     info: &ElfInfo,
 ) -> Result<usize, Box<dyn Error>> {
+    if info.file_type != 3 || info.interpreter.is_some() {
+        return Err("relative relocation stage accepts static ET_DYN images only".into());
+    }
+
     let dynamic_segments: Vec<&ProgramHeader> = info
         .program_headers
         .iter()
@@ -50,6 +55,9 @@ pub fn apply_relative_relocations(
         return Err("PT_DYNAMIC file size exceeds its memory size".into());
     }
     let dynamic_length = usize::try_from(dynamic.file_size)?;
+    if dynamic_length > MAX_DYNAMIC_TABLE_SIZE {
+        return Err("PT_DYNAMIC exceeds the 16 MiB safety limit".into());
+    }
     if dynamic_length % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
