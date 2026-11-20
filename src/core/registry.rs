@@ -168,7 +168,7 @@ fn is_older_than(path: &std::path::Path, age: Duration) -> bool {
 
 /// Remove old abandoned staging directories and stale cached downloads.
 /// Active or recent work and all registered images are left untouched.
-pub fn clean_staging() -> Result<usize, Box<dyn std::error::Error>> {
+pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
     let mut removed = 0;
     let store = images::image_store_dir();
     if store.exists() {
