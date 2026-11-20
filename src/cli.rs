@@ -7,7 +7,7 @@ use crate::core::{config, elf, host, images, logging, registry};
     name = "nelroot",
     version,
     about = "Independent Linux execution and virtualization engine",
-    long_about = "NELRoot is an independent systems project by AtDev. Its runtime, executable loader and CPU emulator are developed as first-party components."
+    long_about = "NELRoot is an independent, first-party Linux runtime and systems project by AtDev."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -328,7 +328,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 if catalog.images.is_empty() {
                     println!("No images registered.");
                     println!(
-                        "Search a registry with: nelroot image search ubuntu --registry <https-index-url>"
+                        "Registry search: nelroot image search <term> --registry <https-index-url>"
                     );
                 } else {
                     for image in catalog.images {
@@ -357,7 +357,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     &format!("image cleanup removed {removed} temporary entries"),
                 );
                 println!(
-                    "Removed {removed} stale temporary entries (staging directories and cached downloads)."
+                    "Removed {removed} stale temporary entries."
                 );
                 println!("Registered images and root filesystems were not modified.");
             }
@@ -372,7 +372,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Program headers: {}", info.program_headers.len());
                 for (index, header) in info.program_headers.iter().enumerate() {
                     println!(
-                        "  [{index}] type={} flags=0x{:x} offset=0x{:x} vaddr=0x{:x} filesz={} memsz={} align={}",
+                        "  [{index}] type={} flags=0x{:x} off=0x{:x} va=0x{:x} file={} mem={} align={}",
                         header.kind,
                         header.flags,
                         header.offset,
