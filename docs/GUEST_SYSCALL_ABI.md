@@ -31,9 +31,11 @@ after exit return `-EINVAL`, and output-cap exhaustion returns `-ENOSPC`.
   architectures need their own ABI definitions and dispatch tables.
 - The dispatcher can now be initialized directly from a prepared
   `GuestExecutionContext` through `SyscallContext::from_execution_context`,
-  which copies the prepared ELF and stack into `GuestMemory`. This connects
-  loader output to the ABI data model, but it is still not connected to a CPU
-  execution loop. It is a tested boundary for future integration, not evidence
+  which copies the prepared ELF and stack into `GuestMemory`. The
+  `X86_64SyscallFrame` adapter maps RAX/RDI/RSI/RDX/R10/R8/R9 to the Linux
+  syscall argument convention and writes the signed result back to RAX. This
+  connects loader output and the modeled register boundary, but it is still
+  not connected to a CPU execution loop or a real hardware trap. It is a tested boundary for future integration, not evidence
   that guest instructions run.
 
 ## Local checks
