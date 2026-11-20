@@ -166,9 +166,9 @@ impl MappedElf {
 
         // PT_LOAD memory ranges may share a page, but their actual byte ranges
         // must not overlap: copying one segment over another would be ambiguous.
-        for left in 0..ranges.len() {
-            for right in left + 1..ranges.len() {
-                if ranges[left].0 < ranges[right].1 && ranges[right].0 < ranges[left].1 {
+        for (left_index, left) in ranges.iter().enumerate() {
+            for right in ranges.iter().skip(left_index + 1) {
+                if left.0 < right.1 && right.0 < left.1 {
                     return Err("ELF PT_LOAD memory ranges overlap".into());
                 }
             }
@@ -222,9 +222,7 @@ impl MappedElf {
         };
 
         // Temporarily make only PT_LOAD pages writable for segment population.
-        if let Err(error) = mapped.protect_runs(true) {
-            return Err(error);
-        }
+        mapped.protect_runs(true)?;
 
         for header in &load_segments {
             let destination_offset = usize::try_from(header.virtual_address - min_page)?;
@@ -245,9 +243,7 @@ impl MappedElf {
             // Anonymous mmap pages are zero-filled, so p_memsz - p_filesz is BSS.
         }
 
-        if let Err(error) = mapped.protect_runs(false) {
-            return Err(error);
-        }
+        mapped.protect_runs(false)?;
 
         let base_address = mapped.base.as_ptr() as usize;
         let load_bias = (base_address as u64)
