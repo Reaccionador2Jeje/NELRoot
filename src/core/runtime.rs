@@ -26,7 +26,10 @@ pub fn has_required_privileges() -> bool {
                         .and_then(|value| u64::from_str_radix(value.trim(), 16).ok())
                 })
             })
-            .is_some_and(|effective| effective & (1_u64 << 18) != 0);
+            .is_some_and(|effective| {
+                let required = (1_u64 << 18) | (1_u64 << 7) | (1_u64 << 6);
+                effective & required == required
+            });
         is_root && has_chroot_capability
     }
     #[cfg(not(target_os = "linux"))]
@@ -77,7 +80,7 @@ pub fn run_image(
     {
         if !has_required_privileges() {
             return Err(
-                "native chroot requires effective UID 0 and the effective CAP_SYS_CHROOT capability; ordinary unprivileged PRoot sessions do not provide them"
+                "native chroot requires effective UID 0 plus CAP_SYS_CHROOT, CAP_SETUID and CAP_SETGID; ordinary unprivileged PRoot sessions do not provide them"
                     .into(),
             );
         }
