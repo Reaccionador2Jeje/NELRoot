@@ -248,11 +248,11 @@ pub fn load_catalog(path: &Path) -> Result<HubCatalog, Box<dyn std::error::Error
     Ok(catalog)
 }
 
-pub fn search_catalog<'a>(
-    catalog: &'a HubCatalog,
+pub fn search_catalog(
+    catalog: &HubCatalog,
     query: &str,
     architecture: Option<&str>,
-) -> Result<Vec<&'a HubCatalogEntry>, String> {
+) -> Result<Vec<&HubCatalogEntry>, String> {
     if query.trim().is_empty() {
         return Err("Hub search query cannot be empty".into());
     }
