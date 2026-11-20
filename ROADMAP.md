@@ -19,7 +19,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [x] First native Linux process-launch backend using chroot(2), same-architecture ELF execution and child exit-code propagation.
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
-- [ ] ELF64 inspection/parser module (first bounded runtime milestone).
+- [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
 - [x] Non-executing ELF load-plan foundation with page-range, entry-point and W^X validation.
 - [x] Bounded Linux memory mapping for host-native static ET_DYN images, including PT_LOAD population, BSS zero-fill, page permissions and RAII unmapping (mapping only; no execution).
