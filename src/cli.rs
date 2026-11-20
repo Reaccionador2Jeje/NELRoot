@@ -7,7 +7,7 @@ use crate::core::{config, elf, host, images, logging, registry};
     name = "nelroot",
     version,
     about = "Independent Linux execution and virtualization engine",
-    long_about = "NELRoot is an independent, first-party Linux runtime and systems project by AtDev."
+    long_about = "Independent first-party Linux runtime and systems project by AtDev."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -372,7 +372,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Program headers: {}", info.program_headers.len());
                 for (index, header) in info.program_headers.iter().enumerate() {
                     println!(
-                        "  [{index}] type={} flags=0x{:x} off=0x{:x} va=0x{:x} file={} mem={} align={}",
+                        "  [{index}] type={} flags={:#x} off={:#x} va={:#x} file={} mem={} align={}",
                         header.kind,
                         header.flags,
                         header.offset,
