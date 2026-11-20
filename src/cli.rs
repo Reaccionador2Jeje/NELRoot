@@ -249,7 +249,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
             ui::state("ELF load planner", true, "mapping plan only");
-            ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
+            ui::state(
+                "ELF memory mapper",
+                cfg!(target_os = "linux"),
+                "static ET_DYN; no execution",
+            );
             ui::state(
                 "Native chroot runner",
                 runtime::supported(),
@@ -544,7 +548,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "event_logging", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
                             {"name": "elf_load_planner", "status": "available"},
-                            {"name": "elf_memory_mapper", "status": if cfg!(target_os = "linux") { "available" } else { "not_implemented" }},
+                            {
+                                "name": "elf_memory_mapper",
+                                "status": if cfg!(target_os = "linux") {
+                                    "available"
+                                } else {
+                                    "not_implemented"
+                                }
+                            },
                             {
                                 "name": "native_chroot_runtime",
                                 "status": if runtime::supported() {
@@ -566,11 +577,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 "The native chroot backend requires a Linux host."
                             } else if !runtime::has_required_privileges() {
                                 concat!(
-                                    "Effective UID 0 plus effective CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID are required; ",
+                                    "Effective UID 0 plus effective CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID ",
+                                    "are required; "
                                     "ordinary unprivileged PRoot sessions cannot start it."
                                 )
                             } else {
-                                "Native chroot process launch is implemented; this is not a syscall emulator or security sandbox."
+                                "Native chroot process launch is implemented; this is not a syscall ",
+                                "emulator or security sandbox."
                             }
                         }
                     });
@@ -586,7 +599,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Event logging", true, "local event log");
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
-                    ui::state("ELF memory mapper", cfg!(target_os = "linux"), "static ET_DYN; no execution");
+                    ui::state(
+                        "ELF memory mapper",
+                        cfg!(target_os = "linux"),
+                        "static ET_DYN; no execution",
+                    );
                     ui::state(
                         "Native chroot runner",
                         runtime::supported(),
