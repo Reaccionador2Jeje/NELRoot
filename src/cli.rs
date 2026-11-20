@@ -287,7 +287,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::state("Independent ELF executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
-                    ui::state("CPU execution loop", false, "not implemented");
+                    ui::state("Syscall integration", false, "waiting for guest CPU execution");
             ui::state("CPU emulator", false, "not implemented");
             ui::warn("Host interfaces do not imply guest Linux compatibility.");
         }
