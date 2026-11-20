@@ -196,19 +196,20 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
             }
 
             // Recover the old managed image if an update was interrupted after backup.
-            if path.is_dir() && is_old && name.starts_with('.') {
-                if let Some((image_name, _)) = name
+            if path.is_dir()
+                && is_old
+                && name.starts_with('.')
+                && let Some((image_name, _)) = name
                     .strip_prefix('.')
                     .and_then(|value| value.split_once(".backup-"))
-                {
-                    let destination = store.join(image_name);
-                    if !destination.exists() {
-                        fs::rename(&path, destination)?;
-                    } else {
-                        fs::remove_dir_all(&path)?;
-                    }
-                    removed += 1;
+            {
+                let destination = store.join(image_name);
+                if !destination.exists() {
+                    fs::rename(&path, destination)?;
+                } else {
+                    fs::remove_dir_all(&path)?;
                 }
+                removed += 1;
             }
         }
     }
@@ -224,6 +225,37 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
         }
     }
     Ok(removed)
+}
+
+
+/// Download and verify the latest registry entry, then transactionally update a managed image.
+pub fn update(
+    registry_url: &str,
+    name: &str,
+    architecture: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let index = fetch_index(registry_url)?;
+    let image = index
+        .images
+        .into_iter()
+        .find(|image| image.name == name && image.architecture == architecture)
+        .ok_or_else(|| format!("image '{name}' for architecture '{architecture}' was not found"))?;
+
+    let downloads = config::cache_dir().join("downloads");
+    fs::create_dir_all(&downloads)?;
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let archive = downloads.join(format!(
+        "{}-update-{}-{nonce}.tar.gz",
+        image.name,
+        std::process::id()
+    ));
+
+    let result: Result<PathBuf, Box<dyn std::error::Error>> = (|| {
+        images::download_archive(&image.url, &archive, &image.sha256)?;
+        images::update_image_from_archive(&image.name, &archive, &image.architecture)
+    })();
+    let _ = fs::remove_file(&archive);
+    result
 }
 
 #[cfg(test)]
@@ -255,32 +287,3 @@ mod tests {
     }
 }
 
-/// Download and verify the latest registry entry, then transactionally update a managed image.
-pub fn update(
-    registry_url: &str,
-    name: &str,
-    architecture: &str,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let index = fetch_index(registry_url)?;
-    let image = index
-        .images
-        .into_iter()
-        .find(|image| image.name == name && image.architecture == architecture)
-        .ok_or_else(|| format!("image '{name}' for architecture '{architecture}' was not found"))?;
-
-    let downloads = config::cache_dir().join("downloads");
-    fs::create_dir_all(&downloads)?;
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-    let archive = downloads.join(format!(
-        "{}-update-{}-{nonce}.tar.gz",
-        image.name,
-        std::process::id()
-    ));
-
-    let result: Result<PathBuf, Box<dyn std::error::Error>> = (|| {
-        images::download_archive(&image.url, &archive, &image.sha256)?;
-        images::update_image_from_archive(&image.name, &archive, &image.architecture)
-    })();
-    let _ = fs::remove_file(&archive);
-    result
-}
