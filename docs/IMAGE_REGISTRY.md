@@ -44,7 +44,7 @@ nelroot image clean
 
 The `pull` command downloads the archive, checks its SHA-256 digest, safely extracts the root filesystem into NELRoot's managed image store, and registers it in the local catalog. Temporary download files are removed after the operation.
 
-`image clean` removes only abandoned extraction staging directories older than 24 hours and cached download files older than seven days. It does not remove registered images or user root filesystems.
+`image clean` removes only abandoned extraction/update staging directories older than 24 hours and cached download files older than seven days. If an update was interrupted after moving the previous rootfs to a backup, cleanup restores it when the original destination is missing. It does not remove registered images or external user root filesystems.
 
 ## Hosting guidance
 
