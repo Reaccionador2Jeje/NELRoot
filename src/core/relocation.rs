@@ -46,15 +46,16 @@ pub fn apply_relative_relocations(
     }
 
     let dynamic = dynamic_segments[0];
-    if dynamic.file_size > dynamic.memory_size
-        || dynamic.file_size as usize % ELF64_DYNAMIC_ENTRY_SIZE != 0
-    {
+    if dynamic.file_size > dynamic.memory_size {
+        return Err("PT_DYNAMIC file size exceeds its memory size".into());
+    }
+    let dynamic_length = usize::try_from(dynamic.file_size)?;
+    if dynamic_length % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
-    let dynamic_offset =
-        mapped.virtual_address_offset(dynamic.virtual_address, dynamic.file_size as usize)?;
-    let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic.file_size as usize)?;
+    let dynamic_offset = mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
+    let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic_length)?;
 
     let mut rela_address = None;
     let mut rela_size = None;
