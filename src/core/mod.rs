@@ -6,6 +6,7 @@ pub mod images;
 pub mod logging;
 pub mod registry;
 pub mod runtime;
+pub mod process;
 #[cfg(target_os = "linux")]
 pub mod memory;
 
