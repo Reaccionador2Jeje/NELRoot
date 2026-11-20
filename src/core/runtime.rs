@@ -1,10 +1,13 @@
+use std::{path::Path, process::ExitStatus};
+
+#[cfg(target_os = "linux")]
 use std::{
     ffi::CString,
     io,
-    path::Path,
-    process::{Command, ExitStatus},
+    process::Command,
 };
 
+#[cfg(target_os = "linux")]
 use crate::core::images;
 
 /// Whether this build contains the native Linux chroot process backend.
@@ -38,6 +41,7 @@ pub fn has_required_privileges() -> bool {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn validate_guest_cwd(path: &Path) -> Result<(), &'static str> {
     if path.as_os_str().is_empty() || !path.is_absolute() {
         return Err("guest working directory must be an absolute path inside the image");
@@ -51,6 +55,7 @@ fn validate_guest_cwd(path: &Path) -> Result<(), &'static str> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn host_architecture_matches(guest: &str) -> bool {
     let host = std::env::consts::ARCH;
     matches!(
@@ -171,8 +176,8 @@ pub fn run_image(
         );
         if keep_root {
             eprintln!(
-            "WARNING: guest process retains host root privileges; chroot is not a security boundary."
-        );
+                "WARNING: guest process retains host root privileges; chroot is not a security boundary."
+            );
         } else {
             eprintln!("NELRoot: guest credentials dropped to uid/gid 65534 (nobody).");
         }
