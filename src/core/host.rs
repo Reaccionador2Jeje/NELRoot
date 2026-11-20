@@ -24,7 +24,7 @@ pub fn kernel_release() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// Whether the current process appears to have administrative privileges.
+/// Return the elevated-privilege state when the host exposes a reliable UID source.
 pub fn has_elevated_privileges() -> Option<bool> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
