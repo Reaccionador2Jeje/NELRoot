@@ -82,6 +82,7 @@ nelroot image register <name> <rootfs-path> --architecture aarch64
 nelroot image remove <name>
 nelroot image search ubuntu --registry https://example.org/nelroot/index.json
 nelroot image pull ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
+nelroot image update ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
 nelroot image clean
 
 nelroot logs --lines 50
