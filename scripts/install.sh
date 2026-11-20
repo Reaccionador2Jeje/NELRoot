@@ -2,13 +2,15 @@
 set -euo pipefail
 
 REPO="Reaccionador2Jeje/NELRoot"
-BIN_NAME="nelroot"
-
 say() { printf "\033[1;32m[NELRoot]\033[0m %s\n" "$*"; }
 fail() { printf "\033[1;31m[NELRoot] Error:\033[0m %s\n" "$*" >&2; exit 1; }
 
-command -v curl >/dev/null 2>&1 || fail "curl is required."
-command -v tar >/dev/null 2>&1 || fail "tar is required."
+command -v tar >/dev/null 2>&1 || fail "tar is required to extract the release."
+PYTHON=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then PYTHON="$candidate"; break; fi
+done
+[[ -n "$PYTHON" ]] || fail "Python 3 is required for HTTPS downloads. Install Python 3, then rerun this installer. No curl or wget is used."
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -29,7 +31,10 @@ case "$ARCH" in
 esac
 
 ASSET="nelroot-${PLATFORM}-${CPU}.tar.gz"
-URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+BASE_URL="https://github.com/${REPO}/releases/latest/download"
+URL="${BASE_URL}/${ASSET}"
+CHECKSUM_URL="${BASE_URL}/nelroot-${PLATFORM}-${CPU}.sha256"
+
 say "NELRoot setup wizard"
 say "Detected platform: ${PLATFORM}-${CPU}"
 printf "Install for (u)ser only or (s)ystem-wide? [U/s]: "
@@ -53,8 +58,35 @@ INSTALL_DIR="${CUSTOM_DIR:-$INSTALL_DIR}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-say "Downloading ${ASSET}..."
-curl -fL --retry 3 "$URL" -o "$TMP_DIR/nelroot.tar.gz" || fail "Download failed. Check whether a compatible GitHub Release exists."
+say "Downloading release with Python HTTPS (no curl/wget)..."
+"$PYTHON" - "$URL" "$CHECKSUM_URL" "$TMP_DIR/nelroot.tar.gz" <<'PY'
+import hashlib
+import sys
+import urllib.request
+
+archive_url, checksum_url, archive_path = sys.argv[1:4]
+def download(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "NELRoot-Setup"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read()
+
+try:
+    archive = download(archive_url)
+    checksum_text = download(checksum_url).decode("utf-8", errors="strict")
+except Exception as exc:
+    print(f"NELRoot download failed: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+expected = checksum_text.strip().split()[0].lower() if checksum_text.strip() else ""
+actual = hashlib.sha256(archive).hexdigest()
+if len(expected) != 64 or actual != expected:
+    print("NELRoot checksum verification failed; archive was not installed.", file=sys.stderr)
+    raise SystemExit(1)
+
+with open(archive_path, "wb") as output:
+    output.write(archive)
+print("Download complete; SHA-256 verified.")
+PY
 mkdir -p "$TMP_DIR/unpacked"
 tar -xzf "$TMP_DIR/nelroot.tar.gz" -C "$TMP_DIR/unpacked"
 [[ -f "$TMP_DIR/unpacked/nelroot" ]] || fail "The release archive does not contain the nelroot executable."
@@ -72,6 +104,10 @@ case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *)
     PROFILE="$HOME/.profile"
+    case "${SHELL:-}" in
+      */zsh) PROFILE="$HOME/.zprofile" ;;
+      */bash) PROFILE="$HOME/.bashrc" ;;
+    esac
     LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
     touch "$PROFILE"
     grep -Fqx "$LINE" "$PROFILE" 2>/dev/null || printf '\n# NELRoot CLI\n%s\n' "$LINE" >> "$PROFILE"
@@ -82,4 +118,4 @@ esac
 say "Installation complete."
 say "Open a new terminal or run: export PATH=\"$INSTALL_DIR:\$PATH\""
 "$INSTALL_DIR/nelroot" --version
-say "Try: nelroot help"
+say "Try: nelroot --help"
