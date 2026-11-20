@@ -122,7 +122,7 @@ These interfaces should return typed errors with stable codes. CLI text is for h
 
 ## Rootless namespace preparation
 
-The runtime now exposes a read-only `rootless_namespace_info()` probe. It reports visibility of the current user, mount, PID and network namespace interfaces, readability of UID/GID maps, and the available user-namespace sysctl hints. The CLI surfaces these values in `nelroot doctor`. This is diagnostic information only: procfs visibility and sysctl values cannot prove that seccomp, an LSM or container policy will allow creating a new namespace. The rootless backend remains unimplemented; see [ROOTLESS_RUNTIME.md](ROOTLESS_RUNTIME.md) for its implementation contract.
+The runtime exposes a read-only `rootless_namespace_info()` policy probe and `probe_user_namespace_creation()`, which attempts `unshare(CLONE_NEWUSER)` in a disposable forked child. The CLI reports both the policy hints and the actual child result. The parent process is never moved into a namespace. This proves only that a user namespace can be created in that environment; it does not configure UID/GID maps, test mount/PID namespaces, establish a guest root, or provide a rootless runtime. The rootless backend remains unimplemented; see [ROOTLESS_RUNTIME.md](ROOTLESS_RUNTIME.md) for its implementation contract.
 
 ## First implementation milestone
 
