@@ -264,10 +264,10 @@ impl X86_64Interpreter {
             if let GuestProcessState::Exited { code } = context.process {
                 return Ok(CpuStopReason::ProcessExited { code });
             }
-            if matches!(self.step(context, dispatcher)?, StepOutcome::ProcessExited { .. }) {
-                if let GuestProcessState::Exited { code } = context.process {
-                    return Ok(CpuStopReason::ProcessExited { code });
-                }
+            if matches!(self.step(context, dispatcher)?, StepOutcome::ProcessExited { .. })
+                && let GuestProcessState::Exited { code } = context.process
+            {
+                return Ok(CpuStopReason::ProcessExited { code });
             }
         }
         Ok(CpuStopReason::StepLimitReached)
