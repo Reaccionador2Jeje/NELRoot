@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use nelroot::core::{config, elf, host, hub, images, logging, registry, runtime};
+use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, registry, runtime};
 #[cfg(target_os = "linux")]
 use nelroot::core::{memory, relocation};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
