@@ -99,3 +99,15 @@ This is a diagnostic probe, not the runtime launcher: it exits immediately,
 does not mount or pivot into an image rootfs, does not create a PID namespace,
 and does not supervise guest workloads. Kernel, container, seccomp, or LSM
 policy may deny any stage; failures are returned rather than bypassed.
+
+
+## PID namespace creation probe
+
+The synchronized disposable-child probe also verifies PID namespace setup. After
+the mapped child enters a private mount namespace, it calls
+`unshare(CLONE_NEWPID)` and forks one final child. That child must observe
+`getpid() == 1`, proving that it became PID 1 in the new namespace; the
+intermediate child waits for it and propagates failure. This validates namespace
+creation and PID-1 assignment only. It does not yet launch an image init,
+forward signals, reap arbitrary guest descendants, or provide a complete PID
+namespace supervisor.
