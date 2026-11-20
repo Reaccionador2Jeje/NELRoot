@@ -94,6 +94,7 @@ nelroot image clean
 
 nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
+nelroot elf plan /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
 ```
@@ -135,7 +136,7 @@ NELRoot includes a bounded ELF64 little-endian metadata inspector. It validates 
 nelroot elf inspect ./program
 ```
 
-This is parser groundwork for a future loader, not guest execution or dynamic-linking support.
+The non-executing `nelroot elf plan <file>` command validates supported ELF load segments, computes page-aligned virtual ranges and checks entry-point placement under a default W^X policy. It is a planning report only: it does not map memory or execute code. This is loader groundwork, not guest execution or dynamic-linking support.
 
 ### Download and import an image
 
