@@ -26,7 +26,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Initial static PIE RELATIVE RELA relocation support for x86_64 and AArch64, with bounded dynamic-table parsing and writable-target validation (no execution).
 - [x] Initial ELF64 guest-stack image builder for argc/argv/envp/auxv, AT_RANDOM and AT_EXECFN (data construction only; not mapped or executed).
 - [x] Non-executing static PIE preparation pipeline coordinating snapshot inspection, host-native mapping, supported RELATIVE RELA relocations, load planning and stack-image construction.
-- [ ] Full ELF loading, remaining relocation types, dynamic-linking, mapping the stack into a guest address space and integration into an executing process.
+- [x] Initial architecture-specific guest execution context model (x86_64 RIP/RSP and AArch64 PC/SP descriptors; descriptive only, no CPU transition).
+- [ ] Full ELF loading, remaining relocation types, dynamic-linking, mapping the stack into a guest address space, complete register/ABI initialization and integration into an executing process.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
