@@ -19,7 +19,9 @@ after exit return `-EINVAL`, and output-cap exhaustion returns `-ENOSPC`.
 ## Safety and current limits
 
 - `write` never calls the host kernel and never writes to host files or terminal
-  descriptors. Output remains in bounded Rust vectors owned by the model.
+  descriptors. Output remains in bounded Rust vectors owned by the model. A
+  zero-byte write returns `0`; unsupported descriptors are rejected before
+  guest-pointer access, matching the relevant Linux error precedence.
 - Guest pointers are read only through `GuestMemory`, which checks the guest
   region and its read permission.
 - A single write is limited to 1 MiB; captured output is limited to 4 MiB.
@@ -27,8 +29,12 @@ after exit return `-EINVAL`, and output-cap exhaustion returns `-ENOSPC`.
   process creation, signal delivery, or arbitrary host syscall forwarding.
 - The register layout and syscall numbers are explicitly Linux x86_64. Other
   architectures need their own ABI definitions and dispatch tables.
-- The dispatcher is not connected to a CPU execution loop. It is a tested
-  boundary for future integration, not evidence that guest instructions run.
+- The dispatcher can now be initialized directly from a prepared
+  `GuestExecutionContext` through `SyscallContext::from_execution_context`,
+  which copies the prepared ELF and stack into `GuestMemory`. This connects
+  loader output to the ABI data model, but it is still not connected to a CPU
+  execution loop. It is a tested boundary for future integration, not evidence
+  that guest instructions run.
 
 ## Local checks
 
