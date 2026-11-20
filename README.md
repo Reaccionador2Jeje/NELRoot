@@ -50,6 +50,7 @@ The wizard uses .NET HttpClient (not curl or wget), verifies the SHA-256 checksu
 |---|---|---|
 | Linux | x86_64 | `nelroot-linux-x86_64.tar.gz` |
 | Linux | ARM64 | `nelroot-linux-aarch64.tar.gz` |
+| Debian / Ubuntu | x86_64, ARM64 | `.deb` package attached to GitHub Releases |
 | Android / Termux | ARM64 | `nelroot-android-aarch64.tar.gz` |
 | Windows | x86_64 | `nelroot-windows-x86_64.zip` |
 | macOS | Intel x86_64 | `nelroot-macos-x86_64.tar.gz` |
@@ -143,7 +144,7 @@ cargo run -- info
 
 ## Release automation
 
-Pushing a version tag such as `v0.1.1` triggers GitHub Actions to build platform archives, Linux Debian packages, generate SHA-256 checksums, and publish a GitHub Release with the available assets and setup scripts. A manual workflow run can also publish a version tag; see the Actions workflow inputs.
+Pushing a version tag such as `v0.1.1` triggers GitHub Actions to build platform archives, Debian (`.deb`) and RPM (`.rpm`) packages for supported Linux architectures, generate per-asset SHA-256 checksums, and publish a GitHub Release with the available assets and setup scripts. A manual workflow run can also publish a version tag; see the Actions workflow inputs.
 
 ```bash
 git tag v0.1.0
