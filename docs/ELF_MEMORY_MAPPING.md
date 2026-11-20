@@ -34,6 +34,6 @@ The Linux-only `nelroot elf relocate <file>` command maps a host-native static P
 - x86_64: `R_X86_64_RELATIVE` (type 8)
 - AArch64: `R_AARCH64_RELATIVE` (type 1027)
 
-The implementation requires a valid `PT_DYNAMIC` table terminated by `DT_NULL`, a complete `DT_RELA` / `DT_RELASZ` / `DT_RELAENT` tuple, 24-byte RELA entries, 8-byte-aligned writable targets, and a zero symbol index. It rejects unsupported REL/PLT relocation tables, unknown relocation types, out-of-range targets, and arithmetic overflow. It validates all entries before applying writes, so malformed relocation metadata does not cause a partially relocated image.
+The implementation requires a valid `PT_DYNAMIC` table terminated by `DT_NULL`, a complete `DT_RELA` / `DT_RELASZ` / `DT_RELAENT` tuple, 24-byte RELA entries, 8-byte-aligned writable targets, and a zero symbol index. It rejects unsupported REL, RELR, Android-packed, PLT and text relocation tables, unknown relocation types, out-of-range targets, and arithmetic overflow. It validates all entries before applying writes, so malformed relocation metadata does not cause a partially relocated image.
 
 This command is a preparation and inspection milestone only: it does not execute the ELF entry point or establish a guest process.
