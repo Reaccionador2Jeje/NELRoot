@@ -68,8 +68,10 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
         if writable && executable {
             return Err("writable and executable PT_LOAD segments are rejected by the default W^X policy".into());
         }
+        let segment_end = header.virtual_address.checked_add(header.memory_size)
+            .ok_or("PT_LOAD virtual address range overflows")?;
         if executable && info.entry_point >= header.virtual_address
-            && info.entry_point < header.virtual_address.saturating_add(header.memory_size)
+            && info.entry_point < segment_end
         {
             executable_entry_contains = true;
         }
