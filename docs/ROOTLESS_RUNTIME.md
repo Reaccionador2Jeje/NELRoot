@@ -111,3 +111,20 @@ intermediate child waits for it and propagates failure. This validates namespace
 creation and PID-1 assignment only. It does not yet launch an image init,
 forward signals, reap arbitrary guest descendants, or provide a complete PID
 namespace supervisor.
+
+
+## Read-only rootfs bind mount
+
+The Linux runtime now exposes `bind_mount_rootfs_read_only(rootfs, target)`
+for use inside a mapped user namespace with a private mount namespace already
+prepared. It validates the registered rootfs, requires an existing empty real
+directory as the destination, rejects overlapping source/target paths, and
+creates a recursive bind mount. The bind mount is then remounted read-only,
+with nosuid and nodev flags. If the remount fails, NELRoot detaches the bind
+mount and returns the original error.
+
+This primitive does not create the destination, alter the imported rootfs,
+perform `pivot_root`, add writable guest mounts, or launch a process. It must
+not be called from the host's ordinary mount namespace; the caller must first
+complete namespace mapping and private-mount setup. Rootfs mounting can still
+be denied by kernel, container, seccomp, or LSM policy.
