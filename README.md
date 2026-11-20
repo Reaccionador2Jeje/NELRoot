@@ -31,7 +31,7 @@ python3 -c "import urllib.request; open('nelroot-install.sh','wb').write(urllib.
 bash nelroot-install.sh
 ```
 
-The wizard detects the operating system and CPU architecture, downloads the matching release through Python's standard HTTPS library, verifies its SHA-256 checksum, asks where to install, and configures the user PATH. It does not call curl or wget. Python 3 and tar are required on Unix-like systems. Choose system-wide installation when prompted if you want the executable available to all local users; this requires sudo permissions. On Termux, install Python and tar with `pkg install python tar`, then run the wizard; it installs into the Termux prefix without root.
+The wizard detects the operating system and CPU architecture, downloads the matching release through Python's standard HTTPS library, verifies its SHA-256 checksum, asks where to install, and configures the user PATH. It does not call curl or wget. If no GitHub Release is published yet (HTTP 404), the wizard automatically downloads the current source snapshot and builds it with Cargo instead. For that fallback, install a current stable Rust toolchain (Rust 1.85 or newer) before running the wizard. Python 3 and tar are required on Unix-like systems. Choose system-wide installation when prompted to install for all local users; root can install directly, while a non-root user needs sudo. On Termux, install Python and tar with `pkg install python tar`, then run the wizard; it installs into the Termux prefix without root.
 
 ### Windows (PowerShell)
 
