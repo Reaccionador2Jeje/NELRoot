@@ -51,6 +51,7 @@ The wizard uses .NET HttpClient (not curl or wget), verifies the SHA-256 checksu
 | Linux | x86_64 | `nelroot-linux-x86_64.tar.gz` |
 | Linux | ARM64 | `nelroot-linux-aarch64.tar.gz` |
 | Debian / Ubuntu | x86_64, ARM64 | `.deb` package attached to GitHub Releases |
+| Fedora / RHEL / openSUSE | x86_64, ARM64 | `.rpm` package attached to GitHub Releases |
 | Android / Termux | ARM64 | `nelroot-android-aarch64.tar.gz` |
 | Windows | x86_64 | `nelroot-windows-x86_64.zip` |
 | macOS | Intel x86_64 | `nelroot-macos-x86_64.tar.gz` |
