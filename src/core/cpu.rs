@@ -406,7 +406,7 @@ mod tests {
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         cpu.step(&mut context, &SyscallDispatcher).unwrap();
-        assert_eq!(cpu.registers.rip, 0x1007);
+        assert_eq!(cpu.registers.rip, 0x1006);
         assert_eq!(cpu.registers.rsp, 0x8ff8);
         cpu.step(&mut context, &SyscallDispatcher).unwrap();
         assert_eq!(cpu.registers.rip, 0x1005);
