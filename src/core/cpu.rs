@@ -188,9 +188,10 @@ impl X86_64Interpreter {
             opcode => return Err(CpuError::UnsupportedInstruction { opcode }),
         };
 
-        self.registers.rip = next_rip.unwrap_or(
-            self.registers.rip.checked_add(length as u64).ok_or(CpuError::FetchFault)?
-        );
+        self.registers.rip = match next_rip {
+            Some(target) => target,
+            None => self.registers.rip.checked_add(length as u64).ok_or(CpuError::FetchFault)?,
+        };
         self.instructions_executed = self.instructions_executed.saturating_add(1);
 
         if let GuestProcessState::Exited { code } = context.process {
