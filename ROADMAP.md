@@ -14,6 +14,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] User-scoped data/cache/log/runtime directory initialization and local event log.
 - [x] Expanded host diagnostics with kernel and host-interface detection.
 - [x] Versioned JSON engine capability probe for NEXORA (`nelroot engine status --json`).
+- [x] Adaptive terminal UI with color-safe banners, capability indicators, diagnostics and errors.
 - [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [ ] Independent NELRoot runtime and process lifecycle.
