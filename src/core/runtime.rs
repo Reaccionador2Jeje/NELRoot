@@ -99,6 +99,8 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
 pub fn probe_user_namespace_creation() -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
+        // SAFETY: the child branch below performs only async-signal-safe
+        // operations before _exit; it never resumes normal Rust execution.
         let pid = unsafe { libc::fork() };
         if pid < 0 {
             return Err(std::io::Error::last_os_error());
@@ -116,6 +118,8 @@ pub fn probe_user_namespace_creation() -> std::io::Result<()> {
 
         let mut status = 0;
         loop {
+            // SAFETY: status is a valid writable pointer and pid is the child
+            // returned by fork; waitpid does not retain the pointer.
             let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
             if waited == pid {
                 break;
