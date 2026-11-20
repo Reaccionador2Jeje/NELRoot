@@ -150,6 +150,9 @@ impl GuestMemory {
     }
 
     fn region_for(&self, address: u64, length: usize) -> Result<&BackedRegion, &'static str> {
+        if length == 0 {
+            return Err("guest memory range must not be empty");
+        }
         let length = u64::try_from(length).map_err(|_| "guest memory length overflow")?;
         let end = address.checked_add(length).ok_or("guest memory range overflow")?;
         self.regions.iter()
@@ -162,6 +165,9 @@ impl GuestMemory {
         address: u64,
         length: usize,
     ) -> Result<&mut BackedRegion, &'static str> {
+        if length == 0 {
+            return Err("guest memory range must not be empty");
+        }
         let length = u64::try_from(length).map_err(|_| "guest memory length overflow")?;
         let end = address.checked_add(length).ok_or("guest memory range overflow")?;
         self.regions.iter_mut()
@@ -205,7 +211,7 @@ mod tests {
         memory.write(0x8004, b"test").unwrap();
         assert_eq!(memory.read(0x8004, 4).unwrap(), b"test");
         assert!(memory.write(0x4000, b"x").is_err());
-        assert!(memory.read(0x4000, 1).unwrap().is_empty() == false);
+        assert_eq!(memory.read(0x4000, 1).unwrap(), vec![0x7f]);
     }
 
     #[test]
