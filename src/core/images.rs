@@ -178,10 +178,21 @@ pub fn download_archive(
     if response.url().scheme() != "https" {
         return Err("image download redirected to a non-HTTPS URL".into());
     }
+    const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
+    if response.content_length().is_some_and(|length| length > MAX_ARCHIVE_BYTES) {
+        return Err("image archive exceeds the 512 MiB download limit".into());
+    }
     let mut output = File::create(destination)?;
-    if let Err(error) = std::io::copy(&mut response, &mut output) {
+    let copied = match std::io::copy(&mut response.take(MAX_ARCHIVE_BYTES + 1), &mut output) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = fs::remove_file(destination);
+            return Err(error.into());
+        }
+    };
+    if copied > MAX_ARCHIVE_BYTES {
         let _ = fs::remove_file(destination);
-        return Err(error.into());
+        return Err("image archive exceeds the 512 MiB download limit".into());
     }
     output.flush()?;
     drop(output);
