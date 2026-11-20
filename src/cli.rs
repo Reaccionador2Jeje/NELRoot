@@ -99,7 +99,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("NELRoot paths");
             println!("-------------");
             println!("Data directory : {}", config::data_dir().display());
-            println!("Configuration : {}", config::data_dir().join("config.toml").display());
+            println!(
+                "Configuration : {}",
+                config::data_dir().join("config.toml").display()
+            );
             println!("Image catalog : {}", images::catalog_path().display());
         }
         Commands::Config { command } => match command {
@@ -134,7 +137,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             println!("Image: {}", image.name);
                             println!("Architecture: {}", image.architecture);
                             println!("Format: {}", image.format);
-                            println!("Source: {}", image.source.as_deref().unwrap_or("not specified"));
+                            println!(
+                                "Source: {}",
+                                image.source.as_deref().unwrap_or("not specified")
+                            );
                         }
                         None => return Err(format!("image '{name}' is not registered").into()),
                     }
