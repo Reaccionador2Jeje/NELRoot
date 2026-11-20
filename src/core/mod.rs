@@ -3,6 +3,7 @@ pub mod elf;
 pub mod loader;
 pub mod host;
 pub mod hub;
+pub mod hub_signing;
 pub mod images;
 pub mod logging;
 pub mod registry;
