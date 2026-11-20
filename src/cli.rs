@@ -206,8 +206,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ui::heading("Host interfaces");
             for (name, available) in host::host_interfaces() {
-                if available { ui::good(&format!("{name}: available")); }
-                else { ui::warn(&format!("{name}: unavailable")); }
+                if available {
+                    ui::good(&format!("{name}: available"));
+                } else {
+                    ui::warn(&format!("{name}: unavailable"));
+                }
             }
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
@@ -266,7 +269,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::warn(&format!("No images matched '{query}'."));
                 } else {
                     for image in matches {
-                        ui::key(&image.name, format!("{} · {}", image.architecture, image.description));
+                        ui::key(
+                            &image.name,
+                            format!("{} · {}", image.architecture, image.description),
+                        );
                     }
                 }
             }
@@ -362,11 +368,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::banner("Local image catalog");
                 if catalog.images.is_empty() {
                     ui::warn("No images registered.");
-                    ui::muted("Search a registry with: nelroot image search <term> --registry <https-index-url>");
+                    ui::muted(
+                        "Search a registry with: nelroot image search <term> --registry <https-index-url>",
+                    );
                 } else {
                     ui::heading(&format!("Registered images ({})", catalog.images.len()));
                     for image in catalog.images {
-                        ui::key(&image.name, format!("{} · {}", image.architecture, image.format));
+                        ui::key(
+                            &image.name,
+                            format!("{} · {}", image.architecture, image.format),
+                        );
                     }
                 }
             }
@@ -381,8 +392,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         let source = image.source.as_deref().unwrap_or("not specified");
                         ui::key("Root filesystem", source);
                         let exists = std::path::Path::new(source).is_dir();
-                        if exists { ui::good("Root filesystem path exists."); }
-                        else { ui::warn("Root filesystem path is missing."); }
+                        if exists {
+                            ui::good("Root filesystem path exists.");
+                        } else {
+                            ui::warn("Root filesystem path is missing.");
+                        }
                     }
                     None => return Err(format!("image '{name}' is not registered").into()),
                 }
@@ -403,7 +417,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::banner("ELF64 inspection");
                 ui::key("File", path.display());
                 ui::key("Type", info.file_type);
-                ui::key("Machine", format!("{} ({})", info.machine, info.architecture));
+                ui::key(
+                    "Machine",
+                    format!("{} ({})", info.machine, info.architecture),
+                );
                 ui::key("Entry point", format!("0x{:016x}", info.entry_point));
                 if let Some(interpreter) = &info.interpreter {
                     ui::key("Interpreter", interpreter);
