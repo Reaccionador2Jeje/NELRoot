@@ -46,6 +46,19 @@ fn looks_like_rootfs(path: &Path) -> bool {
             .any(|entry| path.join(entry).is_dir())
 }
 
+/// Validate and canonicalize an existing Linux root filesystem directory.
+pub fn validate_rootfs(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let canonical = path.canonicalize()?;
+    if !looks_like_rootfs(&canonical) {
+        return Err(format!(
+            "{} does not look like a Linux root filesystem directory",
+            canonical.display()
+        )
+        .into());
+    }
+    Ok(canonical)
+}
+
 fn save_catalog(catalog: &ImageCatalog) -> Result<(), Box<dyn std::error::Error>> {
     let path = catalog_path();
     let parent = path
@@ -75,14 +88,7 @@ pub fn register_image(
         return Err("architecture must be a non-empty identifier such as aarch64 or x86_64".into());
     }
 
-    let rootfs = rootfs.canonicalize()?;
-    if !looks_like_rootfs(&rootfs) {
-        return Err(format!(
-            "{} does not look like a Linux root filesystem directory",
-            rootfs.display()
-        )
-        .into());
-    }
+    let rootfs = validate_rootfs(rootfs)?;
 
     let mut catalog = load_catalog()?;
     if catalog.images.iter().any(|image| image.name == name) {
