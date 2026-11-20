@@ -90,6 +90,14 @@ impl MappedElf {
     /// Map a bounded static PIE (ET_DYN without PT_INTERP) into this process.
     /// The image is never executed. Dynamic linking and relocations are not performed.
     pub fn map_file(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::map_file_with_info(path).map(|(mapped, _info)| mapped)
+    }
+
+    /// Read, inspect and map one immutable byte snapshot, returning its ELF metadata.
+    /// This avoids re-reading a path between mapping and later loader stages.
+    pub fn map_file_with_info(
+        path: &Path,
+    ) -> Result<(Self, ElfInfo), Box<dyn std::error::Error>> {
         let metadata = fs::metadata(path)?;
         if metadata.len() > MAX_IMAGE_SIZE as u64 {
             return Err("ELF image exceeds the 256 MiB mapping input limit".into());
@@ -102,7 +110,8 @@ impl MappedElf {
             return Err("ELF image grew beyond the 256 MiB mapping input limit".into());
         }
         let info = elf::inspect_elf_bytes(&bytes)?;
-        Self::map_bytes(&bytes, &info)
+        let mapped = Self::map_bytes(&bytes, &info)?;
+        Ok((mapped, info))
     }
 
     fn map_bytes(bytes: &[u8], info: &ElfInfo) -> Result<Self, Box<dyn std::error::Error>> {
