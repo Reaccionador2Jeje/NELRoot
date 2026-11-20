@@ -21,6 +21,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Read-only Linux user-namespace policy and procfs namespace-interface diagnostics (prerequisite probe only; no namespace runtime yet).
 - [x] Initial guest VFS path normalization and root confinement with canonical symlink checks (inspection helpers only; not a security boundary for later opens).
 - [x] Linux root-confined file open and exclusive create using openat2(2), pinned root directory descriptors and RESOLVE_IN_ROOT (requires Linux 5.6+; no fallback on older kernels).
+- [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop (no namespace isolation or signal forwarding yet).
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
