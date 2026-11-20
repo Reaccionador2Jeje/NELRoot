@@ -719,6 +719,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     ui::banner("Engine capability status");
                     ui::heading("Available");
+                    let namespaces = runtime::rootless_namespace_info();
+                    ui::state(
+                        "Rootless user namespace prerequisites",
+                        namespaces.potentially_available(),
+                        "read-only kernel-policy probe",
+                    );
                     ui::state("Core", true, "initialized");
                     ui::state("Host detection", true, "platform information");
                     ui::state("Configuration", true, "user settings");
