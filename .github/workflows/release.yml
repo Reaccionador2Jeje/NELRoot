@@ -59,6 +59,9 @@ jobs:
       - name: Set up Android NDK
         if: matrix.target == 'aarch64-linux-android'
         uses: android-actions/setup-android@v3
+        with:
+          # 'tools' is deprecated and makes sdkmanager fail on current SDK repositories.
+          packages: platform-tools
       - name: Install Android NDK
         if: matrix.target == 'aarch64-linux-android'
         run: sdkmanager "ndk;27.2.12479018"
