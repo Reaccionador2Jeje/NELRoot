@@ -131,6 +131,33 @@ enum ImageCommands {
         #[arg(long)]
         architecture: Option<String>,
     },
+    /// Download, verify and import an image from the first-party NELRoot Hub.
+    HubPull {
+        /// Stable Hub image ID, for example atdev/alpine-3.22.
+        image_id: String,
+        /// HTTPS base URL of the NELRoot Hub.
+        #[arg(long)]
+        hub: String,
+        /// Guest CPU architecture.
+        #[arg(long, default_value_t = std::env::consts::ARCH.to_string())]
+        architecture: String,
+        /// Optional local image name (otherwise derived from ID and architecture).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Update a NELRoot-managed image from the first-party NELRoot Hub.
+    HubUpdate {
+        /// Stable Hub image ID, for example atdev/alpine-3.22.
+        image_id: String,
+        /// Existing local image name to replace.
+        name: String,
+        /// HTTPS base URL of the NELRoot Hub.
+        #[arg(long)]
+        hub: String,
+        /// Guest CPU architecture.
+        #[arg(long, default_value_t = std::env::consts::ARCH.to_string())]
+        architecture: String,
+    },
     /// Search a local copy of the first-party NELRoot Hub catalog.
     HubCatalogSearch {
         /// Path to the catalog JSON file.
@@ -494,6 +521,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ui::muted(&format!("Catalog generated at {}", catalog.generated_at));
+            }
+            ImageCommands::HubPull { image_id, hub: hub_url, architecture, name } => {
+                let (local_name, rootfs) = hub::pull_remote_image(
+                    &hub_url, &image_id, &architecture, name.as_deref(),
+                )?;
+                let _ = logging::record("info", &format!("first-party Hub image pulled: {image_id} as {local_name}"));
+                ui::good(&format!("Hub image '{image_id}' downloaded, verified and imported."));
+                ui::key("Local image", local_name);
+                ui::key("Root filesystem", rootfs.display());
+                ui::key("Architecture", architecture);
+            }
+            ImageCommands::HubUpdate { image_id, name, hub: hub_url, architecture } => {
+                let rootfs = hub::update_remote_image(&hub_url, &image_id, &architecture, &name)?;
+                let _ = logging::record("info", &format!("first-party Hub image updated: {image_id} as {name}"));
+                ui::good(&format!("Local image '{name}' updated from Hub image '{image_id}'."));
+                ui::key("Root filesystem", rootfs.display());
+                ui::key("Architecture", architecture);
             }
             ImageCommands::HubCatalogSearch { path, query, architecture } => {
                 let catalog = hub::load_catalog(&path)?;
