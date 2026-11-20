@@ -3,7 +3,7 @@ Version: @VERSION@
 Section: utils
 Priority: optional
 Architecture: @ARCH@
-Maintainer: AtDev <packages@atdev.dev>
+Maintainer: AtDev
 Description: Independent Linux execution and virtualization engine
  NELRoot is an independent systems project. The current CLI manages
  host diagnostics and Linux root filesystem images. Guest execution
