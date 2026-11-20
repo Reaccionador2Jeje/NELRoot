@@ -506,6 +506,123 @@ pub fn bind_mount_rootfs_read_only(rootfs: &Path, target: &Path) -> io::Result<(
     Ok(())
 }
 
+/// Validate a mounted rootfs and its real /tmp directory before pivot_root.
+#[cfg(target_os = "linux")]
+fn validate_pivot_root_target(rootfs_mount_target: &Path) -> io::Result<(std::path::PathBuf, std::path::PathBuf)> {
+    let root_meta = std::fs::symlink_metadata(rootfs_mount_target)?;
+    if root_meta.file_type().is_symlink() || !root_meta.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pivot_root target must be an existing real directory, not a symlink",
+        ));
+    }
+    let root = rootfs_mount_target.canonicalize()?;
+    let tmp_candidate = root.join("tmp");
+    let tmp_meta = std::fs::symlink_metadata(&tmp_candidate).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("rootfs must contain a real /tmp directory for safe pivot_root: {error}"),
+        )
+    })?;
+    if tmp_meta.file_type().is_symlink() || !tmp_meta.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs /tmp must be an existing real directory, not a symlink",
+        ));
+    }
+    let tmp = tmp_candidate.canonicalize()?;
+    if !tmp.starts_with(&root) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs /tmp resolves outside the rootfs",
+        ));
+    }
+    Ok((root, tmp))
+}
+
+/// Enter a previously bind-mounted rootfs and detach the previous root.
+///
+/// This is a child-only operation: call it only after UID/GID mapping, user and
+/// private mount namespace setup, and bind_mount_rootfs_read_only. It mounts
+/// a small private tmpfs over the guest's real /tmp, uses that mount as the
+/// temporary put_old directory, performs pivot_root, then detaches the old
+/// root. The imported image itself is not modified.
+///
+/// A failure after pivot_root is fatal to the caller: terminate this child
+/// rather than continuing with a partially completed root transition.
+#[cfg(target_os = "linux")]
+pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
+    let (root, tmp) = validate_pivot_root_target(rootfs_mount_target)?;
+    let root_c = CString::new(root.as_os_str().as_encoded_bytes()).map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidInput, "rootfs path contains NUL")
+    })?;
+    let tmp_c = CString::new(tmp.as_os_str().as_encoded_bytes()).map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidInput, "rootfs /tmp path contains NUL")
+    })?;
+
+    // A fresh tmpfs provides a writable, disposable put_old directory while
+    // preserving the read-only imported rootfs beneath it.
+    if unsafe {
+        libc::mount(
+            c"tmpfs".as_ptr(),
+            tmp_c.as_ptr(),
+            c"tmpfs".as_ptr(),
+            (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+            c"mode=1777,size=16m".as_ptr(),
+        )
+    } != 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+
+    let old_root = tmp.join(".nelroot-oldroot");
+    if let Err(error) = std::fs::create_dir(&old_root) {
+        unsafe {
+            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
+        }
+        return Err(error);
+    }
+
+    // pivot_root paths are relative to the new root after chdir(root).
+    if unsafe { libc::chdir(root_c.as_ptr()) } != 0 {
+        let error = io::Error::last_os_error();
+        let _ = std::fs::remove_dir(&old_root);
+        unsafe {
+            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
+        }
+        return Err(error);
+    }
+
+    // SAFETY: "." is the mounted new root; put_old is a directory beneath it
+    // on the tmpfs mounted over its /tmp directory.
+    if unsafe {
+        libc::syscall(
+            libc::SYS_pivot_root,
+            c".".as_ptr(),
+            c"tmp/.nelroot-oldroot".as_ptr(),
+        )
+    } != 0
+    {
+        let error = io::Error::last_os_error();
+        let _ = std::fs::remove_dir(&old_root);
+        unsafe {
+            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
+        }
+        return Err(error);
+    }
+
+    // From here onward the process has changed roots. Any error must cause
+    // the caller to terminate this child rather than resume normal execution.
+    if unsafe { libc::chdir(c"/".as_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe { libc::umount2(c"/tmp/.nelroot-oldroot".as_ptr(), libc::MNT_DETACH) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    std::fs::remove_dir("/tmp/.nelroot-oldroot")?;
+    Ok(())
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
@@ -737,6 +854,46 @@ mod tests {
     fn user_namespace_id_map_format_is_single_id_and_newline_terminated() {
         assert_eq!(format_id_map(1000), "0 1000 1\n");
         assert_eq!(format_id_map(0), "0 0 1\n");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pivot_root_validation_requires_a_real_tmp_directory() {
+        let unique = format!(
+            "nelroot-pivot-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(root.join("tmp")).expect("test rootfs should be created");
+
+        let (validated_root, validated_tmp) =
+            validate_pivot_root_target(&root).expect("real rootfs /tmp should validate");
+        assert_eq!(validated_root, root.canonicalize().unwrap());
+        assert_eq!(validated_tmp, validated_root.join("tmp"));
+
+        std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pivot_root_validation_rejects_missing_tmp_directory() {
+        let unique = format!(
+            "nelroot-pivot-missing-tmp-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&root).expect("test rootfs should be created");
+
+        assert!(validate_pivot_root_target(&root).is_err());
+        std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
     }
 
     #[test]
