@@ -223,9 +223,11 @@ pub fn import_archive(
         let input = File::open(archive_path)?;
         let decoder = flate2::read::GzDecoder::new(input);
         let mut archive = tar::Archive::new(decoder);
-        let unpacked = archive.unpack_in(&staging)?;
-        if !unpacked {
-            return Err("archive contains unsafe paths; extraction was refused".into());
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            if !entry.unpack_in(&staging)? {
+                return Err("archive contains unsafe paths; extraction was refused".into());
+            }
         }
 
         let root = if looks_like_rootfs(&staging) {
