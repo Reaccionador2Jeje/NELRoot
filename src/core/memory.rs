@@ -147,6 +147,18 @@ impl MappedElf {
                     "PT_LOAD alignment exceeds the host page size supported by this mapper".into(),
                 );
             }
+            if header.alignment > 1 {
+                if !header.alignment.is_power_of_two() {
+                    return Err("PT_LOAD alignment is not a power of two".into());
+                }
+                if header.virtual_address % header.alignment
+                    != header.offset % header.alignment
+                {
+                    return Err(
+                        "PT_LOAD file offset and virtual address are not congruent".into(),
+                    );
+                }
+            }
             if header.file_size > header.memory_size {
                 return Err("PT_LOAD file size exceeds memory size".into());
             }
@@ -419,6 +431,21 @@ mod tests {
         for offset in bss_offset..bss_offset + 64 {
             assert_eq!(mapped.read_byte(offset).unwrap(), 0);
         }
+    }
+
+    #[test]
+    fn rejects_non_power_of_two_segment_alignment() {
+        let (bytes, mut info) = static_pie();
+        info.program_headers[0].alignment = 3;
+        assert!(MappedElf::map_bytes(&bytes, &info).is_err());
+    }
+
+    #[test]
+    fn rejects_incongruent_segment_alignment() {
+        let (bytes, mut info) = static_pie();
+        info.program_headers[0].alignment = 4096;
+        info.program_headers[0].offset = 1;
+        assert!(MappedElf::map_bytes(&bytes, &info).is_err());
     }
 
     #[test]
