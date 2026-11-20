@@ -1,16 +1,24 @@
 # Maintainer: AtDev
 pkgname=nelroot
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=0
 pkgdesc="Independent Linux execution and virtualization engine"
 url="https://github.com/Reaccionador2Jeje/NELRoot"
-arch="all"
+arch="x86_64 aarch64"
 license="MIT"
-options="!check"
-source=""
+makedepends="cargo"
+source="https://github.com/Reaccionador2Jeje/NELRoot/archive/refs/tags/v$pkgver.tar.gz"
+builddir="$srcdir/NELRoot-$pkgver"
+sha512sums="REPLACE_WITH_VERIFIED_SHA512"
+
+build() {
+  cd "$builddir"
+  cargo build --release
+}
 
 package() {
-  install -Dm755 "$srcdir/nelroot" "$pkgdir/usr/bin/nelroot"
-  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/nelroot/README.md"
-  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/nelroot/LICENSE"
+  cd "$builddir"
+  install -Dm755 target/release/nelroot "$pkgdir/usr/bin/nelroot"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/nelroot/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/nelroot/LICENSE"
 }
