@@ -4,7 +4,7 @@
 //! catalog. Network transport and publishing are intentionally separate stages.
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, fs, io::Read, path::Path};
 
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CATALOG_ENTRIES: usize = 100_000;
@@ -215,7 +215,15 @@ fn read_metadata(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     if !metadata.is_file() || metadata.len() > MAX_METADATA_BYTES {
         return Err("Hub metadata must be a regular file no larger than 8 MiB".into());
     }
-    Ok(fs::read(path)?)
+
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(MAX_METADATA_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_METADATA_BYTES {
+        return Err("Hub metadata exceeds the 8 MiB size limit".into());
+    }
+    Ok(bytes)
 }
 
 pub fn load_manifest(path: &Path) -> Result<HubManifest, Box<dyn std::error::Error>> {
