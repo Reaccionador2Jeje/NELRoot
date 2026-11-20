@@ -615,8 +615,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             },
                             {"name": "native_executor", "status": "not_implemented"},
                             {"name": "elf_loader", "status": "not_implemented"},
-                            {"name": "syscall_layer", "status": "model_available_not_connected"},
-                            {"name": "cpu_emulator", "status": "not_implemented"}
+                            {"name": "syscall_layer", "status": "model_available_connected_to_guest_interpreter"},
+                            {"name": "guest_cpu_interpreter", "status": "bounded_x86_64_instruction_subset_available"},
+                            {"name": "full_linux_cpu_compatibility", "status": "not_implemented"}
                         ],
                         "guest_execution": {
                             "available": runtime::supported() && runtime::has_required_privileges(),
@@ -649,7 +650,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Registry client", true, "HTTPS + SHA-256");
                     ui::state("Event logging", true, "local event log");
                     ui::state("Guest memory", true, "bounded byte-backed model");
-                    ui::state("Guest syscall ABI", true, "x86_64 write/exit model; not connected to execution");
+                    ui::state("Guest syscall ABI", true, "x86_64 write/exit model; connected to guest interpreter");
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
                     ui::state(
@@ -665,8 +666,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::heading("Under development");
                     ui::state("Independent ELF executor", false, "not implemented");
                     ui::state("ELF memory loader", false, "not implemented");
-                    ui::state("CPU execution loop", false, "not implemented");
-                    ui::state("CPU emulator", false, "not implemented");
+                    ui::state("Guest CPU interpreter", true, "bounded x86_64 instruction subset; smoke tests only");
+                    ui::state("Full Linux CPU compatibility", false, "not implemented");
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
                     } else {
