@@ -12,11 +12,16 @@ command -v tar >/dev/null 2>&1 || fail "tar is required."
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
-case "$OS" in
-  Linux) PLATFORM="linux" ;;
-  Darwin) PLATFORM="macos" ;;
-  *) fail "Unsupported operating system: $OS. Use the Windows PowerShell installer." ;;
-esac
+if [[ -n "${TERMUX_VERSION:-}" || "${PREFIX:-}" == *com.termux* ]]; then
+  PLATFORM="android"
+  [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]] || fail "Termux release currently supports Android arm64 only."
+elif [[ "$OS" == "Linux" ]]; then
+  PLATFORM="linux"
+elif [[ "$OS" == "Darwin" ]]; then
+  PLATFORM="macos"
+else
+  fail "Unsupported operating system: $OS. Use the Windows PowerShell installer."
+fi
 case "$ARCH" in
   x86_64|amd64) CPU="x86_64" ;;
   aarch64|arm64) CPU="aarch64" ;;
@@ -31,7 +36,10 @@ printf "Install for (u)ser only or (s)ystem-wide? [U/s]: "
 read -r SCOPE
 SCOPE="${SCOPE:-u}"
 
-if [[ "$SCOPE" =~ ^[Ss]$ ]]; then
+if [[ "$PLATFORM" == "android" ]]; then
+  INSTALL_DIR="${NELROOT_INSTALL_DIR:-$PREFIX/bin}"
+  NEED_SUDO=0
+elif [[ "$SCOPE" =~ ^[Ss]$ ]]; then
   INSTALL_DIR="/usr/local/bin"
   NEED_SUDO=1
 else
