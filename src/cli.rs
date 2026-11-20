@@ -578,12 +578,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             } else if !runtime::has_required_privileges() {
                                 concat!(
                                     "Effective UID 0 plus effective CAP_SYS_CHROOT/CAP_SETUID/CAP_SETGID ",
-                                    "are required; "
+                                    "are required; ",
                                     "ordinary unprivileged PRoot sessions cannot start it."
                                 )
                             } else {
-                                "Native chroot process launch is implemented; this is not a syscall ",
-                                "emulator or security sandbox."
+                                concat!(
+                                    "Native chroot process launch is implemented; this is not a syscall ",
+                                    "emulator or security sandbox."
+                                )
                             }
                         }
                     });
