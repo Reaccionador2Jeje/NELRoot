@@ -16,6 +16,7 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
 - [ ] Independent NELRoot runtime and process lifecycle.
+- [ ] ELF64 inspection/parser module (first bounded runtime milestone).
 - [ ] ELF loader and dynamic-linking support.
 - [ ] Linux syscall compatibility layer.
 - [ ] Filesystem, process, signal, networking and namespace compatibility where host platforms permit.
@@ -106,11 +107,15 @@ Official repository inclusion is a separate contribution and review process. Unt
 - [ ] Run integration tests against clean Ubuntu, Debian, Fedora and Arch environments.
 - [ ] Publish support matrix, known limitations and upgrade guidance.
 
-## 6. NEXORA runtime interface preparation
+## 6. Runtime architecture preparation
+
+The independent runtime design and first implementation milestone are documented in [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md). The first code milestone is an ELF64 inspection/parser that does not execute guest code.
+
+## 7. NEXORA runtime interface preparation
 
 The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](docs/NEXORA_INTEGRATION.md). NEXORA must call a stable NELRoot interface and must not assume that image registration means an environment can already execute.
 
-## 7. Product principles
+## 8. Product principles
 
 1. **Independent runtime:** NELRoot is the engine, not a wrapper around PRoot, QEMU or Docker.
 2. **Developer-friendly:** common tasks should be simple, discoverable and consistent.
