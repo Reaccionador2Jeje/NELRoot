@@ -1179,7 +1179,7 @@ mod tests {
                 .as_nanos()
         );
         let root = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(&root).expect("test rootfs should be created");
+        std::fs::create_dir_all(root.join("run")).expect("test /run should be created");
 
         assert!(validate_pivot_root_target(&root).is_err());
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
