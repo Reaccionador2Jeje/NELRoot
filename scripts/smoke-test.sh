@@ -8,6 +8,8 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" --help >/dev/null
 "$BINARY" engine status >/dev/null
 "$BINARY" engine status --help >/dev/null
+"$BINARY" run --help >/dev/null
+"$BINARY" shell --help >/dev/null
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
 
@@ -27,7 +29,9 @@ assert isinstance(data["version"], str) and data["version"]
 assert isinstance(data["host"]["os"], str) and data["host"]["os"]
 assert isinstance(data["host"]["architecture"], str) and data["host"]["architecture"]
 assert isinstance(data["components"], list)
-assert data["guest_execution"]["available"] is False
+assert isinstance(data["guest_execution"]["available"], bool)
+assert data["guest_execution"]["backend"] == "linux_chroot_host_kernel"
+assert data["guest_execution"]["same_architecture_only"] is True
 required = {
     "core",
     "host_detection",
@@ -37,6 +41,7 @@ required = {
     "event_logging",
     "elf64_inspector",
     "elf_load_planner",
+    "native_chroot_runtime",
 }
 available = {item["name"] for item in data["components"] if item["status"] == "available"}
 assert required <= available
