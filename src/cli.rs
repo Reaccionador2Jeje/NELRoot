@@ -261,14 +261,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 registry: registry_url,
             } => {
                 let matches = registry::search(&registry_url, &query)?;
+                ui::banner(&format!("Image registry search: {query}"));
                 if matches.is_empty() {
-                    println!("No images matched '{query}'.");
+                    ui::warn(&format!("No images matched '{query}'."));
                 } else {
                     for image in matches {
-                        println!(
-                            "{}\t{}\t{}",
-                            image.name, image.architecture, image.description
-                        );
+                        ui::key(&image.name, format!("{} · {}", image.architecture, image.description));
                     }
                 }
             }
@@ -282,9 +280,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image pulled: {name} ({architecture})"),
                 );
-                println!("Image '{name}' downloaded, SHA-256 verified and imported.");
-                println!("Root filesystem: {}", rootfs.display());
-                println!("Architecture: {architecture}");
+                ui::good(&format!("Image '{name}' downloaded, verified and imported."));
+                ui::key("Root filesystem", rootfs.display());
+                ui::key("Architecture", architecture);
             }
             ImageCommands::Update {
                 name,
@@ -296,9 +294,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image updated: {name} ({architecture})"),
                 );
-                println!("Image '{name}' updated and SHA-256 verified.");
-                println!("Root filesystem: {}", rootfs.display());
-                println!("Architecture: {architecture}");
+                ui::good(&format!("Image '{name}' updated and verified."));
+                ui::key("Root filesystem", rootfs.display());
+                ui::key("Architecture", architecture);
             }
             ImageCommands::Download {
                 url,
@@ -310,9 +308,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image archive downloaded: {}", output.display()),
                 );
-                println!("Image archive downloaded and verified.");
-                println!("File: {}", output.display());
-                println!("SHA-256: {digest}");
+                ui::good("Image archive downloaded and verified.");
+                ui::key("File", output.display());
+                ui::key("SHA-256", digest);
             }
             ImageCommands::Import {
                 name,
@@ -324,14 +322,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image imported: {name} ({architecture})"),
                 );
-                println!("Imported image '{name}'.");
-                println!("Root filesystem: {}", rootfs.display());
-                println!("Architecture: {architecture}");
+                ui::good(&format!("Imported image '{name}'."));
+                ui::key("Root filesystem", rootfs.display());
+                ui::key("Architecture", architecture);
             }
             ImageCommands::Validate { path } => {
                 let rootfs = images::validate_rootfs(&path)?;
-                println!("Root filesystem validation: passed");
-                println!("Path: {}", rootfs.display());
+                ui::good("Root filesystem validation passed.");
+                ui::key("Path", rootfs.display());
             }
             ImageCommands::Register {
                 name,
@@ -343,9 +341,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image registered: {name} ({architecture})"),
                 );
-                println!("Registered image '{name}'.");
-                println!("Root filesystem: {}", path.canonicalize()?.display());
-                println!("The source directory was not copied or modified.");
+                ui::good(&format!("Registered image '{name}'."));
+                ui::key("Root filesystem", path.canonicalize()?.display());
+                ui::muted("The source directory was not copied or modified.");
             }
             ImageCommands::Remove { name } => {
                 if images::unregister_image(&name)? {
@@ -353,22 +351,22 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "info",
                         &format!("image unregistered: {name}"),
                     );
-                    println!("Unregistered image '{name}'.");
-                    println!("Its files were left untouched.");
+                    ui::good(&format!("Unregistered image '{name}'."));
+                    ui::muted("Its files were left untouched.");
                 } else {
                     return Err(format!("image '{name}' is not registered").into());
                 }
             }
             ImageCommands::List => {
                 let catalog = images::load_catalog()?;
+                ui::banner("Local image catalog");
                 if catalog.images.is_empty() {
-                    println!("No images registered.");
-                    println!(
-                        "Registry search: nelroot image search <term> --registry <https-index-url>"
-                    );
+                    ui::warn("No images registered.");
+                    ui::muted("Search a registry with: nelroot image search <term> --registry <https-index-url>");
                 } else {
+                    ui::heading(&format!("Registered images ({})", catalog.images.len()));
                     for image in catalog.images {
-                        println!("{}\t{}\t{}", image.name, image.architecture, image.format);
+                        ui::key(&image.name, format!("{} · {}", image.architecture, image.format));
                     }
                 }
             }
@@ -376,12 +374,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let catalog = images::load_catalog()?;
                 match catalog.images.iter().find(|image| image.name == name) {
                     Some(image) => {
-                        println!("Image: {}", image.name);
-                        println!("Architecture: {}", image.architecture);
-                        println!("Format: {}", image.format);
+                        ui::banner("Image details");
+                        ui::key("Image", &image.name);
+                        ui::key("Architecture", &image.architecture);
+                        ui::key("Format", &image.format);
                         let source = image.source.as_deref().unwrap_or("not specified");
-                        println!("Root filesystem: {source}");
-                        println!("Path exists: {}", std::path::Path::new(source).is_dir());
+                        ui::key("Root filesystem", source);
+                        let exists = std::path::Path::new(source).is_dir();
+                        if exists { ui::good("Root filesystem path exists."); }
+                        else { ui::warn("Root filesystem path is missing."); }
                     }
                     None => return Err(format!("image '{name}' is not registered").into()),
                 }
@@ -392,10 +393,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "info",
                     &format!("image cleanup removed {removed} temporary entries"),
                 );
-                println!(
-                    "Removed {removed} stale temporary entries."
-                );
-                println!("Registered images and root filesystems were not modified.");
+                ui::good(&format!("Removed {removed} stale temporary entries."));
+                ui::muted("Registered images and root filesystems were not modified.");
             }
         },
         Commands::Elf { command } => match command {
