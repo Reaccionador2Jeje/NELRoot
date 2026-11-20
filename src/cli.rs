@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use crate::core::{config, elf, host, images, logging, registry, runtime};
+use nelroot::core::{config, elf, host, images, logging, registry, runtime};
 #[cfg(target_os = "linux")]
-use crate::core::{memory, relocation};
+use nelroot::core::{memory, relocation};
 use crate::ui;
 
 #[derive(Debug, Parser)]
