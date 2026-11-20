@@ -88,6 +88,7 @@ nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
+nelroot engine status --json
 ```
 
 Run `nelroot <command> --help` for command-specific help.
