@@ -6,7 +6,7 @@ NELRoot is an open-source systems project by **AtDev**. Its long-term goal is to
 
 NELRoot is designed as an independent engine. PRoot and QEMU are not execution backends or runtime requirements.
 
-> **Development status:** Early development. NELRoot has a Linux-only native chroot launcher, a bounded memory mapper for host-native static PIE images, and an initial RELATIVE RELA relocation stage for x86_64/AArch64. These ELF tools prepare images in memory but do not execute guest code; the chroot launcher still relies on the host kernel for ELF loading and syscalls. Neither is a complete independent guest runtime or secure sandbox. See [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md) for implementation boundaries.
+> **Development status:** Early development. NELRoot has a Linux-only native chroot launcher, a bounded memory mapper for host-native static PIE images, an initial RELATIVE RELA relocation stage for x86_64/AArch64, and a bounded ELF64 initial-stack image builder. These ELF tools prepare image data but do not execute guest code; the chroot launcher still relies on the host kernel for ELF loading and syscalls. Neither is a complete independent guest runtime or secure sandbox. See [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md) for implementation boundaries.
 
 ## Product direction
 
