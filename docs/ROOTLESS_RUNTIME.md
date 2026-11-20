@@ -135,14 +135,13 @@ be denied by kernel, container, seccomp, or LSM policy.
 The Linux runtime exposes enter_rootfs_with_pivot(rootfs_mount_target) as a
 child-only root transition. It requires the caller to have completed UID/GID
 mapping, entered a private mount namespace, and mounted the validated rootfs
-read-only. The rootfs must contain a real /tmp directory; symlinks and
-missing directories are rejected.
+read-only. The rootfs must contain a real /tmp directory and an existing empty real /run
+directory; symlinks and missing directories are rejected.
 
-To avoid modifying the imported image, NELRoot mounts a small nosuid,nodev
-tmpfs over guest /tmp, creates a temporary .nelroot-oldroot directory
-there, changes into the new root, calls pivot_root, changes directory to /,
-and lazily detaches the old root. The tmpfs remains as the guest's writable
-/tmp; the imported rootfs remains read-only.
+To avoid modifying the imported image, NELRoot uses the existing empty /run
+directory on the rootfs mount as pivot_root's put_old, then detaches the old
+root and mounts a small nosuid,nodev tmpfs over guest /tmp. This satisfies
+pivot_root's requirement that put_old be on the same mount as new_root.
 
 This function does not create namespaces, perform UID/GID mapping, mount the
 rootfs, create /proc or /dev, launch a command, or supervise PID 1. It
@@ -154,7 +153,7 @@ pivot_root, and NELRoot returns those errors without falling back to chroot.
 
 ## First rootless guest launcher
 
-The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, mounts a bounded tmpfs over guest `/tmp`, pivots into the image, detaches the previous root, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
+The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, pivots into the image using its existing empty `/run` directory as `put_old`, detaches the previous root, mounts a bounded tmpfs over guest `/tmp`, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
 
 This path rejects host UID 0, never falls back to chroot, and leaves the imported rootfs unchanged. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
