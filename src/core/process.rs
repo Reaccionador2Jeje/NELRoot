@@ -4,8 +4,7 @@
 //! isolation. It provides the process lifecycle building block used by the
 //! future namespace-backed runtime.
 
-use std::process::{Child, Command, ExitStatus};
-use std::io;
+use std::{io, process::{Child, Command, ExitStatus}};
 
 /// Observable lifecycle state of a supervised child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,12 +70,12 @@ impl SupervisedProcess {
             return Ok(status);
         }
 
-        match self.child.kill() {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::InvalidInput => {
-                // The child may have exited between try_wait and kill.
+        if let Err(error) = self.child.kill() {
+            // Resolve the exit-vs-kill race before returning an error.
+            if let Some(status) = self.try_wait()? {
+                return Ok(status);
             }
-            Err(error) => return Err(error),
+            return Err(error);
         }
 
         self.wait()
