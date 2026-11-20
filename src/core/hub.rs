@@ -1,7 +1,7 @@
 //! First-party NELRoot Image Hub metadata format and validation.
 //!
-//! This module defines the stable JSON contract used by the AtDev-hosted
-//! catalog. Network transport and publishing are intentionally separate stages.
+//! This module defines the stable JSON contract and HTTPS client for the
+//! AtDev-hosted catalog. Server-side publishing lives in the Hub service.
 
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fs, io::Read, path::{Path, PathBuf}};
@@ -500,6 +500,16 @@ mod tests {
                 },
             },
         }
+    }
+
+    #[test]
+    fn generated_local_image_names_are_safe_and_bounded() {
+        let value = manifest();
+        let name = local_image_name(&value);
+        assert!(!name.is_empty());
+        assert!(name.len() <= 64);
+        assert!(name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b'_'));
+        assert!(name.ends_with("-x86_64"));
     }
 
     #[test]
