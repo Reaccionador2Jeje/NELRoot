@@ -206,3 +206,8 @@ git push origin v0.1.0
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## Terminal experience
+
+The CLI includes an adaptive terminal UI with a NELRoot banner, colored capability indicators, aligned diagnostic output and styled errors. Colors are enabled only in interactive terminals; set `NO_COLOR=1` for plain output. JSON interfaces remain machine-readable. See [CLI interface documentation](docs/CLI_INTERFACE.md).
