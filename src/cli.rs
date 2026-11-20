@@ -145,6 +145,16 @@ enum ImageCommands {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Publish a local rootfs archive and manifest to the first-party NELRoot Hub.
+    HubPublish {
+        /// Path to a validated schema-v1 manifest JSON file.
+        manifest: std::path::PathBuf,
+        /// Matching gzip-compressed rootfs archive.
+        archive: std::path::PathBuf,
+        /// HTTPS base URL of the NELRoot Hub.
+        #[arg(long)]
+        hub: String,
+    },
     /// Update a NELRoot-managed image from the first-party NELRoot Hub.
     HubUpdate {
         /// Stable Hub image ID, for example atdev/alpine-3.22.
@@ -531,6 +541,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Local image", local_name);
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
+            }
+            ImageCommands::HubPublish { manifest, archive, hub: hub_url } => {
+                let token = std::env::var("NELROOT_HUB_PUBLISH_TOKEN")
+                    .map_err(|_| "NELROOT_HUB_PUBLISH_TOKEN is not set")?;
+                let manifest_url = hub::publish_image(&hub_url, &manifest, &archive, &token)?;
+                let _ = logging::record("info", &format!("first-party Hub manifest published: {}", manifest.display()));
+                ui::good("Image archive uploaded and manifest published to NELRoot Hub.");
+                ui::key("Manifest", manifest_url);
             }
             ImageCommands::HubUpdate { image_id, name, hub: hub_url, architecture } => {
                 let rootfs = hub::update_remote_image(&hub_url, &image_id, &architecture, &name)?;
