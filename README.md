@@ -62,6 +62,7 @@ nelroot config path
 nelroot config show
 
 nelroot image list
+nelroot image validate <rootfs-path>
 nelroot image inspect <name>
 nelroot image register <name> <rootfs-path> --architecture aarch64
 nelroot image remove <name>
@@ -76,6 +77,7 @@ Run `nelroot <command> --help` for command-specific help.
 NELRoot can register an existing Linux root filesystem directory without copying it:
 
 ```bash
+nelroot image validate /path/to/rootfs
 nelroot image register ubuntu-rootfs /path/to/rootfs --architecture aarch64
 nelroot image list
 nelroot image inspect ubuntu-rootfs
