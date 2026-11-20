@@ -6,11 +6,15 @@ say() { printf "\033[1;32m[NELRoot]\033[0m %s\n" "$*"; }
 fail() { printf "\033[1;31m[NELRoot] Error:\033[0m %s\n" "$*" >&2; exit 1; }
 
 command -v tar >/dev/null 2>&1 || fail "tar is required to extract the release."
-PYTHON=""
-for candidate in python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1; then PYTHON="$candidate"; break; fi
-done
-[[ -n "$PYTHON" ]] || fail "Python 3 is required for HTTPS downloads. Install Python 3, then rerun this installer. No curl or wget is used."
+command -v wget >/dev/null 2>&1 || fail "wget is required. Install it with 'sudo apt install wget' on Ubuntu/Debian or 'pkg install wget' on Termux."
+
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_file() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+  hash_file() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  fail "A SHA-256 utility is required (sha256sum or shasum)."
+fi
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -24,6 +28,7 @@ elif [[ "$OS" == "Darwin" ]]; then
 else
   fail "Unsupported operating system: $OS. Use the Windows PowerShell installer."
 fi
+
 case "$ARCH" in
   x86_64|amd64) CPU="x86_64" ;;
   aarch64|arm64) CPU="aarch64" ;;
@@ -37,6 +42,7 @@ CHECKSUM_URL="${BASE_URL}/nelroot-${PLATFORM}-${CPU}.sha256"
 
 say "NELRoot setup wizard"
 say "Detected platform: ${PLATFORM}-${CPU}"
+say "Downloader: wget"
 printf "Install for (u)ser only or (s)ystem-wide? [U/s]: "
 read -r SCOPE
 SCOPE="${SCOPE:-u}"
@@ -46,11 +52,7 @@ if [[ "$PLATFORM" == "android" ]]; then
   NEED_SUDO=0
 elif [[ "$SCOPE" =~ ^[Ss]$ ]]; then
   INSTALL_DIR="/usr/local/bin"
-  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-    NEED_SUDO=0
-  else
-    NEED_SUDO=1
-  fi
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then NEED_SUDO=0; else NEED_SUDO=1; fi
 else
   INSTALL_DIR="${NELROOT_INSTALL_DIR:-$HOME/.local/bin}"
   NEED_SUDO=0
@@ -62,74 +64,31 @@ INSTALL_DIR="${CUSTOM_DIR:-$INSTALL_DIR}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-say "Downloading release with Python HTTPS (no curl/wget)..."
 RELEASE_READY=0
-if "$PYTHON" - "$URL" "$CHECKSUM_URL" "$TMP_DIR/nelroot.tar.gz" <<'PY'
-import hashlib
-import sys
-import urllib.error
-import urllib.request
 
-archive_url, checksum_url, archive_path = sys.argv[1:4]
-def download(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "NELRoot-Setup"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
-
-try:
-    archive = download(archive_url)
-    checksum_text = download(checksum_url).decode("utf-8", errors="strict")
-except urllib.error.HTTPError as exc:
-    if exc.code == 404:
-        print("No published binary release found (HTTP 404).", file=sys.stderr)
-        raise SystemExit(10)
-    print(f"NELRoot release download failed: HTTP {exc.code}", file=sys.stderr)
-    raise SystemExit(1)
-except Exception as exc:
-    print(f"NELRoot release download failed: {exc}", file=sys.stderr)
-    raise SystemExit(1)
-
-expected = checksum_text.strip().split()[0].lower() if checksum_text.strip() else ""
-actual = hashlib.sha256(archive).hexdigest()
-if len(expected) != 64 or actual != expected:
-    print("NELRoot checksum verification failed; archive was not installed.", file=sys.stderr)
-    raise SystemExit(1)
-
-with open(archive_path, "wb") as output:
-    output.write(archive)
-print("Download complete; SHA-256 verified.")
-PY
-then
-  RELEASE_READY=1
+say "Checking the latest GitHub Release..."
+PROBE_OUTPUT="$(wget --server-response --spider --timeout=30 "$URL" 2>&1 || true)"
+if grep -Eq 'HTTP/[0-9.]+ 404' <<< "$PROBE_OUTPUT"; then
+  say "No published binary asset found. Preparing a source build."
 else
-  DOWNLOAD_STATUS=$?
-  if [[ "$DOWNLOAD_STATUS" -ne 10 ]]; then
-    fail "Release download failed. No files were installed."
-  fi
-  say "Falling back to a source build because no GitHub Release exists yet."
-  command -v cargo >/dev/null 2>&1 || fail "No published release exists and Cargo is not installed. Install Rust/Cargo first, then rerun this installer. Ubuntu: apt install cargo (or install stable Rust with rustup)."
-  "$PYTHON" - "$TMP_DIR/source.tar.gz" <<'PY'
-import json
-import sys
-import urllib.request
+  say "Downloading release archive and checksum with wget..."
+  wget --show-progress --timeout=120 -O "$TMP_DIR/nelroot.tar.gz" "$URL" || fail "Release archive download failed."
+  wget -q --timeout=60 -O "$TMP_DIR/nelroot.sha256" "$CHECKSUM_URL" || fail "Release checksum download failed."
+  EXPECTED="$(awk 'NR == 1 { print tolower($1); exit }' "$TMP_DIR/nelroot.sha256")"
+  ACTUAL="$(hash_file "$TMP_DIR/nelroot.tar.gz")"
+  [[ "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] || fail "The release checksum file is malformed."
+  [[ "$ACTUAL" == "$EXPECTED" ]] || fail "SHA-256 verification failed. The downloaded archive was not installed."
+  RELEASE_READY=1
+  say "Release downloaded and SHA-256 verified."
+fi
 
-output = sys.argv[1]
-headers = {"User-Agent": "NELRoot-Setup"}
-def get(url):
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=90) as response:
-        return response.read()
-
-try:
-    commit = json.loads(get("https://api.github.com/repos/Reaccionador2Jeje/NELRoot/commits/main"))["sha"]
-    archive = get(f"https://codeload.github.com/Reaccionador2Jeje/NELRoot/tar.gz/{commit}")
-    with open(output, "wb") as stream:
-        stream.write(archive)
-    print(f"Downloaded NELRoot source at commit {commit}.")
-except Exception as exc:
-    print(f"Could not download NELRoot source: {exc}", file=sys.stderr)
-    raise SystemExit(1)
-PY
+if [[ "$RELEASE_READY" -eq 0 ]]; then
+  command -v cargo >/dev/null 2>&1 || fail "No published release exists and Cargo is not installed. Install stable Rust/Cargo, then rerun the installer."
+  say "Downloading the latest source snapshot with wget..."
+  wget -q --timeout=60 -O "$TMP_DIR/commit.json" "https://api.github.com/repos/$REPO/commits/main" || fail "Could not resolve the latest source commit."
+  COMMIT="$(sed -nE 's/.*"sha"[[:space:]]*:[[:space:]]*"([0-9a-f]{40})".*/\1/p' "$TMP_DIR/commit.json" | head -n 1)"
+  [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail "GitHub returned an invalid source commit identifier."
+  wget --show-progress --timeout=120 -O "$TMP_DIR/source.tar.gz" "https://codeload.github.com/$REPO/tar.gz/$COMMIT" || fail "Source archive download failed."
   mkdir -p "$TMP_DIR/source"
   tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR/source"
   SOURCE_DIR="$(find "$TMP_DIR/source" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
@@ -138,13 +97,11 @@ PY
   (cd "$SOURCE_DIR" && cargo build --release)
   mkdir -p "$TMP_DIR/unpacked"
   install -m 0755 "$SOURCE_DIR/target/release/nelroot" "$TMP_DIR/unpacked/nelroot"
-  RELEASE_READY=1
-fi
-
-if [[ ! -f "$TMP_DIR/unpacked/nelroot" ]]; then
+else
   mkdir -p "$TMP_DIR/unpacked"
   tar -xzf "$TMP_DIR/nelroot.tar.gz" -C "$TMP_DIR/unpacked"
 fi
+
 [[ -f "$TMP_DIR/unpacked/nelroot" ]] || fail "The release archive does not contain the nelroot executable."
 
 if [[ "$NEED_SUDO" -eq 1 ]]; then
