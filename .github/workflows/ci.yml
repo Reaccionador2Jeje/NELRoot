@@ -23,6 +23,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check shell scripts
         run: bash -n scripts/install.sh scripts/smoke-test.sh packaging/build-deb.sh packaging/build-rpm.sh
+      - name: Test official rootfs publisher
+        run: python3 -m unittest scripts/test_official_images.py
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
