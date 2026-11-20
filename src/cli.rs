@@ -120,6 +120,17 @@ enum ImageCommands {
         /// Path to the catalog JSON file.
         path: std::path::PathBuf,
     },
+    /// Search the live first-party NELRoot Image Hub catalog.
+    HubRemoteSearch {
+        /// Search text.
+        query: String,
+        /// HTTPS base URL of the NELRoot Hub.
+        #[arg(long)]
+        hub: String,
+        /// Optional guest architecture filter.
+        #[arg(long)]
+        architecture: Option<String>,
+    },
     /// Search a local copy of the first-party NELRoot Hub catalog.
     HubCatalogSearch {
         /// Path to the catalog JSON file.
@@ -467,6 +478,22 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::good(&format!("Catalog is valid: {} image entries.", catalog.images.len()));
                 ui::key("Schema version", catalog.schema_version);
                 ui::key("Generated at", &catalog.generated_at);
+            }
+            ImageCommands::HubRemoteSearch { query, hub: hub_url, architecture } => {
+                let catalog = hub::fetch_remote_catalog(&hub_url)?;
+                let matches = hub::search_catalog(&catalog, &query, architecture.as_deref())?;
+                ui::banner(&format!("NELRoot Image Hub: {query}"));
+                if matches.is_empty() {
+                    ui::warn("No first-party Hub images matched the query.");
+                } else {
+                    for image in matches {
+                        ui::key(
+                            &image.id,
+                            format!("{} {} · {} · {} · {}", image.name, image.version, image.distribution, image.architecture, image.description),
+                        );
+                    }
+                }
+                ui::muted(&format!("Catalog generated at {}", catalog.generated_at));
             }
             ImageCommands::HubCatalogSearch { path, query, architecture } => {
                 let catalog = hub::load_catalog(&path)?;
