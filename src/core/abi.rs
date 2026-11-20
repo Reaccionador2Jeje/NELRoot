@@ -99,6 +99,16 @@ impl SyscallContext {
             output: GuestOutput::default(),
         }
     }
+
+    /// Connect the syscall model to a prepared Linux guest image and stack.
+    /// This creates byte-backed memory only; it does not start guest execution.
+    #[cfg(target_os = "linux")]
+    pub fn from_execution_context(
+        context: &super::loader::GuestExecutionContext,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let memory = GuestMemory::from_execution_context(context)?;
+        Ok(Self::new(memory))
+    }
 }
 
 /// Dispatches the currently supported Linux x86_64 syscall subset.
@@ -131,10 +141,16 @@ impl SyscallDispatcher {
     }
 
     fn write(&self, context: &mut SyscallContext, fd: u64, address: u64, count: u64) -> i64 {
+        if fd != 1 && fd != 2 {
+            return -errno::EBADF;
+        }
         let Ok(length) = usize::try_from(count) else {
             return -errno::EINVAL;
         };
-        if length == 0 || length > MAX_SYSCALL_WRITE_BYTES {
+        if length == 0 {
+            return 0;
+        }
+        if length > MAX_SYSCALL_WRITE_BYTES {
             return -errno::EINVAL;
         }
 
@@ -233,14 +249,36 @@ mod tests {
     }
 
     #[test]
-    fn write_rejects_zero_and_oversized_requests() {
+    fn zero_length_write_succeeds_without_reading_guest_memory() {
         let mut context = context();
-        for count in [0, (MAX_SYSCALL_WRITE_BYTES + 1) as u64] {
-            let result = SyscallDispatcher.dispatch(
-                &mut context,
-                GuestSyscallRegisters::new(x86_64::WRITE, [1, 0x1100, count, 0, 0, 0]),
-            );
-            assert_eq!(result, -errno::EINVAL);
-        }
+        let result = SyscallDispatcher.dispatch(
+            &mut context,
+            GuestSyscallRegisters::new(x86_64::WRITE, [1, u64::MAX, 0, 0, 0, 0]),
+        );
+        assert_eq!(result, 0);
+        assert!(context.output.stdout().is_empty());
+    }
+
+    #[test]
+    fn write_checks_descriptor_before_guest_pointer() {
+        let mut context = context();
+        let result = SyscallDispatcher.dispatch(
+            &mut context,
+            GuestSyscallRegisters::new(x86_64::WRITE, [9, u64::MAX, 4, 0, 0, 0]),
+        );
+        assert_eq!(result, -errno::EBADF);
+    }
+
+    #[test]
+    fn write_rejects_oversized_requests() {
+        let mut context = context();
+        let result = SyscallDispatcher.dispatch(
+            &mut context,
+            GuestSyscallRegisters::new(
+                x86_64::WRITE,
+                [1, 0x1100, (MAX_SYSCALL_WRITE_BYTES + 1) as u64, 0, 0, 0],
+            ),
+        );
+        assert_eq!(result, -errno::EINVAL);
     }
 }
