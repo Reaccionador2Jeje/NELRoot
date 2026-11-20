@@ -278,7 +278,7 @@ pub fn fetch_remote_catalog(
             }
         }))
         .build()?;
-    let mut response = client.get(endpoint).send()?.error_for_status()?;
+    let response = client.get(endpoint).send()?.error_for_status()?;
     if response.url().scheme() != "https" {
         return Err("Hub catalog redirected to a non-HTTPS URL".into());
     }
@@ -326,7 +326,7 @@ pub fn fetch_remote_manifest(
             }
         }))
         .build()?;
-    let mut response = client.get(manifest_url).send()?.error_for_status()?;
+    let response = client.get(manifest_url).send()?.error_for_status()?;
     if response.url().scheme() != "https" {
         return Err("manifest request redirected to a non-HTTPS URL".into());
     }
@@ -531,11 +531,11 @@ pub fn update_remote_image(
     result
 }
 
-pub fn search_catalog(
-    catalog: &HubCatalog,
+pub fn search_catalog<'a>(
+    catalog: &'a HubCatalog,
     query: &str,
     architecture: Option<&str>,
-) -> Result<Vec<&HubCatalogEntry>, String> {
+) -> Result<Vec<&'a HubCatalogEntry>, String> {
     if query.trim().is_empty() {
         return Err("Hub search query cannot be empty".into());
     }
