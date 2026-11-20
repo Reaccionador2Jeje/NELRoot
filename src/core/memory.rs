@@ -204,8 +204,7 @@ impl MappedElf {
                 .checked_add(header.file_size)
                 .ok_or("executable PT_LOAD file range overflows")?;
             if header.flags & PF_X != 0
-                && info.entry_point >= *start
-                && info.entry_point < file_end
+                && (*start..file_end).contains(&info.entry_point)
             {
                 entry_is_executable = true;
             }
