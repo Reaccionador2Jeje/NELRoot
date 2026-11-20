@@ -221,7 +221,7 @@ mod tests {
         let offset = (stack.argv_addresses()[0] - stack.stack_pointer()) as usize;
         assert_eq!(&stack.bytes()[offset..offset + 10], b"/bin/demo\0");
         let execfn_offset = (stack.execfn_address() - stack.stack_pointer()) as usize;
-        assert_eq!(&stack.bytes()[execfn_offset..execfn_offset + 14], b"/usr/bin/demo\\0");
+        assert_eq!(&stack.bytes()[execfn_offset..execfn_offset + 14], b"/usr/bin/demo\0");
         let random_offset = (stack.random_address() - stack.stack_pointer()) as usize;
         assert_eq!(&stack.bytes()[random_offset..random_offset + 16], &[0x5a; 16]);
     }
