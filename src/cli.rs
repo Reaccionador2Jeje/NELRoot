@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::core::{config, host, images, logging, registry};
+use crate::core::{config, elf, host, images, logging, registry};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -41,6 +41,11 @@ enum Commands {
     Image {
         #[command(subcommand)]
         command: ImageCommands,
+    },
+    /// Inspect ELF64 executable metadata without executing the file.
+    Elf {
+        #[command(subcommand)]
+        command: ElfCommands,
     },
     /// Inspect the independent NELRoot runtime.
     Engine {
@@ -127,6 +132,15 @@ enum ImageCommands {
     },
     /// Remove abandoned image extraction staging directories.
     Clean,
+}
+
+#[derive(Debug, Subcommand)]
+enum ElfCommands {
+    /// Validate and display an ELF64 file's header and program headers.
+    Inspect {
+        /// Path to the ELF file.
+        path: std::path::PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -298,6 +312,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Registered images and root filesystems were not modified.");
             }
         },
+        Commands::Elf { command } => match command {
+            ElfCommands::Inspect { path } => {
+                let info = elf::inspect_file(&path)?;
+                println!("ELF file: {}", path.display());
+                println!("Type: {}", info.file_type);
+                println!("Machine: {} ({})", info.machine, info.architecture);
+                println!("Entry point: 0x{:016x}", info.entry_point);
+                println!("Program headers: {}", info.program_headers.len());
+                for (index, header) in info.program_headers.iter().enumerate() {
+                    println!(
+                        "  [{index}] type={} flags=0x{:x} offset=0x{:x} vaddr=0x{:x} filesz={} memsz={} align={}",
+                        header.kind,
+                        header.flags,
+                        header.offset,
+                        header.virtual_address,
+                        header.file_size,
+                        header.memory_size,
+                        header.alignment
+                    );
+                }
+            }
+        },
         Commands::Engine { command } => match command {
             EngineCommands::Status { json } => {
                 if json {
@@ -334,7 +370,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Registry client  : available");
                     println!("Event logging    : available");
                     println!("Native executor  : not implemented");
-                    println!("ELF loader       : not implemented");
+                    println!("ELF64 parser     : available (inspection only)");
+                println!("ELF loader       : not implemented");
                     println!("Syscall layer    : not implemented");
                     println!("CPU emulator     : not implemented");
                     println!("Linux guest boot : not available");
