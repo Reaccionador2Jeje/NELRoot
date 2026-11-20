@@ -297,10 +297,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "Required chroot/setuid/setgid capabilities are unavailable to this process.",
                 );
             }
-            ui::state("Independent ELF executor", false, "not implemented");
-            ui::state("ELF memory loader", false, "not implemented");
-                    ui::state("Syscall integration", false, "waiting for guest CPU execution");
-            ui::state("CPU emulator", false, "not implemented");
+            ui::state("Independent ELF executor", false, "experimental subset; not general Linux compatibility");
+            ui::state("Static PIE preparation", cfg!(target_os = "linux"), "loader → guest memory pipeline; x86_64 interpreter");
+            ui::state("Syscall integration", true, "bounded write/exit ABI connected to guest interpreter");
+            ui::state("Guest CPU interpreter", cfg!(all(target_os = "linux", target_arch = "x86_64")), "bounded x86_64 subset; instruction budget required");
             ui::warn("Host interfaces do not imply guest Linux compatibility.");
         }
         Commands::Setup | Commands::Init => {
