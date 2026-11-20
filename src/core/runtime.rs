@@ -17,7 +17,17 @@ pub fn has_required_privileges() -> bool {
     #[cfg(target_os = "linux")]
     {
         // SAFETY: geteuid has no pointer arguments or side effects.
-        unsafe { libc::geteuid() == 0 }
+        let is_root = unsafe { libc::geteuid() == 0 };
+        let has_chroot_capability = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                status.lines().find_map(|line| {
+                    line.strip_prefix("CapEff:")
+                        .and_then(|value| u64::from_str_radix(value.trim(), 16).ok())
+                })
+            })
+            .is_some_and(|effective| effective & (1_u64 << 18) != 0);
+        is_root && has_chroot_capability
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -67,7 +77,7 @@ pub fn run_image(
     {
         if !has_required_privileges() {
             return Err(
-                "native chroot requires effective root and CAP_SYS_CHROOT; this does not work inside an ordinary unprivileged PRoot session"
+                "native chroot requires effective UID 0 and the effective CAP_SYS_CHROOT capability; ordinary unprivileged PRoot sessions do not provide them"
                     .into(),
             );
         }
