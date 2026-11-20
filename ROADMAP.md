@@ -21,7 +21,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Add bearer-token-protected artifact upload and immutable manifest publication with SHA-256 and rootfs-size verification.
 - [ ] Deploy and operate the public Hub service with TLS, backups, monitoring, rate limits and durable production storage.
 - [ ] Add maintainer accounts, scoped credentials, image review/moderation and signed provenance verification.
-- [x] Add live HTTPS retrieval and validation of the first-party Hub catalog in the NELRoot CLI (remote manifest retrieval and verified rootfs pulls remain pending).
+- [x] Add live HTTPS retrieval and validation of the first-party Hub catalog in the NELRoot CLI.
+- [x] Fetch content-addressed manifests, verify catalog-published manifest digests, cross-check catalog metadata, and pull/update rootfs archives with HTTPS, SHA-256, exact-size and bounded-download verification.
 - [ ] OCI layer download, digest verification, whiteout handling and transactional rootfs reconstruction for optional OCI sources.
 - [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Publish and operate official AtDev images for Ubuntu, Debian and Alpine.
