@@ -50,9 +50,9 @@ def alpine_release(architecture: str) -> tuple[str, str, str]:
     directory = urllib.parse.urljoin(ALPINE_BASE, f"{architecture}/")
     page = request_bytes(directory).decode("utf-8", "replace")
     pattern = re.compile(
-        r'href=["\\'](alpine-minirootfs-(\d+\.\d+\.\d+)-'
+        r"""href=["'](alpine-minirootfs-(\d+\.\d+\.\d+)-"""
         + re.escape(architecture)
-        + r'\.tar\.gz)["\\']'
+        + r""".tar\.gz)["']"""
     )
     matches = pattern.findall(page)
     if not matches:
@@ -173,20 +173,6 @@ def read_json_response(request: urllib.request.Request) -> dict:
     if len(body) > 1024 * 1024:
         raise RuntimeError("Hub response exceeded 1 MiB")
     return json.loads(body.decode("utf-8"))
-
-
-def upload_artifact(hub: str, token: str, digest: str, path: Path) -> dict:
-    request = urllib.request.Request(
-        f"{hub}/v1/artifacts/{digest}",
-        data=path.read_bytes(),
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/gzip",
-            "User-Agent": USER_AGENT,
-        },
-    )
-    return read_json_response(request)
 
 
 def publish_one(
