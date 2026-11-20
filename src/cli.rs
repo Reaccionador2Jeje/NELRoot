@@ -152,6 +152,14 @@ enum ElfCommands {
         /// Path to the ELF file.
         path: std::path::PathBuf,
     },
+    /// Build a non-executing memory mapping plan for an ELF64 image.
+    Plan {
+        /// Path to the ELF file.
+        path: std::path::PathBuf,
+        /// Page-aligned load bias (primarily for ET_DYN images).
+        #[arg(long, default_value_t = 0)]
+        load_bias: u64,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -410,6 +418,29 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         header.file_size,
                         header.memory_size,
                         header.alignment
+                    );
+                }
+            }
+            ElfCommands::Plan { path, load_bias } => {
+                let info = elf::inspect_file(&path)?;
+                let plan = crate::core::loader::plan_load(&info, load_bias)?;
+                println!("ELF load plan (inspection only; no memory mapped or code executed)");
+                println!("Architecture: {}", plan.architecture);
+                println!("Load bias: 0x{:016x}", plan.load_bias);
+                println!("Entry point: 0x{:016x}", plan.entry_point);
+                for (index, segment) in plan.segments.iter().enumerate() {
+                    let mut permissions = String::new();
+                    permissions.push(if segment.readable { 'r' } else { '-' });
+                    permissions.push(if segment.writable { 'w' } else { '-' });
+                    permissions.push(if segment.executable { 'x' } else { '-' });
+                    println!(
+                        "  [{index}] {:#018x}-{:#018x} {} file={} memory={} offset={:#x}",
+                        segment.virtual_start,
+                        segment.virtual_end,
+                        permissions,
+                        segment.file_size,
+                        segment.memory_size,
+                        segment.file_offset
                     );
                 }
             }
