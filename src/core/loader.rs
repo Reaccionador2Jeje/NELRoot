@@ -291,8 +291,10 @@ impl PreparedStaticPie {
         if stack_end <= stack_pointer {
             return Err("guest stack range is empty or overflows".into());
         }
-        if self.plan.entry_point == 0 || self.mapped.entry_address() == 0 {
-            return Err("guest entry point is invalid".into());
+        if self.plan.entry_point == 0
+            || u64::try_from(self.mapped.entry_address())? != self.plan.entry_point
+        {
+            return Err("planned ELF entry point does not match the mapped executable address".into());
         }
         let cpu_state = match self.info.machine {
             EM_X86_64 => InitialCpuState::X86_64 {
