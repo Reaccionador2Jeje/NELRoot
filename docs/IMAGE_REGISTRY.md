@@ -36,6 +36,7 @@ The index must be no larger than 4 MiB. Duplicate `name` + `architecture` pairs 
 ```bash
 nelroot image search ubuntu --registry https://example.org/nelroot/index.json
 nelroot image pull ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
+nelroot image update ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
 nelroot image list
 nelroot image inspect ubuntu-noble
 nelroot image clean
@@ -60,5 +61,5 @@ NELRoot does not currently operate an official AtDev image registry. Do not trea
 
 - Only gzip-compressed tar rootfs archives are accepted.
 - Registry search is a simple case-insensitive match against name and description.
-- The client does not yet provide registry authentication, signature verification, delta updates or automatic refresh of an already-registered image.
+- The client does not yet provide registry authentication, signature verification, delta updates or automatic background refresh. Manual `image update` is available for images stored in NELRoot's managed image directory; external registered directories are never replaced.
 - A downloaded rootfs is stored and catalogued; it is not yet booted or executed by NELRoot.
