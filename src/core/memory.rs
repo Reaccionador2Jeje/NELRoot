@@ -440,6 +440,41 @@ impl MappedElf {
         Ok(offset)
     }
 
+    /// Copy loader-owned bytes from a mapped guest virtual range.
+    ///
+    /// Unlike guest reads, this internal loader operation may copy execute-only
+    /// pages. It never reads unmapped PROT_NONE pages.
+    pub(crate) fn copy_virtual_bytes(
+        &self,
+        virtual_address: u64,
+        length: usize,
+    ) -> Result<Vec<u8>, &'static str> {
+        let offset = self.virtual_address_offset(virtual_address, length)?;
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+        let end = offset.checked_add(length).ok_or("ELF copy range overflows")?;
+        let first_page = offset / self.page_size;
+        let last_page = (end - 1) / self.page_size;
+        if self.page_permissions[first_page..=last_page]
+            .iter()
+            .any(|permissions| permissions.0 == 0)
+        {
+            return Err("ELF copy range includes an unmapped page");
+        }
+        let mut bytes = vec![0_u8; length];
+        // SAFETY: the complete range is within this owned mmap reservation,
+        // and every covered page belongs to a PT_LOAD mapping.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                self.base.as_ptr().add(offset),
+                bytes.as_mut_ptr(),
+                length,
+            );
+        }
+        Ok(bytes)
+    }
+
     pub fn read_byte(&self, offset: usize) -> Result<u8, &'static str> {
         self.read_bytes(offset, 1).map(|bytes| bytes[0])
     }
