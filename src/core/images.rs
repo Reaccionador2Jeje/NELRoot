@@ -213,7 +213,10 @@ pub fn import_archive(
         return Err(format!("image directory already exists: {}", destination.display()).into());
     }
 
-    let staging = store.join(format!(".{name}.staging-{}", std::process::id()));
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let staging = store.join(format!(".{name}.staging-{}-{nonce}", std::process::id()));
     if staging.exists() {
         fs::remove_dir_all(&staging)?;
     }
@@ -266,8 +269,18 @@ pub fn import_archive(
         Ok(canonical)
     })();
 
-    if result.is_err() && staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
+    if result.is_err() {
+        if staging.exists() {
+            let _ = fs::remove_dir_all(&staging);
+        }
+        // A failed catalog write must not leave an unregistered managed rootfs behind.
+        if destination.exists()
+            && !load_catalog()
+                .map(|catalog| catalog.images.iter().any(|image| image.name == name))
+                .unwrap_or(true)
+        {
+            let _ = fs::remove_dir_all(&destination);
+        }
     }
     result
 }
