@@ -8,3 +8,6 @@ pub mod registry;
 pub mod runtime;
 #[cfg(target_os = "linux")]
 pub mod memory;
+
+#[cfg(target_os = "linux")]
+pub mod relocation;
