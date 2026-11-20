@@ -90,6 +90,67 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
     }
 }
 
+/// Attempt user-namespace creation in a disposable child process.
+///
+/// The parent process is never moved into a namespace. The child performs only
+/// the unshare syscall, reads errno on failure, and exits immediately. This
+/// verifies user-namespace creation only; it does not test UID/GID mapping,
+/// mount namespaces, PID namespaces, or rootfs setup.
+pub fn probe_user_namespace_creation() -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        let pid = unsafe { libc::fork() };
+        if pid < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        if pid == 0 {
+            // SAFETY: after fork the child uses only unshare, a direct errno
+            // read, and _exit; it does not touch inherited Rust runtime state.
+            let result = unsafe { libc::unshare(libc::CLONE_NEWUSER) };
+            if result == 0 {
+                unsafe { libc::_exit(0) };
+            }
+            let errno = unsafe { *libc::__errno_location() };
+            unsafe { libc::_exit(errno.clamp(1, 255)) };
+        }
+
+        let mut status = 0;
+        loop {
+            let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
+            if waited == pid {
+                break;
+            }
+            if waited < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+
+        if libc::WIFEXITED(status) {
+            let code = libc::WEXITSTATUS(status);
+            if code == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::from_raw_os_error(code))
+            }
+        } else {
+            Err(std::io::Error::other(
+                "user-namespace probe child did not exit normally",
+            ))
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "user namespaces are only available on Linux",
+        ))
+    }
+}
+
 /// Whether this build contains the native Linux chroot process backend.
 pub fn supported() -> bool {
     cfg!(target_os = "linux")
