@@ -111,8 +111,8 @@ mod tests {
 
     #[test]
     fn try_wait_reports_running_then_exited() {
-        let mut command = Command::new("sh");
-        command.args(["-c", "sleep 0.05"]);
+        let mut command = Command::new("sleep");
+        command.arg("0.2");
         let mut process = SupervisedProcess::spawn(&mut command).unwrap();
 
         assert_eq!(process.state(), ProcessState::Running);
@@ -124,8 +124,8 @@ mod tests {
 
     #[test]
     fn terminate_kills_and_reaps_child() {
-        let mut command = Command::new("sh");
-        command.args(["-c", "sleep 30"]);
+        let mut command = Command::new("sleep");
+        command.arg("30");
         let mut process = SupervisedProcess::spawn(&mut command).unwrap();
         thread::sleep(Duration::from_millis(20));
 
