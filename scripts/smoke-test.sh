@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY="\${1:-target/release/nelroot}"
+BINARY="$1"
+if [[ -z "$BINARY" ]]; then BINARY="target/release/nelroot"; fi
 [[ -x "$BINARY" ]] || { echo "NELRoot binary not found: $BINARY" >&2; exit 1; }
 
 "$BINARY" --version
