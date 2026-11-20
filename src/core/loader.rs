@@ -82,8 +82,7 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
             .checked_add(header.file_size)
             .ok_or("PT_LOAD executable file range overflows")?;
         if executable
-            && info.entry_point >= header.virtual_address
-            && info.entry_point < executable_file_end
+            && (header.virtual_address..executable_file_end).contains(&info.entry_point)
         {
             executable_entry_contains = true;
         }
