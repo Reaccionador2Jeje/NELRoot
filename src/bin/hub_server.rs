@@ -16,6 +16,7 @@ use axum::{
 use nelroot::core::hub::{self, HubCatalog, HubCatalogEntry, HubManifest};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use std::{
     env,
     path::{Path as FsPath, PathBuf},
@@ -94,11 +95,17 @@ fn catalog_path(state: &AppState) -> PathBuf {
 }
 
 fn authorized(headers: &HeaderMap, state: &AppState) -> bool {
-    headers
+    let Some(token) = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|token| token == state.publish_token.as_str())
+    else {
+        return false;
+    };
+
+    let supplied = token.as_bytes();
+    let expected = state.publish_token.as_bytes();
+    supplied.len() == expected.len() && bool::from(supplied.ct_eq(expected))
 }
 
 fn require_auth(headers: &HeaderMap, state: &AppState) -> ApiResult<()> {
@@ -140,6 +147,15 @@ async fn write_atomic(path: &FsPath, bytes: &[u8]) -> ApiResult<()> {
 
 async fn load_catalog_file(state: &AppState) -> ApiResult<HubCatalog> {
     let path = catalog_path(state);
+    let metadata = fs::metadata(&path)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    if !metadata.is_file() || metadata.len() > MAX_MANIFEST_BYTES as u64 {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "stored catalog exceeds the 8 MiB metadata limit",
+        ));
+    }
     let bytes = fs::read(&path)
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
@@ -196,9 +212,18 @@ async fn get_manifest(
         return Err(api_error(StatusCode::BAD_REQUEST, "invalid manifest SHA-256"));
     }
     let path = manifest_path(&state, &digest);
-    let bytes = fs::read(path)
+    let metadata = fs::metadata(&path)
         .await
         .map_err(|_| api_error(StatusCode::NOT_FOUND, "manifest not found"))?;
+    if !metadata.is_file() || metadata.len() > MAX_MANIFEST_BYTES as u64 {
+        return Err(api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "stored manifest exceeds the 8 MiB metadata limit",
+        ));
+    }
+    let bytes = fs::read(path)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     if digest_hex(&bytes) != digest {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -298,6 +323,7 @@ async fn publish_manifest(
 
     let _guard = state.catalog_lock.lock().await;
     let artifact_digest = manifest.image.rootfs.sha256.to_ascii_lowercase();
+    manifest.image.rootfs.sha256 = artifact_digest.clone();
     let artifact = verify_artifact(&state, &artifact_digest).await?;
     if artifact.len() as u64 != manifest.image.rootfs.size_bytes {
         return Err(api_error(
