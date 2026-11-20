@@ -53,6 +53,26 @@ enum ConfigCommands {
 
 #[derive(Debug, Subcommand)]
 enum ImageCommands {
+    /// Download an HTTPS image archive and verify its SHA-256 checksum.
+    Download {
+        /// HTTPS URL of a .tar.gz image archive.
+        url: String,
+        /// Local path where the archive will be saved.
+        output: std::path::PathBuf,
+        /// Expected SHA-256 checksum (64 hexadecimal characters).
+        #[arg(long)]
+        sha256: String,
+    },
+    /// Import and safely extract a .tar.gz Linux root filesystem archive.
+    Import {
+        /// Name to assign to the imported image.
+        name: String,
+        /// Path to a previously downloaded .tar.gz archive.
+        archive: std::path::PathBuf,
+        /// CPU architecture of the root filesystem.
+        #[arg(long, default_value = "aarch64")]
+        architecture: String,
+    },
     /// List images registered in the local image catalog.
     List,
     /// Inspect an image registered in the local catalog.
@@ -139,6 +159,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
+            ImageCommands::Download { url, output, sha256 } => {
+                let digest = images::download_archive(&url, &output, &sha256)?;
+                println!("Image archive downloaded and verified.");
+                println!("File: {}", output.display());
+                println!("SHA-256: {digest}");
+            }
+            ImageCommands::Import { name, archive, architecture } => {
+                let rootfs = images::import_archive(&name, &archive, &architecture)?;
+                println!("Imported image '{name}'.");
+                println!("Root filesystem: {}", rootfs.display());
+                println!("Architecture: {architecture}");
+            }
             ImageCommands::Validate { path } => {
                 let rootfs = images::validate_rootfs(&path)?;
                 println!("Root filesystem validation: passed");
