@@ -287,3 +287,276 @@ mod tests {
     }
 }
 
+
+
+// Docker Hub / OCI Distribution API support. This stage provides remote discovery
+// and platform-aware manifest inspection; layer reconstruction is implemented separately.
+const DOCKER_HUB_API: &str = "https://hub.docker.com/v2";
+const DOCKER_REGISTRY: &str = "https://registry-1.docker.io";
+const DOCKER_AUTH: &str = "https://auth.docker.io/token";
+const OCI_ACCEPT: &str = "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json";
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DockerHubRepository {
+    pub repo_name: String,
+    #[serde(default)]
+    pub short_description: String,
+    #[serde(default)]
+    pub star_count: u64,
+    #[serde(default)]
+    pub pull_count: u64,
+    #[serde(default)]
+    pub is_official: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DockerHubTag {
+    pub name: String,
+    #[serde(default)]
+    pub last_updated: String,
+    #[serde(default)]
+    pub full_size: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DockerHubManifest {
+    pub repository: String,
+    pub reference: String,
+    pub digest: String,
+    pub media_type: String,
+    pub architecture: String,
+    pub os: String,
+    pub layer_count: usize,
+    pub total_layer_bytes: u64,
+}
+
+fn docker_http_client() -> Result<reqwest::blocking::Client, Box<dyn std::error::Error>> {
+    Ok(reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()?)
+}
+
+fn normalize_docker_repository(repository: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let repository = repository.trim().trim_matches('/');
+    if repository.is_empty() {
+        return Err("Docker Hub repository cannot be empty".into());
+    }
+    let normalized = if repository.contains('/') {
+        repository.to_owned()
+    } else {
+        format!("library/{repository}")
+    };
+    let mut parts = normalized.split('/');
+    let namespace = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+    if parts.next().is_some()
+        || [namespace, name].iter().any(|part| {
+            part.is_empty()
+                || part.len() > 255
+                || !part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte))
+        })
+    {
+        return Err("Docker Hub repository must be [namespace/]name using lowercase ASCII letters, digits, '.', '_' or '-'".into());
+    }
+    Ok(normalized)
+}
+
+fn docker_architecture(architecture: &str) -> Result<&'static str, Box<dyn std::error::Error>> {
+    match architecture {
+        "x86_64" | "amd64" => Ok("amd64"),
+        "aarch64" | "arm64" => Ok("arm64"),
+        "arm" | "armv7" | "armv7l" => Ok("arm"),
+        "i686" | "i386" => Ok("386"),
+        "riscv64" => Ok("riscv64"),
+        "ppc64le" => Ok("ppc64le"),
+        "s390x" => Ok("s390x"),
+        _ => Err(format!("unsupported Docker image architecture: {architecture}").into()),
+    }
+}
+
+/// Search public Docker Hub repositories using its web catalog API.
+pub fn docker_hub_search(
+    query: &str,
+    limit: u16,
+) -> Result<Vec<DockerHubRepository>, Box<dyn std::error::Error>> {
+    if query.trim().is_empty() {
+        return Err("Docker Hub search query cannot be empty".into());
+    }
+    let limit = limit.clamp(1, 100);
+    let client = docker_http_client()?;
+    let response = client
+        .get(format!("{DOCKER_HUB_API}/search/repositories/"))
+        .query(&[("query", query.trim()), ("page_size", &limit.to_string())])
+        .send()?
+        .error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("Docker Hub search redirected to a non-HTTPS URL".into());
+    }
+    let payload: serde_json::Value = response.json()?;
+    let results = payload
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("Docker Hub search response has no results array")?;
+    results
+        .iter()
+        .map(|entry| serde_json::from_value(entry.clone()).map_err(Into::into))
+        .collect()
+}
+
+/// List public tags for a Docker Hub repository (up to 100 per request).
+pub fn docker_hub_tags(
+    repository: &str,
+    limit: u16,
+) -> Result<Vec<DockerHubTag>, Box<dyn std::error::Error>> {
+    let repository = normalize_docker_repository(repository)?;
+    let limit = limit.clamp(1, 100);
+    let client = docker_http_client()?;
+    let response = client
+        .get(format!("{DOCKER_HUB_API}/repositories/{repository}/tags/"))
+        .query(&[("page_size", limit.to_string())])
+        .send()?
+        .error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("Docker Hub tags endpoint redirected to a non-HTTPS URL".into());
+    }
+    let payload: serde_json::Value = response.json()?;
+    let results = payload
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("Docker Hub tags response has no results array")?;
+    results
+        .iter()
+        .map(|entry| serde_json::from_value(entry.clone()).map_err(Into::into))
+        .collect()
+}
+
+fn docker_bearer_token(
+    client: &reqwest::blocking::Client,
+    repository: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let response = client
+        .get(DOCKER_AUTH)
+        .query(&[
+            ("service", "registry.docker.io"),
+            ("scope", &format!("repository:{repository}:pull")),
+        ])
+        .send()?
+        .error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("Docker Hub token endpoint redirected to a non-HTTPS URL".into());
+    }
+    let payload: serde_json::Value = response.json()?;
+    payload
+        .get("token")
+        .or_else(|| payload.get("access_token"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|token| !token.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "Docker Hub token response did not contain a bearer token".into())
+}
+
+/// Resolve a Docker Hub tag or digest and inspect its OCI/Docker manifest for one platform.
+pub fn docker_hub_inspect(
+    repository: &str,
+    reference: &str,
+    architecture: &str,
+) -> Result<DockerHubManifest, Box<dyn std::error::Error>> {
+    let repository = normalize_docker_repository(repository)?;
+    if reference.is_empty()
+        || reference.len() > 256
+        || !reference.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || b"._:-".contains(&byte)
+        })
+    {
+        return Err("image reference contains invalid characters".into());
+    }
+    let architecture = docker_architecture(architecture)?;
+    let client = docker_http_client()?;
+    let token = docker_bearer_token(&client, &repository)?;
+    let manifest_url = format!("{DOCKER_REGISTRY}/v2/{repository}/manifests/{reference}");
+    let response = client
+        .get(&manifest_url)
+        .bearer_auth(&token)
+        .header(reqwest::header::ACCEPT, OCI_ACCEPT)
+        .send()?
+        .error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("Docker Registry manifest endpoint redirected to a non-HTTPS URL".into());
+    }
+    let top_digest = response
+        .headers()
+        .get("docker-content-digest")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let mut payload: serde_json::Value = response.json()?;
+    let mut selected_reference = reference.to_owned();
+
+    if let Some(manifests) = payload.get("manifests").and_then(serde_json::Value::as_array) {
+        let selected = manifests
+            .iter()
+            .find(|descriptor| {
+                let platform = &descriptor["platform"];
+                platform["os"].as_str() == Some("linux")
+                    && platform["architecture"].as_str() == Some(architecture)
+                    && platform["variant"].as_str().is_none_or(|variant| {
+                        architecture != "arm" || variant == "v7"
+                    })
+            })
+            .ok_or_else(|| format!("image has no linux/{architecture} manifest"))?;
+        let digest = selected["digest"]
+            .as_str()
+            .ok_or("selected platform descriptor has no digest")?;
+        selected_reference = digest.to_owned();
+        let child = client
+            .get(format!("{DOCKER_REGISTRY}/v2/{repository}/manifests/{digest}"))
+            .bearer_auth(&token)
+            .header(reqwest::header::ACCEPT, OCI_ACCEPT)
+            .send()?
+            .error_for_status()?;
+        if child.url().scheme() != "https" {
+            return Err("Docker Registry platform manifest redirected to non-HTTPS URL".into());
+        }
+        payload = child.json()?;
+    }
+
+    let layers = payload
+        .get("layers")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("Docker manifest does not contain a layers array")?;
+    let total_layer_bytes = layers.iter().try_fold(0_u64, |total, layer| {
+        total.checked_add(layer.get("size").and_then(serde_json::Value::as_u64).unwrap_or(0))
+            .ok_or("Docker image layer size overflow")
+    })?;
+    let media_type = payload
+        .get("mediaType")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown")
+        .to_owned();
+    let digest = if selected_reference == reference {
+        top_digest
+    } else {
+        selected_reference.clone()
+    };
+
+    Ok(DockerHubManifest {
+        repository,
+        reference: selected_reference,
+        digest,
+        media_type,
+        architecture: architecture.to_owned(),
+        os: "linux".to_owned(),
+        layer_count: layers.len(),
+        total_layer_bytes,
+    })
+}
