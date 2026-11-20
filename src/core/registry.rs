@@ -172,17 +172,39 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
     let mut removed = 0;
     let store = images::image_store_dir();
     if store.exists() {
-        for entry in fs::read_dir(store)? {
+        for entry in fs::read_dir(&store)? {
             let entry = entry?;
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with('.')
-                && name.contains(".staging-")
-                && entry.path().is_dir()
-                && is_older_than(&entry.path(), STAGING_MAX_AGE)
+            let path = entry.path();
+            let is_old = is_older_than(&path, STAGING_MAX_AGE);
+
+            if path.is_dir()
+                && is_old
+                && name.starts_with('.')
+                && (name.contains(".staging-")
+                    || name.contains(".update-staging-")
+                    || name.contains(".update-rootfs-"))
             {
-                fs::remove_dir_all(entry.path())?;
+                fs::remove_dir_all(&path)?;
                 removed += 1;
+                continue;
+            }
+
+            // Recover the old managed image if an update was interrupted after backup.
+            if path.is_dir() && is_old && name.starts_with('.') {
+                if let Some((image_name, _)) = name
+                    .strip_prefix('.')
+                    .and_then(|value| value.split_once(".backup-"))
+                {
+                    let destination = store.join(image_name);
+                    if !destination.exists() {
+                        fs::rename(&path, destination)?;
+                    } else {
+                        fs::remove_dir_all(&path)?;
+                    }
+                    removed += 1;
+                }
             }
         }
     }
