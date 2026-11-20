@@ -287,7 +287,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|limit| limit.to_string())
                     .unwrap_or_else(|| "unknown".to_owned()),
             );
-            ui::key("UID/GID maps readable", format!("{}/{}", namespaces.uid_map_readable, namespaces.gid_map_readable));
+            ui::key(
+                "UID/GID maps readable",
+                format!(
+                    "{}/{}",
+                    namespaces.uid_map_readable, namespaces.gid_map_readable
+                ),
+            );
             ui::key(
                 "Namespace interfaces",
                 format!(
