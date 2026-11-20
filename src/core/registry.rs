@@ -183,6 +183,7 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
                 && is_old
                 && name.starts_with('.')
                 && (name.contains(".staging-")
+                    || name.contains(".rootfs-")
                     || name.contains(".update-staging-")
                     || name.contains(".update-rootfs-"))
             {
