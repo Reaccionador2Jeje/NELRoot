@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use nelroot::core::hub::{self, HubCatalog, HubCatalogEntry, HubManifest};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use std::{
