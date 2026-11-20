@@ -56,9 +56,6 @@ install -D -m 0644 %{SOURCE2} %{buildroot}%{_docdir}/nelroot/LICENSE
 %{_docdir}/nelroot/README.md
 %{_docdir}/nelroot/LICENSE
 
-%changelog
-* Thu Nov 19 2026 AtDev <packages@atdev.invalid> - %{version}-1
-- Initial automated package build.
 SPEC
 
 rpmbuild -bb \
