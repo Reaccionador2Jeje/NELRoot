@@ -10,6 +10,10 @@ model and never transfers control to host memory.
 - `31 C0`: XOR EAX, EAX
 - `48 B8+r imm64`: MOV an immediate 64-bit value into one of RAX, RCX, RDX,
   RBX, RSP, RBP, RSI or RDI
+- `48 83 C0/E8 ib`: ADD/SUB sign-extended immediate to RAX
+- `50..57` / `58..5F`: PUSH/POP the eight legacy general-purpose registers
+- `E8` / `E9`: relative CALL/JMP; `C3`: RET
+- `EB`, `74`, `75`: short JMP, JZ and JNZ
 - `0F 05`: SYSCALL, routed through `SyscallDispatcher`
 
 The interpreter models the general-purpose register file, RIP and a basic
@@ -29,8 +33,9 @@ to the existing ABI dispatcher; it does not execute a host syscall.
 ## Important limitations
 
 This is an initial interpreter milestone, not a complete x86_64 CPU or Linux
-runtime. It does not yet support ELF startup execution, general arithmetic,
-branches, stack instructions, flags semantics, interrupts, signals, threads,
+runtime. It does not yet support ELF startup execution, general arithmetic beyond the small ADD/SUB subset, most branches, full
+stack/calling-convention semantics, complete flags semantics, interrupts,
+signals, threads,
 dynamic linking, or the full Linux syscall ABI. Unsupported opcodes stop with
 an explicit error. The interpreter is currently suitable for tiny, controlled
 smoke-test instruction streams only.
