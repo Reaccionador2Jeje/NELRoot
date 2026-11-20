@@ -286,6 +286,19 @@ pub struct X86_64GuestRuntime {
 
 #[cfg(target_os = "linux")]
 impl X86_64GuestRuntime {
+    /// Prepare a static x86_64 PIE from disk and connect its loader output to
+    /// the bounded guest interpreter. The guest image is copied into the
+    /// byte-backed model; no host instruction pointer is changed.
+    #[cfg(target_os = "linux")]
+    pub fn from_static_pie(
+        path: &std::path::Path,
+        stack_config: &super::stack::GuestStackConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let prepared = super::loader::prepare_static_pie(path, stack_config)?;
+        let execution_context = prepared.into_execution_context()?;
+        Self::from_execution_context(&execution_context)
+    }
+
     pub fn from_execution_context(
         prepared: &super::loader::GuestExecutionContext,
     ) -> Result<Self, Box<dyn std::error::Error>> {
