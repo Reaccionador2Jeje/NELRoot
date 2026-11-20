@@ -6,9 +6,8 @@
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
-    middleware::DefaultBodyLimit,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
