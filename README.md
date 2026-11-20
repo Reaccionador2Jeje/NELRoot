@@ -6,7 +6,7 @@ NELRoot is an open-source systems project by **AtDev**. Its long-term goal is to
 
 NELRoot is designed as an independent engine. PRoot and QEMU are not execution backends or runtime requirements.
 
-> **Development status:** Early development. The current release provides the CLI, host diagnostics, configuration and image-catalog scaffolding. Guest Linux execution, ELF loading and CPU emulation are not implemented yet. The ELF64 inspection parser validates metadata but does not load or execute binaries.
+> **Development status:** Early development. NELRoot now has a Linux-only native chroot process launcher for registered, same-architecture root filesystems. It uses the host Linux kernel to load ELF files and handle syscalls; it is not yet an independent ELF loader, syscall emulator, or secure sandbox. See [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) for requirements and security limits.
 
 ## Product direction
 
@@ -97,9 +97,26 @@ nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
+
+# Native Linux execution (Linux host + effective root + CAP_SYS_CHROOT)
+nelroot run ubuntu -- /bin/uname -a
+nelroot shell ubuntu
+# Optional, unsafe: retain host root credentials inside chroot
+nelroot shell ubuntu --keep-root
 ```
 
 Run `nelroot <command> --help` for command-specific help.
+
+### Native Linux runtime
+
+On Linux hosts with effective root and `CAP_SYS_CHROOT`, NELRoot can launch a native same-architecture program from a registered root filesystem:
+
+```bash
+nelroot run ubuntu -- /bin/uname -a
+nelroot shell ubuntu
+```
+
+The default child drops to UID/GID 65534 and enables `no_new_privs`. The optional `--keep-root` flag is unsafe and must only be used with trusted images. This initial backend uses the host kernel's ELF loader and syscall implementation. It does not provide mount/PID/user/network namespaces or a security sandbox, and it is unavailable in ordinary unprivileged PRoot sessions and typical Termux installations. Read [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md) before using it.
 
 ### Remote image registry
 
@@ -112,7 +129,7 @@ nelroot image pull ubuntu --registry https://example.org/nelroot/index.json --ar
 
 The registry client verifies the archive SHA-256 before importing it.
 
-For application integrations such as NEXORA, use `nelroot engine status --json`. It returns schema version `1`, host identity, component availability and an explicit `guest_execution.available` boolean. NEXORA can parse this JSON without relying on human-readable terminal output; the current response correctly reports guest execution as unavailable. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
+For application integrations such as NEXORA, use `nelroot engine status --json`. It returns schema version `1`, host identity, component availability and an explicit `guest_execution.available` boolean. NEXORA can parse this JSON without relying on human-readable terminal output; the response reports whether the native Linux chroot backend can start on this host, and identifies its backend and same-architecture limitation. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
 
 ### Local image catalog
 
