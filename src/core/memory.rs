@@ -115,7 +115,7 @@ impl MappedElf {
         Ok((mapped, info))
     }
 
-    fn map_bytes(bytes: &[u8], info: &ElfInfo) -> Result<Self, Box<dyn std::error::Error>> {
+    pub(crate) fn map_bytes(bytes: &[u8], info: &ElfInfo) -> Result<Self, Box<dyn std::error::Error>> {
         if info.file_type != ET_DYN {
             return Err("the first memory mapper supports static ET_DYN images only".into());
         }
