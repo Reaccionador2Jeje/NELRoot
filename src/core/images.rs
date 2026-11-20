@@ -158,7 +158,7 @@ pub fn download_archive(
     if destination.exists() {
         return Err(format!("destination already exists: {}", destination.display()).into());
     }
-    if let Some(parent) = destination.parent() {
+    if let Some(parent) = destination.parent().filter(|path| !path.as_os_str().is_empty()) {
         fs::create_dir_all(parent)?;
     }
 
