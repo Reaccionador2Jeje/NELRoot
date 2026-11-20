@@ -107,4 +107,4 @@ These interfaces should return typed errors with stable codes. CLI text is for h
 
 ## First implementation milestone
 
-The next runtime code milestone is a standalone ELF64 inspection/parser module that reads and validates metadata without executing guest code. This creates a bounded, testable foundation before attempting a loader or syscall execution.
+The standalone ELF64 inspection parser is now implemented in `src/core/elf.rs` and exposed as `nelroot elf inspect <file>`. It validates the ELF64 little-endian header, program-header table bounds, PT_LOAD file ranges, memory sizes and alignment. It does not execute files. The next milestone is extended ELF metadata inspection (including PT_INTERP) followed by a separate, testable loader design.
