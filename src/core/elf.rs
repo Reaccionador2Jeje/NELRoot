@@ -240,6 +240,37 @@ mod tests {
         assert!(inspect_elf_bytes(&bytes).is_err());
     }
 
+    fn elf_with_interpreter(path: &[u8]) -> Vec<u8> {
+        let mut bytes = minimal_elf64();
+        let second_header = ELF_HEADER_SIZE + ELF64_PROGRAM_HEADER_SIZE;
+        let interpreter_offset = second_header + ELF64_PROGRAM_HEADER_SIZE;
+        bytes.resize(interpreter_offset + path.len() + 1, 0);
+        bytes[56..58].copy_from_slice(&2_u16.to_le_bytes());
+
+        bytes[second_header..second_header + 4].copy_from_slice(&3_u32.to_le_bytes());
+        bytes[second_header + 8..second_header + 16]
+            .copy_from_slice(&(interpreter_offset as u64).to_le_bytes());
+        bytes[second_header + 32..second_header + 40]
+            .copy_from_slice(&((path.len() + 1) as u64).to_le_bytes());
+        bytes[second_header + 40..second_header + 48]
+            .copy_from_slice(&((path.len() + 1) as u64).to_le_bytes());
+        bytes[interpreter_offset..interpreter_offset + path.len()].copy_from_slice(path);
+        bytes
+    }
+
+    #[test]
+    fn reads_absolute_pt_interp_path() {
+        let bytes = elf_with_interpreter(b"/lib/ld-linux-aarch64.so.1");
+        let info = inspect_elf_bytes(&bytes).unwrap();
+        assert_eq!(info.interpreter.as_deref(), Some("/lib/ld-linux-aarch64.so.1"));
+    }
+
+    #[test]
+    fn rejects_relative_pt_interp_path() {
+        let bytes = elf_with_interpreter(b"ld-linux.so");
+        assert!(inspect_elf_bytes(&bytes).is_err());
+    }
+
     #[test]
     fn rejects_load_segment_beyond_file() {
         let mut bytes = minimal_elf64();
