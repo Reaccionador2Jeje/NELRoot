@@ -123,7 +123,7 @@ nelroot image import ubuntu ./rootfs.tar.gz --architecture aarch64
 nelroot image inspect ubuntu
 ```
 
-Import currently accepts gzip-compressed tar archives (`.tar.gz` / `.tgz`). Extraction is performed into a staging directory and rejects archive paths that would escape that directory. Imported files are stored under `~/.nelroot/images/<name>`. This is image management only: imported root filesystems are not yet booted or executed by NELRoot.
+Import currently accepts gzip-compressed tar archives (`.tar.gz` / `.tgz`). Extraction is performed into a unique staging directory and rejects archive paths that would escape that directory. Imported files are stored under `~/.nelroot/images/<name>`. This is image management only: imported root filesystems are not yet booted or executed by NELRoot.
 
 
 ## Build from source
@@ -139,7 +139,7 @@ cargo run -- info
 
 ## Release automation
 
-Pushing a version tag such as `v0.1.0` triggers GitHub Actions to build the platform packages, generate SHA-256 checksum files, and publish a GitHub Release with the archives and setup scripts.
+Pushing a version tag such as `v0.1.1` triggers GitHub Actions to build platform archives, Linux Debian packages, generate SHA-256 checksums, and publish a GitHub Release with the available assets and setup scripts. A manual workflow run can also publish a version tag; see the Actions workflow inputs.
 
 ```bash
 git tag v0.1.0
