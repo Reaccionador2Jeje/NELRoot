@@ -26,7 +26,9 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Publish local rootfs archives and schema-v1 manifests to the first-party Hub with bearer authentication and pre-upload size/SHA-256 verification.
 - [ ] OCI layer download, digest verification, whiteout handling and transactional rootfs reconstruction for optional OCI sources.
 - [ ] Support additional archive formats and distribution-specific image manifests.
+- [x] Add a verified official-rootfs bootstrap workflow for Alpine minirootfs and Ubuntu Base (download, upstream SHA-256 validation, archive checks and Hub publication).
 - [ ] Publish and operate official AtDev images for Ubuntu, Debian and Alpine.
+- [ ] Add reproducible, pinned toolchain rootfs variants for Python, Node.js, Rust, Go, Java and native build tools.
 - [x] First native Linux process-launch backend using chroot(2), same-architecture ELF execution and child exit-code propagation.
 - [x] Read-only Linux user-namespace policy and procfs namespace-interface diagnostics.
 - [x] Disposable-child CLONE_NEWUSER creation probe that leaves the parent process unchanged (does not configure UID/GID maps or create a guest runtime).
