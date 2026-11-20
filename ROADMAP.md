@@ -133,4 +133,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. The current CLI and image catalog do not yet boot a Linux guest, provide a full Linux shell, run Linux services, or package arbitrary projects. Those capabilities depend on the independent runtime, loader, syscall and networking work above.
+NELRoot is still in early development. It can launch same-architecture programs and an interactive shell from a registered rootfs on privileged Linux hosts through the initial chroot backend. It does not boot a separate guest kernel, provide namespace-based isolation, run reliably on ordinary Android/Termux or unprivileged PRoot hosts, or implement its own ELF loader and syscall ABI. Linux services, full process supervision, networking and project packaging still require the remaining runtime work above.
