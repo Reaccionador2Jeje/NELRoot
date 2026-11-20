@@ -58,6 +58,42 @@ impl GuestMemory {
         Ok(Self { regions, total_bytes })
     }
 
+    /// Build byte-backed guest memory from a prepared ELF execution context.
+    ///
+    /// ELF pages are copied from the loader mapping (including execute-only
+    /// pages and zero-filled BSS); the initial stack image is copied into its
+    /// reserved guest stack range. This remains a data model, not execution.
+    #[cfg(target_os = "linux")]
+    pub fn from_execution_context(
+        context: &super::loader::GuestExecutionContext,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut memory = Self::from_address_space(&context.address_space)?;
+
+        for region in context.address_space.regions()
+            .iter()
+            .filter(|region| region.kind == GuestRegionKind::ElfImage)
+        {
+            let length = usize::try_from(region.len())?;
+            let bytes = context.mapped.copy_virtual_bytes(region.start, length)?;
+            memory.initialize(region.start, &bytes)?;
+        }
+
+        memory.initialize(context.stack.stack_pointer(), context.stack.bytes())?;
+        Ok(memory)
+    }
+
+    /// Populate a reserved region during loader setup, before guest execution.
+    fn initialize(&mut self, address: u64, bytes: &[u8]) -> Result<(), &'static str> {
+        if bytes.is_empty() {
+            return Err("guest initialization data must not be empty");
+        }
+        let region = self.region_for_mut(address, bytes.len())?;
+        let offset = usize::try_from(address - region.metadata.start)
+            .map_err(|_| "guest initialization offset does not fit host address space")?;
+        region.bytes[offset..offset + bytes.len()].copy_from_slice(bytes);
+        Ok(())
+    }
+
     /// Total host bytes allocated for guest regions.
     pub fn allocated_bytes(&self) -> usize {
         self.total_bytes
