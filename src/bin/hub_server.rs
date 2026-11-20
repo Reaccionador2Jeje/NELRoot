@@ -398,7 +398,8 @@ fn resolve_bind_address(
     configured_bind: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(port) = platform_port {
-        let port = port.parse::<u16>()
+        let port = port
+            .parse::<u16>()
             .map_err(|_| format!("PORT must be a valid TCP port, received '{port}'"))?;
         if port == 0 {
             return Err("PORT must be greater than zero".into());
@@ -476,7 +477,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     Ok(())
 }
-
 
 #[cfg(test)]
 mod bind_address_tests {
