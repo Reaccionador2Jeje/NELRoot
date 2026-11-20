@@ -199,10 +199,13 @@ impl MappedElf {
         }
 
         let mut entry_is_executable = false;
-        for (header, (start, end, _, _)) in load_segments.iter().zip(&ranges) {
+        for (header, (start, _, _, _)) in load_segments.iter().zip(&ranges) {
+            let file_end = start
+                .checked_add(header.file_size)
+                .ok_or("executable PT_LOAD file range overflows")?;
             if header.flags & PF_X != 0
                 && info.entry_point >= *start
-                && info.entry_point < *end
+                && info.entry_point < file_end
             {
                 entry_is_executable = true;
             }
@@ -389,7 +392,7 @@ mod tests {
         };
         bytes[18..20].copy_from_slice(&machine.to_le_bytes());
         bytes[20..24].copy_from_slice(&1_u32.to_le_bytes());
-        bytes[24..32].copy_from_slice(&0x100_u64.to_le_bytes());
+        bytes[24..32].copy_from_slice(&0x70_u64.to_le_bytes());
         bytes[32..40].copy_from_slice(&64_u64.to_le_bytes());
         bytes[52..54].copy_from_slice(&64_u16.to_le_bytes());
         bytes[54..56].copy_from_slice(&56_u16.to_le_bytes());
