@@ -17,7 +17,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Adaptive terminal UI with color-safe banners, capability indicators, diagnostics and errors.
 - [ ] Support additional archive formats and distribution-specific image manifests.
 - [ ] Publish and operate an official AtDev image registry with maintained Ubuntu, Debian and Alpine manifests.
-- [ ] Independent NELRoot runtime and process lifecycle.
+- [x] First native Linux process-launch backend using chroot(2), same-architecture ELF execution and child exit-code propagation.
+- [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [ ] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
 - [x] Non-executing ELF load-plan foundation with page-range, entry-point and W^X validation.
@@ -33,8 +34,9 @@ NELRoot should make it straightforward for a developer to use a Linux environmen
 
 Target workflows:
 
-- Open an interactive Linux shell.
-- Run common Linux development commands and toolchains.
+- [x] Open an interactive shell in a registered same-architecture rootfs on Linux hosts with chroot privileges (initial chroot backend; not a sandbox).
+- [x] Run explicit same-architecture Linux commands through the initial native chroot backend (Linux host + effective root/CAP_SYS_CHROOT required).
+- [ ] Run common Linux development commands and toolchains with a fully independent ABI and isolation layer.
 - Clone, build, test and compile projects.
 - Run local web servers, APIs, databases and development services where supported.
 - Expose and manage development ports safely.
@@ -43,7 +45,7 @@ Target workflows:
 - Create, start, stop, inspect, export and remove named environments through simple commands.
 - Provide clear errors, sensible defaults, progress feedback and guided setup.
 
-Proposed future command experience (illustrative, not implemented yet):
+Implemented initial commands: `nelroot run <image> -- <absolute-program> [args...]` and `nelroot shell <image>`. These use the native Linux chroot backend and are subject to [docs/NATIVE_RUNTIME.md](docs/NATIVE_RUNTIME.md). The following lifecycle commands remain proposed:
 
 ```bash
 nelroot create ubuntu
@@ -114,7 +116,7 @@ Official repository inclusion is a separate contribution and review process. Unt
 
 ## 6. Runtime architecture preparation
 
-The independent runtime design is documented in [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md). Implemented groundwork now includes a bounded ELF64 metadata inspector and a non-executing load planner for x86_64/AArch64, with page-range, entry-point and W^X checks. Actual memory mapping, dynamic linking and guest execution remain future milestones.
+The independent runtime design is documented in [docs/RUNTIME_ARCHITECTURE.md](docs/RUNTIME_ARCHITECTURE.md). A first real process execution backend now uses Linux `chroot(2)` for same-architecture rootfs programs. The host kernel performs ELF loading and syscall handling. NELRoot’s own ELF memory loader, dynamic linker, syscall ABI, virtual filesystem and namespace isolation remain future milestones.
 
 ## 7. NEXORA runtime interface preparation
 
