@@ -14,7 +14,10 @@ model and never transfers control to host memory.
 
 The interpreter models the general-purpose register file, RIP and a basic
 instruction counter. The run loop accepts a mandatory instruction budget and
-returns when the guest process exits or the budget is exhausted.
+returns when the guest process exits or the budget is exhausted. On Linux,
+`X86_64GuestRuntime::from_execution_context` wires a prepared loader context,
+byte-backed memory, initial RIP/RSP and syscall dispatcher into one runtime
+facade with `step()` and `run(max_steps)` methods.
 
 ## Memory and syscall boundary
 
