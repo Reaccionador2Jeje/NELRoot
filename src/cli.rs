@@ -81,7 +81,7 @@ enum Commands {
         /// Keep host root credentials inside the chroot (unsafe; only for trusted images).
         #[arg(long)]
         keep_root: bool,
-    }
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -530,7 +530,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Base address", format!("{:#018x}", mapped.base_address()));
                 ui::key("Load bias", format!("{:#018x}", mapped.load_bias()));
                 ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
-                ui::key("Lowest virtual page", format!("{:#018x}", mapped.min_virtual_address()));
+                ui::key(
+                    "Lowest virtual page",
+                    format!("{:#018x}", mapped.min_virtual_address()),
+                );
                 ui::muted("The mapping is released automatically when this command exits.");
             }
         },
