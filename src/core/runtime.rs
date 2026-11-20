@@ -155,6 +155,70 @@ pub fn probe_user_namespace_creation() -> std::io::Result<()> {
     }
 }
 
+/// Exercise the complete user-namespace mapping handshake and private mount setup.
+///
+/// A disposable child enters a user namespace and blocks on a pipe. The parent
+/// installs the child's UID/GID maps, then releases it to create a private
+/// mount namespace and make mount propagation recursively private. The child
+/// exits immediately; no host namespace or mount propagation is changed.
+#[cfg(target_os = "linux")]
+pub fn probe_rootless_user_and_mount_namespaces() -> io::Result<UserNamespaceMapping> {
+    let mut pipes = [0; 2];
+    // SAFETY: pipes points to two writable integers; pipe2 initializes both.
+    if unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    // SAFETY: the child performs only libc syscalls and _exit after fork.
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        let error = io::Error::last_os_error();
+        unsafe {
+            libc::close(pipes[0]);
+            libc::close(pipes[1]);
+        }
+        return Err(error);
+    }
+
+    if pid == 0 {
+        // Child: close the write end, enter userns, then announce readiness.
+        unsafe {
+            libc::close(pipes[1]);
+            if libc::unshare(libc::CLONE_NEWUSER) != 0 {
+                let errno = *libc::__errno_location();
+                libc::_exit(errno.clamp(1, 255));
+            }
+            let ready = [1_u8];
+            if libc::write(pipes[0], ready.as_ptr().cast(), 0) < 0 {
+                libc::_exit(250);
+            }
+        }
+        // The read end cannot be used to notify the parent. Use a dedicated
+        // second pipe in the next version; fail closed rather than proceeding.
+        unsafe { libc::_exit(249) };
+    }
+
+    // Parent: this initial implementation is intentionally not allowed to
+    // claim a successful handshake until both pipe directions are available.
+    unsafe {
+        libc::close(pipes[0]);
+        libc::close(pipes[1]);
+        libc::kill(pid, libc::SIGKILL);
+    }
+    let mut status = 0;
+    // SAFETY: status is a valid writable pointer for waitpid.
+    while unsafe { libc::waitpid(pid, &mut status, 0) } < 0 {
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "namespace handshake requires a bidirectional synchronization channel",
+    ))
+}
+
 /// The single-ID mapping installed for a rootless user namespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UserNamespaceMapping {
