@@ -4,10 +4,12 @@
 //! catalog. Network transport and publishing are intentionally separate stages.
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fs, io::Read, path::Path};
+use std::{collections::HashSet, fs, io::Read, path::{Path, PathBuf}};
+use sha2::{Digest, Sha256};
 
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CATALOG_ENTRIES: usize = 100_000;
+const MAX_ARTIFACT_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HubManifest {
@@ -141,8 +143,8 @@ pub fn validate_manifest(manifest: &HubManifest) -> Result<(), String> {
     if image.rootfs.format != "tar.gz" {
         return Err("unsupported rootfs format; the first Hub schema supports tar.gz".into());
     }
-    if image.rootfs.size_bytes == 0 {
-        return Err("rootfs size_bytes must be greater than zero".into());
+    if image.rootfs.size_bytes == 0 || image.rootfs.size_bytes > MAX_ARTIFACT_BYTES {
+        return Err("rootfs size_bytes must be between 1 byte and 512 MiB".into());
     }
     if !valid_sha256(&image.rootfs.sha256) {
         return Err("rootfs sha256 must contain exactly 64 hexadecimal characters".into());
@@ -303,6 +305,138 @@ pub fn fetch_remote_catalog(
         )
     })?;
     Ok(catalog)
+}
+
+/// Fetch a content-addressed manifest and verify its catalog-published digest.
+pub fn fetch_remote_manifest(
+    manifest_url: &str,
+    expected_sha256: &str,
+) -> Result<HubManifest, Box<dyn std::error::Error>> {
+    if !valid_https_url(manifest_url) || !valid_sha256(expected_sha256) {
+        return Err("manifest URL or expected SHA-256 is invalid".into());
+    }
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent(concat!("NELRoot/", env!("CARGO_PKG_VERSION")))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()?;
+    let mut response = client.get(manifest_url).send()?.error_for_status()?;
+    if response.url().scheme() != "https" {
+        return Err("manifest request redirected to a non-HTTPS URL".into());
+    }
+    if response.content_length().is_some_and(|length| length > MAX_METADATA_BYTES) {
+        return Err("remote manifest exceeds the 8 MiB metadata limit".into());
+    }
+    let mut bytes = Vec::new();
+    response.take(MAX_METADATA_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_METADATA_BYTES {
+        return Err("remote manifest exceeds the 8 MiB metadata limit".into());
+    }
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    if !digest.eq_ignore_ascii_case(expected_sha256) {
+        return Err(format!("manifest SHA-256 mismatch: expected {expected_sha256}, received {digest}").into());
+    }
+    let manifest: HubManifest = serde_json::from_slice(&bytes)?;
+    validate_manifest(&manifest).map_err(|error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("invalid remote NELRoot Hub manifest: {error}"))
+    })?;
+    Ok(manifest)
+}
+
+fn remote_image(
+    hub_url: &str,
+    image_id: &str,
+    architecture: &str,
+) -> Result<HubManifest, Box<dyn std::error::Error>> {
+    let catalog = fetch_remote_catalog(hub_url)?;
+    let entry = catalog.images.iter()
+        .find(|entry| entry.id == image_id && entry.architecture == architecture)
+        .ok_or_else(|| format!("image '{image_id}' for architecture '{architecture}' was not found in the NELRoot Hub"))?;
+    let manifest = fetch_remote_manifest(&entry.manifest_url, &entry.manifest_sha256)?;
+    if manifest.image.id != entry.id
+        || manifest.image.architecture != entry.architecture
+        || manifest.image.name != entry.name
+        || manifest.image.version != entry.version
+        || manifest.image.distribution != entry.distribution
+    {
+        return Err("remote manifest metadata does not match its catalog entry".into());
+    }
+    Ok(manifest)
+}
+
+fn local_image_name(manifest: &HubManifest) -> String {
+    let normalized = manifest.image.id.chars()
+        .map(|character| if character.is_ascii_alphanumeric() { character.to_ascii_lowercase() } else { '-' })
+        .collect::<String>();
+    let suffix = format!("-{}", manifest.image.architecture);
+    let max_prefix = 64usize.saturating_sub(suffix.len());
+    let prefix = normalized.trim_matches('-');
+    format!("{}{}", prefix.chars().take(max_prefix).collect::<String>(), suffix)
+}
+
+fn download_remote_rootfs(
+    manifest: &HubManifest,
+    prefix: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let downloads = crate::core::config::cache_dir().join("downloads");
+    fs::create_dir_all(&downloads)?;
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos();
+    let archive = downloads.join(format!("{prefix}-{}-{nonce}.tar.gz", std::process::id()));
+    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+        crate::core::images::download_archive(
+            &manifest.image.rootfs.download_url,
+            &archive,
+            &manifest.image.rootfs.sha256,
+        )?;
+        let actual_size = fs::metadata(&archive)?.len();
+        if actual_size != manifest.image.rootfs.size_bytes {
+            return Err(format!(
+                "rootfs size mismatch: expected {} bytes, received {actual_size}",
+                manifest.image.rootfs.size_bytes
+            ).into());
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_file(&archive);
+        return Err(error);
+    }
+    Ok(archive)
+}
+
+/// Download a verified first-party Hub rootfs archive and import it into local storage.
+pub fn pull_remote_image(
+    hub_url: &str,
+    image_id: &str,
+    architecture: &str,
+    local_name: Option<&str>,
+) -> Result<(String, PathBuf), Box<dyn std::error::Error>> {
+    let manifest = remote_image(hub_url, image_id, architecture)?;
+    let name = local_name.map(str::to_owned).unwrap_or_else(|| local_image_name(&manifest));
+    let archive = download_remote_rootfs(&manifest, "hub-pull")?;
+    let result = crate::core::images::import_archive(&name, &archive, architecture);
+    let _ = fs::remove_file(&archive);
+    result.map(|path| (name, path))
+}
+
+/// Update a NELRoot-managed local image from a verified first-party Hub archive.
+pub fn update_remote_image(
+    hub_url: &str,
+    image_id: &str,
+    architecture: &str,
+    local_name: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let manifest = remote_image(hub_url, image_id, architecture)?;
+    let archive = download_remote_rootfs(&manifest, "hub-update")?;
+    let result = crate::core::images::update_image_from_archive(local_name, &archive, architecture);
+    let _ = fs::remove_file(&archive);
+    result
 }
 
 pub fn search_catalog(
