@@ -269,6 +269,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             ui::heading("NELRoot runtime");
+            let namespaces = runtime::rootless_namespace_info();
+            ui::state(
+                "Rootless user namespaces",
+                namespaces.potentially_available(),
+                "kernel-policy probe only; runtime backend not implemented yet",
+            );
+            ui::key(
+                "User namespace sysctl",
+                namespaces.unprivileged_userns_clone
+                    .map(|enabled| if enabled { "enabled" } else { "disabled" })
+                    .unwrap_or("not exposed"),
+            );
+            ui::key(
+                "Maximum user namespaces",
+                namespaces.max_user_namespaces
+                    .map(|limit| limit.to_string())
+                    .unwrap_or_else(|| "unknown".to_owned()),
+            );
             ui::state("ELF64 inspector", true, "metadata only");
             ui::state("ELF load planner", true, "mapping plan only");
             ui::state(
@@ -641,6 +659,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     "not_implemented"
                                 }
                             },
+                            {
+                                "name": "rootless_user_namespace_probe",
+                                "status": if runtime::rootless_namespace_info().potentially_available() {
+                                    "kernel_policy_appears_available_backend_not_implemented"
+                                } else {
+                                    "unavailable_or_unknown"
+                                }
+                            },
+                            {"name": "rootless_process_runtime", "status": "not_implemented"},
                             {"name": "guest_memory_backing", "status": "model_available_not_execution"},
                             {"name": "guest_syscall_abi", "status": "model_available_connected_to_guest_interpreter"},
                             {
