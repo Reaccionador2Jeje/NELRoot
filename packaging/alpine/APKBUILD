@@ -1,0 +1,16 @@
+# Maintainer: AtDev
+pkgname=nelroot
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="Independent Linux execution and virtualization engine"
+url="https://github.com/Reaccionador2Jeje/NELRoot"
+arch="all"
+license="MIT"
+options="!check"
+source=""
+
+package() {
+  install -Dm755 "$srcdir/nelroot" "$pkgdir/usr/bin/nelroot"
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/nelroot/README.md"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/nelroot/LICENSE"
+}
