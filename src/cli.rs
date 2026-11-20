@@ -592,9 +592,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     "not_implemented"
                                 }
                             },
-                            {
                             {"name": "guest_memory_backing", "status": "model_available_not_execution"},
                             {"name": "guest_syscall_abi", "status": "model_available_not_connected"},
+                            {
                                 "name": "elf_relative_relocator",
                                 "status": if cfg!(all(
                                     target_os = "linux",
