@@ -96,6 +96,9 @@ nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
 nelroot engine status
 nelroot engine status --json
+
+# Inspect ELF64 metadata without executing the file
+nelroot elf inspect ./program
 nelroot engine status --json
 ```
 
@@ -127,6 +130,16 @@ nelroot image remove ubuntu-rootfs
 ```
 
 The directory must resemble a Linux root filesystem (for example, it contains `etc`, `usr`, `bin` or `sbin`). Removing an entry only unregisters it; it never deletes the root filesystem.
+
+### ELF64 inspection
+
+NELRoot includes a bounded ELF64 little-endian metadata inspector. It validates header and program-header bounds, load-segment ranges and alignment, and reports the dynamic interpreter (`PT_INTERP`) when present. It never executes the inspected file:
+
+```bash
+nelroot elf inspect ./program
+```
+
+This is parser groundwork for a future loader, not guest execution or dynamic-linking support.
 
 ### Download and import an image
 
