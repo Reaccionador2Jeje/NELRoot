@@ -156,7 +156,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let catalog = images::load_catalog()?;
                 if catalog.images.is_empty() {
                     println!("No images registered.");
-                    println!("Register an existing root filesystem with: nelroot image register <name> <path>");
+                    println!(
+                        "Register an existing root filesystem with: nelroot image register <name> <path>"
+                    );
                 } else {
                     for image in catalog.images {
                         println!("{}\t{}\t{}", image.name, image.architecture, image.format);
