@@ -776,6 +776,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             .map(|error| error.to_string())
                             .unwrap_or_else(|| "disposable child probe succeeded".to_owned()),
                     );
+                    let namespace_stack = runtime::probe_rootless_user_mount_and_pid_namespaces();
+                    ui::state(
+                        "Rootless user/mount/PID namespaces",
+                        namespace_stack.is_ok(),
+                        &namespace_stack
+                            .as_ref()
+                            .err()
+                            .map(|error| error.to_string())
+                            .unwrap_or_else(|| "mapping, private mounts and PID 1 probe succeeded".to_owned()),
+                    );
                     ui::state("Core", true, "initialized");
                     ui::state("Host detection", true, "platform information");
                     ui::state("Configuration", true, "user settings");
