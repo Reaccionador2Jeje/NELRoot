@@ -43,6 +43,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [ ] Resource limits, isolation profiles, permissions and clear security boundaries.
 - [ ] Reliable cleanup, diagnostics, logs and recovery after interrupted sessions.
 
+Image-source behavior and the Docker Hub/OCI support boundary are documented in docs/IMAGE_REGISTRIES.md.
+
 ## 2. Developer environment: a friendly alternative
 
 NELRoot should make it straightforward for a developer to use a Linux environment without needing to learn or operate PRoot, QEMU, or Docker.
