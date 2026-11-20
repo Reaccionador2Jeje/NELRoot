@@ -80,7 +80,7 @@ impl GuestStack {
 
 /// Build argc, argv + NULL, envp + NULL, auxv + AT_NULL, then strings and AT_RANDOM.
 pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<dyn Error>> {
-    if config.stack_top == 0 || config.stack_top % STACK_ALIGNMENT != 0 {
+    if config.stack_top == 0 || !config.stack_top.is_multiple_of(STACK_ALIGNMENT) {
         return Err("guest stack top must be non-zero and 16-byte aligned".into());
     }
     if config.argv.is_empty() {
@@ -144,7 +144,7 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         .stack_top
         .checked_sub(u64::try_from(total_size)?)
         .ok_or("guest stack top is too low for the requested contents")?;
-    if stack_pointer % STACK_ALIGNMENT != 0 {
+    if !stack_pointer.is_multiple_of(STACK_ALIGNMENT) {
         return Err("internal guest stack alignment calculation failed".into());
     }
 
