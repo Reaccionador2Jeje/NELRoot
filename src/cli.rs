@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::core::{config, elf, host, images, logging, registry};
+use crate::core::{config, elf, host, images, logging, registry, runtime};
 use crate::ui;
 
 #[derive(Debug, Parser)]
@@ -53,7 +53,35 @@ enum Commands {
     Engine {
         #[command(subcommand)]
         command: EngineCommands,
+    },,
+    /// Execute a host-native program inside a registered image using Linux chroot.
+    Run {
+        /// Registered image name.
+        image: String,
+        /// Guest working directory.
+        #[arg(long, default_value = "/")]
+        cwd: std::path::PathBuf,
+        /// Keep host root credentials inside the chroot (unsafe; only for trusted images).
+        #[arg(long)]
+        keep_root: bool,
+        /// Absolute guest executable and its arguments, after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
     },
+    /// Open an interactive shell inside a registered image.
+    Shell {
+        /// Registered image name.
+        image: String,
+        /// Guest shell executable.
+        #[arg(long, default_value = "/bin/sh")]
+        shell: String,
+        /// Guest working directory.
+        #[arg(long, default_value = "/")]
+        cwd: std::path::PathBuf,
+        /// Keep host root credentials inside the chroot (unsafe; only for trusted images).
+        #[arg(long)]
+        keep_root: bool,
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -215,6 +243,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::heading("NELRoot runtime");
             ui::state("ELF64 inspector", true, "metadata only");
             ui::state("ELF load planner", true, "mapping plan only");
+            ui::state("Native chroot runner", runtime::supported(), "host-kernel execution; Linux only");
+            ui::state("Effective root", runtime::has_required_privileges(), "required for chroot(2)");
             ui::state("Native executor", false, "not implemented");
             ui::state("ELF memory loader", false, "not implemented");
             ui::state("Syscall layer", false, "not implemented");
@@ -484,14 +514,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "event_logging", "status": "available"},
                             {"name": "elf64_inspector", "status": "available"},
                             {"name": "elf_load_planner", "status": "available"},
+                            {"name": "native_chroot_runtime", "status": if runtime::supported() { "available" } else { "not_implemented" }},
                             {"name": "native_executor", "status": "not_implemented"},
                             {"name": "elf_loader", "status": "not_implemented"},
                             {"name": "syscall_layer", "status": "not_implemented"},
                             {"name": "cpu_emulator", "status": "not_implemented"}
                         ],
                         "guest_execution": {
-                            "available": false,
-                            "reason": "The independent guest runtime is not implemented yet."
+                            "available": runtime::supported() && runtime::has_required_privileges(),
+                            "backend": "linux_chroot_host_kernel",
+                            "same_architecture_only": true,
+                            "reason": if !runtime::supported() {
+                                "The native chroot backend requires a Linux host."
+                            } else if !runtime::has_required_privileges() {
+                                "Effective root and CAP_SYS_CHROOT are required; ordinary unprivileged PRoot sessions cannot start it."
+                            } else {
+                                "Native chroot process launch is implemented; this is not a syscall emulator or security sandbox."
+                            }
                         }
                     });
                     println!("{}", serde_json::to_string_pretty(&status)?);
@@ -516,6 +555,36 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         },
+        Commands::Run { image, cwd, keep_root, command } => {
+            let program = &command[0];
+            let arguments = &command[1..];
+            ui::banner("Native Linux runtime");
+            ui::key("Image", &image);
+            ui::key("Executable", program);
+            if keep_root {
+                ui::warn("Running with host root credentials; use only a trusted image.");
+            } else {
+                ui::good("Child credentials will be dropped to uid/gid 65534.");
+            }
+            let status = runtime::run_image(&image, program, arguments, &cwd, keep_root)?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(128));
+            }
+        }
+        Commands::Shell { image, shell, cwd, keep_root } => {
+            ui::banner("Interactive Linux shell");
+            ui::key("Image", &image);
+            ui::key("Shell", &shell);
+            if keep_root {
+                ui::warn("Running with host root credentials; use only a trusted image.");
+            } else {
+                ui::good("Child credentials will be dropped to uid/gid 65534.");
+            }
+            let status = runtime::run_image(&image, &shell, &[], &cwd, keep_root)?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(128));
+            }
+        }
     }
 
     Ok(())
