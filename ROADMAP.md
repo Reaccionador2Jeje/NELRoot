@@ -147,4 +147,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. It can launch same-architecture programs and an interactive shell from a registered rootfs on privileged Linux hosts through the initial chroot backend. It does not boot a separate guest kernel, provide namespace-based isolation, run reliably on ordinary Android/Termux or unprivileged PRoot hosts, or implement its own ELF loader and syscall ABI. Linux services, full process supervision, networking and project packaging still require the remaining runtime work above.
+NELRoot is still in early development. It has an initial rootless user/mount-namespace launcher for same-architecture programs, plus a separate privileged chroot backend. The rootless launcher is not yet a complete container: it lacks PID namespace supervision, network isolation, /proc and /dev mounts, resource limits and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility and full process lifecycle support remain unverified.
