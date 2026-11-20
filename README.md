@@ -157,7 +157,7 @@ NELRoot includes a bounded ELF64 little-endian metadata inspector. It validates 
 nelroot elf inspect ./program
 ```
 
-The non-executing `nelroot elf plan <file>` command validates supported ELF load segments, computes page-aligned virtual ranges and checks entry-point placement under a default W^X policy. It is a planning report only: it does not map memory or execute code. This is loader groundwork, not guest execution or dynamic-linking support.
+The non-executing `nelroot elf plan <file>` command validates supported ELF load segments, computes page-aligned virtual ranges and checks entry-point placement under a default W^X policy. On Linux x86_64/AArch64, `nelroot elf map <static-pie>` maps a bounded host-native static PIE into the NELRoot process without executing it. `nelroot elf relocate <static-pie>` additionally applies only supported RELATIVE RELA relocations (x86_64 type 8; AArch64 type 1027), after validating the dynamic table and writable targets. REL, PLT, symbol resolution, dynamic linking, stack construction and guest execution are not implemented. This is loader groundwork, not a complete process loader.
 
 ### Download and import an image
 
