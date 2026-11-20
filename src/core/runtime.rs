@@ -506,120 +506,66 @@ pub fn bind_mount_rootfs_read_only(rootfs: &Path, target: &Path) -> io::Result<(
     Ok(())
 }
 
-/// Validate a mounted rootfs and its real /tmp directory before pivot_root.
+/// Validate a mounted rootfs and its real /run and /tmp directories.
 #[cfg(target_os = "linux")]
 fn validate_pivot_root_target(rootfs_mount_target: &Path) -> io::Result<(std::path::PathBuf, std::path::PathBuf)> {
     let root_meta = std::fs::symlink_metadata(rootfs_mount_target)?;
     if root_meta.file_type().is_symlink() || !root_meta.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "pivot_root target must be an existing real directory, not a symlink",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "pivot_root target must be an existing real directory, not a symlink"));
     }
     let root = rootfs_mount_target.canonicalize()?;
-    let tmp_candidate = root.join("tmp");
-    let tmp_meta = std::fs::symlink_metadata(&tmp_candidate).map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("rootfs must contain a real /tmp directory for safe pivot_root: {error}"),
-        )
+    let run = root.join("run");
+    let run_meta = std::fs::symlink_metadata(&run).map_err(|error| {
+        io::Error::new(io::ErrorKind::InvalidInput,
+            format!("rootfs must contain an empty real /run directory for pivot_root: {error}"))
+    })?;
+    if run_meta.file_type().is_symlink() || !run_meta.is_dir() || std::fs::read_dir(&run)?.next().is_some() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "rootfs /run must be an existing empty real directory for pivot_root"));
+    }
+    let tmp = root.join("tmp");
+    let tmp_meta = std::fs::symlink_metadata(&tmp).map_err(|error| {
+        io::Error::new(io::ErrorKind::InvalidInput,
+            format!("rootfs must contain a real /tmp directory: {error}"))
     })?;
     if tmp_meta.file_type().is_symlink() || !tmp_meta.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "rootfs /tmp must be an existing real directory, not a symlink",
-        ));
-    }
-    let tmp = tmp_candidate.canonicalize()?;
-    if !tmp.starts_with(&root) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "rootfs /tmp resolves outside the rootfs",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "rootfs /tmp must be an existing real directory, not a symlink"));
     }
     Ok((root, tmp))
 }
 
 /// Enter a previously bind-mounted rootfs and detach the previous root.
 ///
-/// This is a child-only operation: call it only after UID/GID mapping, user and
-/// private mount namespace setup, and bind_mount_rootfs_read_only. It mounts
-/// a small private tmpfs over the guest's real /tmp, uses that mount as the
-/// temporary put_old directory, performs pivot_root, then detaches the old
-/// root. The imported image itself is not modified.
-///
-/// A failure after pivot_root is fatal to the caller: terminate this child
-/// rather than continuing with a partially completed root transition.
+/// Call only in the isolated child after UID/GID mapping and private mount
+/// namespace setup. The empty /run directory is used as pivot_root's put_old
+/// on the same rootfs mount; after detaching the old root, a bounded tmpfs is
+/// mounted over /tmp. The imported rootfs is never modified.
 #[cfg(target_os = "linux")]
 pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
-    let (root, tmp) = validate_pivot_root_target(rootfs_mount_target)?;
-    let root_c = CString::new(root.as_os_str().as_encoded_bytes()).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "rootfs path contains NUL")
-    })?;
-    let tmp_c = CString::new(tmp.as_os_str().as_encoded_bytes()).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "rootfs /tmp path contains NUL")
-    })?;
-
-    // A fresh tmpfs provides a writable, disposable put_old directory while
-    // preserving the read-only imported rootfs beneath it.
-    if unsafe {
-        libc::mount(
-            c"tmpfs".as_ptr(),
-            tmp_c.as_ptr(),
-            c"tmpfs".as_ptr(),
-            (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-            c"mode=1777,size=16m".as_ptr(),
-        )
-    } != 0
-    {
+    let (root, _tmp) = validate_pivot_root_target(rootfs_mount_target)?;
+    let root_c = CString::new(root.as_os_str().as_encoded_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "rootfs path contains NUL"))?;
+    if unsafe { libc::chdir(root_c.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
-
-    let old_root = tmp.join(".nelroot-oldroot");
-    if let Err(error) = std::fs::create_dir(&old_root) {
-        unsafe {
-            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
-        }
-        return Err(error);
+    if unsafe { libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
     }
-
-    // pivot_root paths are relative to the new root after chdir(root).
-    if unsafe { libc::chdir(root_c.as_ptr()) } != 0 {
-        let error = io::Error::last_os_error();
-        let _ = std::fs::remove_dir(&old_root);
-        unsafe {
-            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
-        }
-        return Err(error);
-    }
-
-    // SAFETY: "." is the mounted new root; put_old is a directory beneath it
-    // on the tmpfs mounted over its /tmp directory.
-    if unsafe {
-        libc::syscall(
-            libc::SYS_pivot_root,
-            c".".as_ptr(),
-            c"tmp/.nelroot-oldroot".as_ptr(),
-        )
-    } != 0
-    {
-        let error = io::Error::last_os_error();
-        let _ = std::fs::remove_dir(&old_root);
-        unsafe {
-            libc::umount2(tmp_c.as_ptr(), libc::MNT_DETACH);
-        }
-        return Err(error);
-    }
-
-    // From here onward the process has changed roots. Any error must cause
-    // the caller to terminate this child rather than resume normal execution.
     if unsafe { libc::chdir(c"/".as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    if unsafe { libc::umount2(c"/tmp/.nelroot-oldroot".as_ptr(), libc::MNT_DETACH) } != 0 {
+    if unsafe { libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    std::fs::remove_dir("/tmp/.nelroot-oldroot")?;
+    if unsafe {
+        libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
+            (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+            c"mode=1777,size=16m".as_ptr())
+    } != 0 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(())
 }
 
@@ -652,6 +598,14 @@ fn validate_rootless_launch(
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput,
             "rootfs must contain a real /tmp directory for the isolated writable tmpfs"));
+    }
+    let run = rootfs.join("run");
+    let run_metadata = std::fs::symlink_metadata(&run)?;
+    if run_metadata.file_type().is_symlink() || !run_metadata.is_dir()
+        || std::fs::read_dir(&run)?.next().is_some()
+    {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "rootfs /run must be an existing empty real directory for pivot_root"));
     }
     let root = rootfs.canonicalize()?;
     let target_meta = std::fs::symlink_metadata(target)?;
@@ -752,7 +706,6 @@ pub fn run_rootless_image(
 
     let root_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
     let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
-    let target_tmp_c = CString::new(target.join("tmp").as_os_str().as_encoded_bytes())?;
     let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
     let program_c = CString::new(program)?;
     let mut argv = Vec::with_capacity(arguments.len() + 2);
@@ -844,31 +797,25 @@ pub fn run_rootless_image(
                 std::ptr::null()) != 0 {
                 rootless_child_fail(error_pipe[1], 4);
             }
-            if libc::mount(c"tmpfs".as_ptr(), target_tmp_c.as_ptr(), c"tmpfs".as_ptr(),
-                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr()) != 0 {
-                rootless_child_fail(error_pipe[1], 5);
+            if libc::chdir(target_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 5); }
+            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 6);
             }
-            if libc::chdir(target_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 6); }
-            if libc::mkdir(c"tmp/.nelroot-oldroot".as_ptr(), 0o700) != 0 {
-                rootless_child_fail(error_pipe[1], 7);
-            }
-            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"tmp/.nelroot-oldroot".as_ptr()) != 0 {
+            if libc::chdir(c"/".as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 7); }
+            if libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) != 0 {
                 rootless_child_fail(error_pipe[1], 8);
             }
-            if libc::chdir(c"/".as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 9); }
-            if libc::umount2(c"/tmp/.nelroot-oldroot".as_ptr(), libc::MNT_DETACH) != 0 {
-                rootless_child_fail(error_pipe[1], 10);
+            if libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                c"mode=1777,size=16m".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 9);
             }
-            if libc::rmdir(c"/tmp/.nelroot-oldroot".as_ptr()) != 0 {
+            if libc::chdir(cwd_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 10); }
+            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                 rootless_child_fail(error_pipe[1], 11);
             }
-            if libc::chdir(cwd_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 12); }
-            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
-                rootless_child_fail(error_pipe[1], 13);
-            }
             libc::execve(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
-            rootless_child_fail(error_pipe[1], 14);
+            rootless_child_fail(error_pipe[1], 12);
         }
     }
 
@@ -914,7 +861,13 @@ pub fn run_rootless_image(
 
     let child_failure = read_child_failure(error_pipe[0]);
     unsafe { libc::close(error_pipe[0]); }
-    let status = wait_for_child(pid)?;
+    let status = match wait_for_child(pid) {
+        Ok(status) => status,
+        Err(error) => {
+            let _ = std::fs::remove_dir(&target);
+            return Err(error.into());
+        }
+    };
     let _ = std::fs::remove_dir(&target);
     if let Some(failure) = child_failure? {
         let stage = match failure.stage {
@@ -922,16 +875,14 @@ pub fn run_rootless_image(
             2 => "make mount propagation private",
             3 => "bind-mount rootfs",
             4 => "remount rootfs read-only",
-            5 => "mount writable /tmp",
-            6 => "enter rootfs mount",
-            7 => "create temporary old-root directory",
-            8 => "pivot_root",
-            9 => "change to guest root",
-            10 => "detach old root",
-            11 => "remove old-root mountpoint",
-            12 => "change guest working directory",
-            13 => "enable no_new_privs",
-            14 => "execute guest program",
+            5 => "enter rootfs mount",
+            6 => "pivot_root",
+            7 => "change to guest root",
+            8 => "detach old root",
+            9 => "mount writable /tmp",
+            10 => "change guest working directory",
+            11 => "enable no_new_privs",
+            12 => "execute guest program",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
