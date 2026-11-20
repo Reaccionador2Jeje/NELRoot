@@ -199,6 +199,86 @@ mod tests {
         assert!(space.reserve_region(0x1000, 0x2000, wx, GuestRegionKind::ElfImage).is_err());
     }
 
+
+    fn sample_stack() -> GuestStack {
+        super::super::stack::build_initial_stack(&super::super::stack::GuestStackConfig {
+            stack_top: 0x800000,
+            argv: vec![b"/bin/demo".to_vec()],
+            envp: vec![],
+            execfn: b"/bin/demo".to_vec(),
+            random: [7; 16],
+            auxv: vec![],
+        }).unwrap()
+    }
+
+    #[test]
+    fn builds_elf_and_non_executable_stack_regions() {
+        let plan = LoadPlan {
+            architecture: "x86_64",
+            load_bias: 0,
+            entry_point: 0x400080,
+            segments: vec![
+                super::super::loader::SegmentMapping {
+                    virtual_start: 0x400000,
+                    virtual_end: 0x402000,
+                    file_offset: 0,
+                    file_size: 4096,
+                    memory_size: 8192,
+                    readable: true,
+                    writable: false,
+                    executable: true,
+                },
+                super::super::loader::SegmentMapping {
+                    virtual_start: 0x402000,
+                    virtual_end: 0x403000,
+                    file_offset: 4096,
+                    file_size: 0,
+                    memory_size: 4096,
+                    readable: true,
+                    writable: true,
+                    executable: false,
+                },
+            ],
+        };
+        let space = GuestAddressSpace::from_load_plan(&plan, &sample_stack()).unwrap();
+        assert!(space.contains(0x400080, 1, GuestPermissions { read: false, write: false, execute: true }));
+        assert!(space.contains(0x402000, 16, GuestPermissions::READ_WRITE));
+        let stack = space.regions().iter().find(|region| region.kind == GuestRegionKind::Stack).unwrap();
+        assert!(stack.permissions.read && stack.permissions.write && !stack.permissions.execute);
+    }
+
+    #[test]
+    fn rejects_overlapping_elf_pages_that_would_be_writable_executable() {
+        let plan = LoadPlan {
+            architecture: "x86_64",
+            load_bias: 0,
+            entry_point: 0x500000,
+            segments: vec![
+                super::super::loader::SegmentMapping {
+                    virtual_start: 0x500000,
+                    virtual_end: 0x501000,
+                    file_offset: 0,
+                    file_size: 1,
+                    memory_size: 4096,
+                    readable: true,
+                    writable: false,
+                    executable: true,
+                },
+                super::super::loader::SegmentMapping {
+                    virtual_start: 0x500000,
+                    virtual_end: 0x501000,
+                    file_offset: 4096,
+                    file_size: 1,
+                    memory_size: 4096,
+                    readable: true,
+                    writable: true,
+                    executable: false,
+                },
+            ],
+        };
+        assert!(GuestAddressSpace::from_load_plan(&plan, &sample_stack()).is_err());
+    }
+
     #[test]
     fn checks_full_range_and_permissions() {
         let mut space = GuestAddressSpace::new();
