@@ -150,3 +150,16 @@ must only run in the isolated child. If an error occurs after pivot_root
 succeeds, the child must be terminated; it must not continue as though setup
 were complete. Kernel or container policy may deny tmpfs mounting or
 pivot_root, and NELRoot returns those errors without falling back to chroot.
+
+
+## First rootless guest launcher
+
+The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, mounts a bounded tmpfs over guest `/tmp`, pivots into the image, detaches the previous root, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
+
+This path rejects host UID 0, never falls back to chroot, and leaves the imported rootfs unchanged. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
+
+Explicit limitations: the guest is not PID 1; PID namespace supervision and signal forwarding are not implemented. The host network namespace remains visible. NELRoot does not mount `/proc` or `/dev`, configure resource limits, or provide protection against kernel vulnerabilities. Commands needing those facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
+
+Example:
+
+    nelroot run-rootless alpine -- /bin/sh -c 'printf "rootless OK\\n"'
