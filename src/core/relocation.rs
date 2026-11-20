@@ -17,6 +17,14 @@ const DT_RELASZ: i64 = 8;
 const DT_RELAENT: i64 = 9;
 const DT_REL: i64 = 17;
 const DT_RELSZ: i64 = 18;
+const DT_TEXTREL: i64 = 22;
+const DT_RELRSZ: i64 = 35;
+const DT_RELR: i64 = 36;
+const DT_RELRENT: i64 = 37;
+const DT_ANDROID_REL: i64 = 0x6000_000f;
+const DT_ANDROID_RELSZ: i64 = 0x6000_0010;
+const DT_ANDROID_RELA: i64 = 0x6000_0011;
+const DT_ANDROID_RELASZ: i64 = 0x6000_0012;
 const DT_PLTRELSZ: i64 = 2;
 const DT_JMPREL: i64 = 23;
 const ELF64_DYNAMIC_ENTRY_SIZE: usize = 16;
@@ -85,9 +93,15 @@ pub fn apply_relative_relocations(
             DT_RELA => set_once(&mut rela_address, value, "DT_RELA")?,
             DT_RELASZ => set_once(&mut rela_size, value, "DT_RELASZ")?,
             DT_RELAENT => set_once(&mut rela_entry_size, value, "DT_RELAENT")?,
-            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ => {
-                if value != 0 {
-                    return Err("ELF image requires unsupported REL or PLT relocations".into());
+            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
+            | DT_RELR | DT_RELRSZ | DT_RELRENT
+            | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
+            | DT_TEXTREL => {
+                if value != 0 || tag == DT_TEXTREL {
+                    return Err(
+                        "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
+                            .into(),
+                    );
                 }
             }
             _ => {}
