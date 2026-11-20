@@ -119,4 +119,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: |\n            release-assets/*\n            scripts/install.sh\n            scripts/install.ps1
+          files: |
+            release-assets/*
+            scripts/install.sh
+            scripts/install.ps1
