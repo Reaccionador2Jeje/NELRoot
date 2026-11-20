@@ -10,6 +10,14 @@ use super::abi::{
 
 const MAX_INSTRUCTION_BYTES: usize = 10;
 
+const FLAG_CF: u64 = 1 << 0;
+const FLAG_PF: u64 = 1 << 2;
+const FLAG_AF: u64 = 1 << 4;
+const FLAG_ZF: u64 = 1 << 6;
+const FLAG_SF: u64 = 1 << 7;
+const FLAG_OF: u64 = 1 << 11;
+const ARITHMETIC_FLAGS: u64 = FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF | FLAG_OF;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct X86_64Registers {
     pub rax: u64,
@@ -112,17 +120,23 @@ impl X86_64Interpreter {
                 if bytes.len() < 4 { return Err(CpuError::TruncatedInstruction); }
                 let operation = bytes[2];
                 let immediate = bytes[3] as i8 as i64 as u64;
-                match operation {
+                let lhs = self.registers.rax;
+                let (result, carry, overflow) = match operation {
                     0xc0 => {
-                        self.registers.rax = self.registers.rax.wrapping_add(immediate);
-                        self.set_zero_flag(self.registers.rax == 0);
+                        let (result, carry) = lhs.overflowing_add(immediate);
+                        let overflow = (!(lhs ^ immediate) & (lhs ^ result) & (1 << 63)) != 0;
+                        (result, carry, overflow)
                     }
                     0xe8 => {
-                        self.registers.rax = self.registers.rax.wrapping_sub(immediate);
-                        self.set_zero_flag(self.registers.rax == 0);
+                        let (result, carry) = lhs.overflowing_sub(immediate);
+                        let overflow = ((lhs ^ immediate) & (lhs ^ result) & (1 << 63)) != 0;
+                        (result, carry, overflow)
                     }
                     _ => return Err(CpuError::UnsupportedInstruction { opcode: operation }),
-                }
+                };
+                let auxiliary = ((lhs ^ immediate ^ result) & 0x10) != 0;
+                self.registers.rax = result;
+                self.set_arithmetic_flags(result, carry, overflow, auxiliary);
                 4
             }
             0x50..=0x57 => {
@@ -212,8 +226,19 @@ impl X86_64Interpreter {
     }
 
     fn set_zero_flag(&mut self, enabled: bool) {
-        if enabled { self.registers.rflags |= 1 << 6; }
-        else { self.registers.rflags &= !(1 << 6); }
+        if enabled { self.registers.rflags |= FLAG_ZF; }
+        else { self.registers.rflags &= !FLAG_ZF; }
+    }
+
+    fn set_arithmetic_flags(&mut self, result: u64, carry: bool, overflow: bool, auxiliary: bool) {
+        let mut flags = self.registers.rflags & !ARITHMETIC_FLAGS;
+        if carry { flags |= FLAG_CF; }
+        if result.to_le_bytes()[0].count_ones().is_multiple_of(2) { flags |= FLAG_PF; }
+        if auxiliary { flags |= FLAG_AF; }
+        if result == 0 { flags |= FLAG_ZF; }
+        if result & (1 << 63) != 0 { flags |= FLAG_SF; }
+        if overflow { flags |= FLAG_OF; }
+        self.registers.rflags = flags;
     }
 
     fn relative_target(&self, ip: u64, length: u64, displacement: i64) -> Result<u64, CpuError> {
@@ -386,6 +411,48 @@ mod tests {
             CpuStopReason::StepLimitReached);
         assert_eq!(cpu.registers.rax, 0);
         assert_eq!(cpu.registers.rip, 0x1012);
+    }
+
+
+    #[test]
+    fn add_sets_carry_zero_and_parity_flags() {
+        let mut context = context_with_code(&[0x48, 0x83, 0xc0, 0x01]);
+        let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
+        cpu.registers.rax = u64::MAX;
+        cpu.step(&mut context, &SyscallDispatcher).unwrap();
+        assert_eq!(cpu.registers.rax, 0);
+        assert_ne!(cpu.registers.rflags & FLAG_CF, 0);
+        assert_ne!(cpu.registers.rflags & FLAG_ZF, 0);
+        assert_ne!(cpu.registers.rflags & FLAG_PF, 0);
+        assert_ne!(cpu.registers.rflags & FLAG_AF, 0);
+        assert_eq!(cpu.registers.rflags & FLAG_OF, 0);
+    }
+
+    #[test]
+    fn add_and_sub_update_signed_overflow_and_sign_flags() {
+        let mut add_context = context_with_code(&[0x48, 0x83, 0xc0, 0x01]);
+        let mut add_cpu = X86_64Interpreter::new(0x1000, 0x9000);
+        add_cpu.registers.rax = i64::MAX as u64;
+        add_cpu.step(&mut add_context, &SyscallDispatcher).unwrap();
+        assert_ne!(add_cpu.registers.rflags & FLAG_OF, 0);
+        assert_ne!(add_cpu.registers.rflags & FLAG_SF, 0);
+
+        let mut sub_context = context_with_code(&[0x48, 0x83, 0xe8, 0x01]);
+        let mut sub_cpu = X86_64Interpreter::new(0x1000, 0x9000);
+        sub_cpu.registers.rax = i64::MIN as u64;
+        sub_cpu.step(&mut sub_context, &SyscallDispatcher).unwrap();
+        assert_ne!(sub_cpu.registers.rflags & FLAG_OF, 0);
+        assert_eq!(sub_cpu.registers.rflags & FLAG_SF, 0);
+    }
+
+    #[test]
+    fn arithmetic_preserves_non_arithmetic_flags() {
+        let mut context = context_with_code(&[0x48, 0x83, 0xc0, 0x01]);
+        let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
+        let preserved = (1 << 9) | (1 << 10);
+        cpu.registers.rflags = preserved;
+        cpu.step(&mut context, &SyscallDispatcher).unwrap();
+        assert_eq!(cpu.registers.rflags & preserved, preserved);
     }
 
     #[test]
