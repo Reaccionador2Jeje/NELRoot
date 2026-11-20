@@ -60,6 +60,11 @@ enum ImageCommands {
         /// Image name from the local catalog.
         name: String,
     },
+    /// Validate an existing Linux root filesystem directory.
+    Validate {
+        /// Path to the root filesystem directory.
+        path: std::path::PathBuf,
+    },
     /// Register an existing Linux root filesystem directory (does not copy it).
     Register {
         /// Name to assign to this image.
@@ -134,6 +139,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::Image { command } => match command {
+            ImageCommands::Validate { path } => {
+                let rootfs = images::validate_rootfs(&path)?;
+                println!("Root filesystem validation: passed");
+                println!("Path: {}", rootfs.display());
+            }
             ImageCommands::Register {
                 name,
                 path,
