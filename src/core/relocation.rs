@@ -36,6 +36,9 @@ pub fn apply_relative_relocations(
     if info.file_type != 3 || info.interpreter.is_some() {
         return Err("relative relocation stage accepts static ET_DYN images only".into());
     }
+    if mapped.machine() != info.machine {
+        return Err("ELF metadata machine does not match the mapped image".into());
+    }
 
     let dynamic_segments: Vec<&ProgramHeader> = info
         .program_headers
