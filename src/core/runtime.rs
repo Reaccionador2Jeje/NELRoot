@@ -155,14 +155,14 @@ pub fn probe_user_namespace_creation() -> std::io::Result<()> {
     }
 }
 
-/// Exercise the complete user-namespace mapping handshake and private mount setup.
+/// Exercise user mapping, private mount setup, and PID namespace creation.
 ///
 /// A disposable child enters a user namespace and blocks on a pipe. The parent
-/// installs the child's UID/GID maps, then releases it to create a private
-/// mount namespace and make mount propagation recursively private. The child
-/// exits immediately; no host namespace or mount propagation is changed.
+/// installs its UID/GID maps, then releases it to create a private mount
+/// namespace and PID namespace. A grandchild verifies that it becomes PID 1.
+/// No host namespace or mount propagation is changed; no guest rootfs is mounted.
 #[cfg(target_os = "linux")]
-pub fn probe_rootless_user_and_mount_namespaces() -> io::Result<UserNamespaceMapping> {
+pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespaceMapping> {
     let mut ready_pipe = [0; 2];
     let mut release_pipe = [0; 2];
 
@@ -232,6 +232,36 @@ pub fn probe_rootless_user_and_mount_namespaces() -> io::Result<UserNamespaceMap
             {
                 let errno = *libc::__errno_location();
                 libc::_exit(errno.clamp(1, 255));
+            }
+            if libc::unshare(libc::CLONE_NEWPID) != 0 {
+                let errno = *libc::__errno_location();
+                libc::_exit(errno.clamp(1, 255));
+            }
+            let init_pid = libc::fork();
+            if init_pid < 0 {
+                let errno = *libc::__errno_location();
+                libc::_exit(errno.clamp(1, 255));
+            }
+            if init_pid == 0 {
+                libc::_exit(if libc::getpid() == 1 { 0 } else { 246 });
+            }
+
+            let mut init_status = 0;
+            loop {
+                let waited = libc::waitpid(init_pid, &mut init_status, 0);
+                if waited == init_pid {
+                    break;
+                }
+                if waited < 0 {
+                    let errno = *libc::__errno_location();
+                    if errno == libc::EINTR {
+                        continue;
+                    }
+                    libc::_exit(errno.clamp(1, 255));
+                }
+            }
+            if !libc::WIFEXITED(init_status) || libc::WEXITSTATUS(init_status) != 0 {
+                libc::_exit(245);
             }
             libc::_exit(0);
         }
