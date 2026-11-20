@@ -251,7 +251,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::state("ELF load planner", true, "mapping plan only");
             ui::state(
                 "ELF memory mapper",
-                cfg!(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))),
+                cfg!(all(
+                    target_os = "linux",
+                    any(target_arch = "x86_64", target_arch = "aarch64")
+                )),
                 "static ET_DYN; no execution",
             );
             ui::state(
@@ -550,7 +553,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "elf_load_planner", "status": "available"},
                             {
                                 "name": "elf_memory_mapper",
-                                "status": if cfg!(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))) {
+                                "status": if cfg!(all(
+                                    target_os = "linux",
+                                    any(target_arch = "x86_64", target_arch = "aarch64")
+                                )) {
                                     "available"
                                 } else {
                                     "not_implemented"
