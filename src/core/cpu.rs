@@ -141,11 +141,20 @@ impl X86_64Interpreter {
                 next_rip = Some(self.relative_target(self.registers.rip, 2, displacement)?);
                 2
             }
-            0xe9 => {
+            0xe8 | 0xe9 => {
                 if bytes.len() < 5 { return Err(CpuError::TruncatedInstruction); }
                 let displacement = i32::from_le_bytes(bytes[1..5].try_into().unwrap()) as i64;
-                next_rip = Some(self.relative_target(self.registers.rip, 5, displacement)?);
+                let target = self.relative_target(self.registers.rip, 5, displacement)?;
+                if first == 0xe8 {
+                    let return_address = self.registers.rip.checked_add(5).ok_or(CpuError::FetchFault)?;
+                    self.push_u64(context, return_address)?;
+                }
+                next_rip = Some(target);
                 5
+            }
+            0xc3 => {
+                next_rip = Some(self.pop_u64(context)?);
+                1
             }
             0x74 | 0x75 => {
                 if bytes.len() < 2 { return Err(CpuError::TruncatedInstruction); }
@@ -372,6 +381,20 @@ mod tests {
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         cpu.run(&mut context, &SyscallDispatcher, 4).unwrap();
         assert_eq!(cpu.registers.rax, 42);
+        assert_eq!(cpu.registers.rsp, 0x9000);
+    }
+
+    #[test]
+    fn call_and_ret_use_guest_stack() {
+        // call +2; nop; ret
+        let code = [0xe8,0x02,0,0,0, 0x90, 0xc3];
+        let mut context = context_with_code(&code);
+        let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
+        cpu.step(&mut context, &SyscallDispatcher).unwrap();
+        assert_eq!(cpu.registers.rip, 0x1007);
+        assert_eq!(cpu.registers.rsp, 0x8ff8);
+        cpu.step(&mut context, &SyscallDispatcher).unwrap();
+        assert_eq!(cpu.registers.rip, 0x1005);
         assert_eq!(cpu.registers.rsp, 0x9000);
     }
 
