@@ -27,7 +27,7 @@ nelroot port expose <name> <guest-port> [--host-port <port>]
 nelroot package <project-path> --output <artifact>
 ```
 
-The exact syntax may evolve before the runtime milestone. NEXORA should initially use `nelroot --version`, `nelroot doctor` and `nelroot engine status` for capability detection rather than assuming future commands exist.
+The exact syntax may evolve before the runtime milestone. NEXORA can currently use `nelroot --version`, `nelroot doctor` and the versioned `nelroot engine status --json` response for capability detection. The JSON response reports that guest execution is unavailable until the runtime milestone is complete.
 
 ## Required machine-readable response
 
