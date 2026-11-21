@@ -95,11 +95,11 @@ pub fn apply_relative_relocations(
     let rela_bytes = mapped.read_bytes(rela_offset, usize::try_from(rela_size)?)?;
     let mut pending = Vec::with_capacity(relocation_count);
 
-    let mut rela_entries = rela_bytes.chunks_exact(ELF64_RELA_ENTRY_SIZE);
-    if !rela_entries.remainder().is_empty() {
+    let (rela_entries, rela_remainder) = rela_bytes.as_chunks::<ELF64_RELA_ENTRY_SIZE>();
+    if !rela_remainder.is_empty() {
         return Err("ELF RELA table has an invalid entry size".into());
     }
-    for entry in &mut rela_entries {
+    for entry in rela_entries {
         let target_address = u64::from_le_bytes(entry[0..8].try_into()?);
         let relocation_info = u64::from_le_bytes(entry[8..16].try_into()?);
         let addend = i64::from_le_bytes(entry[16..24].try_into()?);
@@ -125,7 +125,7 @@ pub fn apply_relative_relocations(
 }
 
 fn parse_dynamic_table(dynamic_bytes: &[u8]) -> Result<Option<DynamicRelaInfo>, Box<dyn Error>> {
-    if dynamic_bytes.len() % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
+    if !dynamic_bytes.len().is_multiple_of(ELF64_DYNAMIC_ENTRY_SIZE) {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
@@ -134,11 +134,12 @@ fn parse_dynamic_table(dynamic_bytes: &[u8]) -> Result<Option<DynamicRelaInfo>, 
     let mut rela_entry_size = None;
     let mut saw_null = false;
 
-    let mut dynamic_entries = dynamic_bytes.chunks_exact(ELF64_DYNAMIC_ENTRY_SIZE);
-    if !dynamic_entries.remainder().is_empty() {
+    let (dynamic_entries, dynamic_remainder) =
+        dynamic_bytes.as_chunks::<ELF64_DYNAMIC_ENTRY_SIZE>();
+    if !dynamic_remainder.is_empty() {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
-    for entry in &mut dynamic_entries {
+    for entry in dynamic_entries {
         let tag = i64::from_le_bytes(entry[0..8].try_into()?);
         let value = u64::from_le_bytes(entry[8..16].try_into()?);
         if tag == DT_NULL {
