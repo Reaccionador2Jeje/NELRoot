@@ -155,7 +155,7 @@ pivot_root, and NELRoot returns those errors without falling back to chroot.
 
 ## First rootless guest launcher
 
-The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, pivots into the image using its existing empty `/run` directory as `put_old`, detaches the previous root, mounts a bounded tmpfs over guest `/tmp`, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
+The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, pivots into the image using its existing empty `/run/lock` directory as `put_old`, detaches the previous root, mounts a bounded tmpfs over guest `/tmp`, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
 
 This path rejects host UID 0, never falls back to chroot, and leaves the imported rootfs unchanged. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
