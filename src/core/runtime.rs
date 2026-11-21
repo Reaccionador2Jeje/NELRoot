@@ -1044,7 +1044,8 @@ pub fn run_rootless_image(
                 c"proc".as_ptr(),
                 (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
                 std::ptr::null(),
-            ) != 0 {
+            ) != 0
+            {
                 rootless_child_fail(error_pipe[1], 9);
             }
 
