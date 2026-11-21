@@ -286,10 +286,10 @@ The Hub must be configured with a publishing token, supplied only through the
 environment:
 
     export NELROOT_HUB_PUBLISH_TOKEN='your-long-publishing-token'
-    ./scripts/publish-alpine-minirootfs.sh x86_64
-    ./scripts/publish-alpine-minirootfs.sh aarch64
-    ./scripts/publish-alpine-minirootfs.sh armv7
-    ./scripts/publish-alpine-minirootfs.sh riscv64
+    bash scripts/publish-alpine-minirootfs.sh x86_64
+    bash scripts/publish-alpine-minirootfs.sh aarch64
+    bash scripts/publish-alpine-minirootfs.sh armv7
+    bash scripts/publish-alpine-minirootfs.sh riscv64
     unset NELROOT_HUB_PUBLISH_TOKEN
 
 Set `ALPINE_VERSION` to select another stable version available on the official
