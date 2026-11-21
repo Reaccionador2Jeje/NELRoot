@@ -632,15 +632,14 @@ fn validate_rootless_launch(
             "rootfs must contain a real /tmp directory for the isolated writable tmpfs",
         ));
     }
-    let put_old = rootfs.join("run/lock");
-    let put_old_metadata = std::fs::symlink_metadata(&put_old)?;
-    if put_old_metadata.file_type().is_symlink()
-        || !put_old_metadata.is_dir()
-        || std::fs::read_dir(&put_old)?.next().is_some()
-    {
+    // The rootless backend uses /run as pivot_root's put_old directory.
+    // It may contain guest runtime files; do not require it to be empty.
+    let run = rootfs.join("run");
+    let run_metadata = std::fs::symlink_metadata(&run)?;
+    if run_metadata.file_type().is_symlink() || !run_metadata.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "rootfs /run/lock must be an existing empty real directory for pivot_root",
+            "rootfs /run must be an existing real directory for pivot_root",
         ));
     }
     let root = rootfs.canonicalize()?;
@@ -898,7 +897,7 @@ pub fn run_rootless_image(
             if libc::chdir(target_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 5);
             }
-            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run/lock".as_ptr()) != 0 {
+            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 6);
             }
             if libc::chdir(c"/".as_ptr()) != 0 {
