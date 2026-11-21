@@ -227,7 +227,7 @@ async fn get_catalog(State(state): State<AppState>) -> ApiResult<Json<HubCatalog
 async fn get_manifest(
     State(state): State<AppState>,
     Path(digest): Path<String>,
-) -> ApiResult<Json<HubManifest>> {
+) -> ApiResult<Response> {
     if !valid_digest(&digest) {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
@@ -257,7 +257,21 @@ async fn get_manifest(
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     hub::validate_manifest(&manifest)
         .map_err(|error| api_error(StatusCode::UNPROCESSABLE_ENTITY, error))?;
-    Ok(Json(manifest))
+
+    // The manifest digest covers the exact stored bytes. Returning Json<T>
+    // would serialize the parsed value again and could change whitespace or
+    // key formatting, causing clients to reject a valid content-addressed file.
+    let mut response = Response::new(axum::body::Body::from(bytes));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
+    Ok(response)
 }
 
 async fn get_artifact(
