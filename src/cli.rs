@@ -1480,7 +1480,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Image", &image);
             ui::key("Executable", program);
             ui::good("Host UID/GID remain unprivileged; guest writes persist in OverlayFS.");
-            ui::good("Guest PID namespace and /proc are enabled; host networking remains shared.");
+            ui::good("Guest PID namespace, /proc, standard /dev devices and devpts are enabled.");
+            ui::good("Host networking remains shared; no network namespace is created.");
             if let Some(path) = workspace.as_ref() {
                 ui::key(
                     "Project workspace",
@@ -1508,7 +1509,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::banner("Rootless interactive Linux shell");
             ui::key("Image", &image);
             ui::key("Shell", &shell);
-            ui::good("Guest runs in a PID namespace with persistent writable storage.");
+            ui::good("Guest runs with persistent storage, PID isolation, /proc and standard /dev devices.");
             if let Some(path) = workspace.as_ref() {
                 ui::key(
                     "Project workspace",
