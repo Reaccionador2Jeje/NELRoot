@@ -881,8 +881,10 @@ pub fn run_rootless_image(
     ))?;
 
     let (upper_dir, work_dir, _container_lock) = prepare_rootless_overlay_storage(image_name)?;
-    validate_workspace_mountpoint(&rootfs.join("workspace"))?;
-    validate_workspace_mountpoint(&upper_dir.join("workspace"))?;
+    if workspace.is_some() {
+        validate_workspace_mountpoint(&rootfs.join("workspace"))?;
+        validate_workspace_mountpoint(&upper_dir.join("workspace"))?;
+    }
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
     let unique = format!(
