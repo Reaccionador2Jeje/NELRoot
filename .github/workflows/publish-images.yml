@@ -23,6 +23,10 @@ jobs:
   publish:
     name: Publish official ${{ inputs.family }} rootfs images
     runs-on: ubuntu-latest
+    timeout-minutes: 240
+    concurrency:
+      group: nelroot-image-hub-publish
+      cancel-in-progress: false
     env:
       NELROOT_HUB_PUBLISH_TOKEN: ${{ secrets.NELROOT_HUB_PUBLISH_TOKEN }}
       NELROOT_HUB_URL: https://nelroot-image-hub-production.up.railway.app
