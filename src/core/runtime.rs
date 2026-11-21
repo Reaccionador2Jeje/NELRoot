@@ -527,7 +527,9 @@ fn validate_pivot_root_target(
     let put_old_meta = std::fs::symlink_metadata(&put_old).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("rootfs must contain an empty real /run/lock directory for pivot_root: {error}"),
+            format!(
+                "rootfs must contain an empty real /run/lock directory for pivot_root: {error}"
+            ),
         )
     })?;
     if put_old_meta.file_type().is_symlink()
