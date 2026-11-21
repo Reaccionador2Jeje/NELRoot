@@ -34,13 +34,14 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Initial guest VFS path normalization and root confinement with canonical symlink checks (inspection helpers only; not a security boundary for later opens).
 - [x] Linux root-confined file open and exclusive create using openat2(2), pinned root directory descriptors and RESOLVE_IN_ROOT (requires Linux 5.6+; no fallback on older kernels).
 - [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop.
-- [x] Parent-death cleanup for the rootless namespace supervisor and guest PID 1, with parent-PID race checks and post-UID-map re-arming (graceful signal forwarding and init reaping remain pending).
+- [x] Parent-death cleanup for the rootless namespace supervisor and guest PID 1, with parent-PID race checks and post-UID-map re-arming.
 - [x] Linux child-side primitive for a private mount namespace with recursive-private propagation (requires a mapped user namespace; launch handshake and rootfs setup remain pending).
 - [x] Linux child-side pivot_root primitive for a read-only mounted rootfs, using the existing empty /run directory on the rootfs mount as put_old (does not launch or supervise a guest process).
 - [x] Rootless guest launcher with synchronized UID/GID mapping, private mount namespace, persistent writable OverlayFS, pivot_root and no_new_privs.
 - [x] PID namespace with supervised guest PID 1 and guest /proc mount.
 - [x] Minimal guest /dev device nodes, devpts and bounded /dev/shm.
-- [ ] Isolated networking, resource limits and full signal/descendant lifecycle handling.
+- [x] Guest PID 1 common-signal forwarding, child-process reaping and namespace-scoped descendant cleanup after workload exit.
+- [ ] Host-supervisor forwarding of externally delivered signals, isolated networking, resource limits and port lifecycle management.
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
@@ -167,4 +168,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage and a guest /proc mount, plus a separate privileged chroot backend. The rootless launcher is not yet a complete developer environment: it has only a minimal guest /dev and devpts setup; it still lacks network isolation, resource limits, graceful signal forwarding, PID 1 child reaping, service/port management and broad distribution validation. Parent-death cleanup is implemented for the namespace supervisor and guest init. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.
+NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage, a guest /proc mount and a PID 1 shim that forwards common signals to its workload, reaps children and cleans up namespace descendants after workload exit. A separate privileged chroot backend also exists. The rootless launcher is not yet a complete developer environment: guest /dev is minimal; full host-supervisor signal forwarding, network isolation, resource limits, service/port management and broad distribution validation remain incomplete. Parent-death cleanup is implemented for the namespace supervisor and guest init. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.
