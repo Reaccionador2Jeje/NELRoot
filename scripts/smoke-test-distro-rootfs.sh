@@ -14,11 +14,13 @@ trap cleanup EXIT
 
 docker pull "$IMAGE"
 CONTAINER_ID="$(docker create "$IMAGE" /bin/sh -c 'exit 0')"
-docker export "$CONTAINER_ID" | tar -xf - -C "$WORK"
+ROOTFS="$WORK/rootfs"
+mkdir -p "$ROOTFS"
+docker export "$CONTAINER_ID" | tar -xf - -C "$ROOTFS"
 docker rm "$CONTAINER_ID" >/dev/null
 CONTAINER_ID=""
 
-ROOTFS="$WORK"
+
 # A distro image may ship transient runtime files; the pivot_root put_old
 # directory must be a dedicated empty mountpoint in this test rootfs.
 rm -rf "$ROOTFS/run"
