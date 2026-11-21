@@ -106,11 +106,24 @@ nelroot engine status --json
 # Native Linux execution (Linux host + effective UID 0 and required capabilities)
 nelroot run ubuntu -- /bin/uname -a
 nelroot shell ubuntu
+# Rootless native launcher (no host root; Linux user + mount namespaces)
+nelroot run-rootless ubuntu -- /bin/uname -a
 # Optional, unsafe: retain host root credentials inside chroot
 nelroot shell ubuntu --keep-root
 ```
 
 Run `nelroot <command> --help` for command-specific help.
+
+### Rootless Linux runtime
+
+Linux hosts can also use NELRoot's independent rootless launcher without host UID 0:
+
+```bash
+nelroot run-rootless <image> -- /bin/sh -c 'printf "NELRoot rootless OK\\n"'
+nelroot run-rootless <image> -- /bin/uname -m
+```
+
+This backend is implemented directly with Linux user and private mount namespaces, UID/GID mapping, a read-only rootfs bind mount, `pivot_root`, a bounded temporary `/tmp`, and `no_new_privs`. It does not invoke PRoot, QEMU or Docker. The invoking host UID/GID remain unprivileged. The current milestone is same-architecture and still lacks PID-namespace supervision, signal forwarding, isolated networking, and guest `/proc` and `/dev` mounts. Kernel, container, seccomp or LSM policy can deny namespace or mount operations; NELRoot fails closed instead of falling back to chroot. See [docs/ROOTLESS_RUNTIME.md](docs/ROOTLESS_RUNTIME.md) for exact limits and prerequisites.
 
 ### Native Linux runtime
 
