@@ -610,17 +610,21 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ProjectCommands::Create { name } => {
                 if name.is_empty()
                     || name.len() > 64
-                    || !name
-                        .chars()
-                        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
                 {
-                    return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
                 }
                 config::initialize()?;
                 let path = config::projects_dir().join(&name);
                 match std::fs::symlink_metadata(&path) {
                     Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-                        return Err("project path already exists and is not a real directory".into());
+                        return Err(
+                            "project path already exists and is not a real directory".into()
+                        );
                     }
                     Ok(_) => {}
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -691,12 +695,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 let metadata = std::fs::symlink_metadata(&working_directory)?;
                 if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                    return Err("host project working directory must be an existing real directory".into());
+                    return Err(
+                        "host project working directory must be an existing real directory".into(),
+                    );
                 }
                 ui::banner("Linux host execution");
                 ui::key("Executable", program);
                 ui::key("Working directory", working_directory.display());
-                ui::warn("This command runs directly on the host; it has no distro or namespace isolation.");
+                ui::warn(
+                    "This command runs directly on the host; it has no distro or namespace isolation.",
+                );
                 let status = std::process::Command::new(program)
                     .args(&command[1..])
                     .current_dir(working_directory)
@@ -1470,9 +1478,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::good("Host UID/GID remain unprivileged; guest writes persist in OverlayFS.");
             ui::good("Guest PID namespace and /proc are enabled; host networking remains shared.");
             if let Some(path) = workspace.as_ref() {
-                ui::key("Project workspace", format!("{} -> /workspace", path.display()));
+                ui::key(
+                    "Project workspace",
+                    format!("{} -> /workspace", path.display()),
+                );
             }
-            let status = runtime::run_rootless_image(&image, program, arguments, &cwd, workspace.as_deref())?;
+            let status = runtime::run_rootless_image(
+                &image,
+                program,
+                arguments,
+                &cwd,
+                workspace.as_deref(),
+            )?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
