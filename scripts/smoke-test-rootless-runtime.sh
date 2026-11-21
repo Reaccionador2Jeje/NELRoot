@@ -6,6 +6,12 @@ BUSYBOX_BIN="${BUSYBOX_BIN:-/bin/busybox}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+write_summary() {
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    printf "%s\\n" "$1" >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
+
 if [[ ! -x "$NELROOT_BIN" ]]; then
   echo "NELROOT_BIN is not executable: $NELROOT_BIN" >&2
   exit 1
@@ -37,10 +43,12 @@ if OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "R
   grep -q '^ROOTLESS_SMOKE_OK$' <<<"$OUTPUT"
   grep -q "^$ARCH$" <<<"$OUTPUT"
   echo "Rootless runtime integration smoke test passed."
+  write_summary "### NELRoot native rootfs smoke\\n\\n**PASS:** native rootfs registered and guest command executed."
 else
   STATUS=$?
   if grep -Fq "rootless runtime failed to create private mount namespace: Operation not permitted" <<<"$OUTPUT"; then
     echo "SKIP: CI runner policy blocks rootless mount namespaces; NELRoot native rootfs registration passed."
+    write_summary "### NELRoot native rootfs smoke\\n\\n**PASS:** native rootfs registered. **SKIP:** guest launch blocked by runner mount-namespace policy."
     exit 0
   fi
   printf '%s\n' "$OUTPUT" >&2
