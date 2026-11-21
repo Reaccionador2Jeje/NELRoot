@@ -686,6 +686,161 @@ unsafe fn configure_parent_death_signal(expected_parent: libc::pid_t) -> Result<
 }
 
 #[cfg(target_os = "linux")]
+static GUEST_INIT_CHILD_PID: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(0);
+
+#[cfg(target_os = "linux")]
+extern "C" fn forward_guest_init_signal(signal: libc::c_int) {
+    let child = GUEST_INIT_CHILD_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if child > 0 {
+        // SAFETY: kill is async-signal-safe; the negative PID targets the
+        // workload process group established by the PID-1 shim.
+        unsafe { libc::kill(-child, signal) };
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn set_guest_init_signal_disposition(
+    signal: libc::c_int,
+    handler: usize,
+) -> Result<(), io::Error> {
+    // SAFETY: zero is a valid initial representation for sigaction on Linux.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    action.sa_flags = libc::SA_RESTART;
+    unsafe { libc::sigemptyset(&mut action.sa_mask) };
+    if unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn guest_init_signals() -> [libc::c_int; 8] {
+    [
+        libc::SIGTERM,
+        libc::SIGINT,
+        libc::SIGHUP,
+        libc::SIGQUIT,
+        libc::SIGUSR1,
+        libc::SIGUSR2,
+        libc::SIGWINCH,
+        libc::SIGCONT,
+    ]
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn reset_guest_workload_signals() {
+    for signal in guest_init_signals() {
+        // SAFETY: a zeroed sigaction with SIG_DFL and an empty mask is valid.
+        let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+        action.sa_sigaction = libc::SIG_DFL;
+        unsafe {
+            libc::sigemptyset(&mut action.sa_mask);
+            libc::sigaction(signal, &action, std::ptr::null_mut());
+        }
+    }
+}
+
+/// Run the workload as a child of PID 1, forwarding common signals and reaping
+/// every process in the guest PID namespace before the init shim exits.
+#[cfg(target_os = "linux")]
+unsafe fn run_guest_pid1(
+    program: *const libc::c_char,
+    argv: *const *const libc::c_char,
+    envp: *const *const libc::c_char,
+) -> ! {
+    for signal in guest_init_signals() {
+        if unsafe {
+            set_guest_init_signal_disposition(
+                signal,
+                forward_guest_init_signal as *const () as usize,
+            )
+        }
+        .is_err()
+        {
+            unsafe { libc::_exit(125) };
+        }
+    }
+
+    let child = unsafe { libc::fork() };
+    if child < 0 {
+        unsafe { libc::_exit(125) };
+    }
+    if child == 0 {
+        unsafe {
+            libc::setpgid(0, 0);
+            reset_guest_workload_signals();
+            libc::execve(program, argv, envp);
+            libc::_exit(127);
+        }
+    }
+
+    unsafe { libc::setpgid(child, child) };
+    GUEST_INIT_CHILD_PID.store(child, std::sync::atomic::Ordering::Relaxed);
+
+    let mut workload_status = 0;
+    let mut workload_reaped = false;
+    loop {
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(-1, &mut status, 0) };
+        if waited == child {
+            workload_status = status;
+            workload_reaped = true;
+            break;
+        }
+        if waited > 0 {
+            continue;
+        }
+        let errno = unsafe { *libc::__errno_location() };
+        if errno == libc::EINTR {
+            continue;
+        }
+        if errno == libc::ECHILD {
+            break;
+        }
+        unsafe { libc::_exit(125) };
+    }
+
+    // PID 1 must not leave daemonized descendants running after the command
+    // completes. kill(-1, ...) is scoped to this PID namespace.
+    unsafe {
+        libc::kill(-child, libc::SIGKILL);
+        libc::kill(-1, libc::SIGKILL);
+    }
+    loop {
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(-1, &mut status, 0) };
+        if waited > 0 {
+            if waited == child {
+                workload_status = status;
+                workload_reaped = true;
+            }
+            continue;
+        }
+        let errno = unsafe { *libc::__errno_location() };
+        if errno == libc::EINTR {
+            continue;
+        }
+        if errno == libc::ECHILD {
+            break;
+        }
+        unsafe { libc::_exit(125) };
+    }
+
+    if !workload_reaped {
+        unsafe { libc::_exit(125) };
+    }
+    if libc::WIFEXITED(workload_status) {
+        unsafe { libc::_exit(libc::WEXITSTATUS(workload_status)) };
+    }
+    if libc::WIFSIGNALED(workload_status) {
+        unsafe { libc::_exit(128 + libc::WTERMSIG(workload_status)) };
+    }
+    unsafe { libc::_exit(125) }
+}
+
+#[cfg(target_os = "linux")]
 unsafe fn rootless_child_fail(error_fd: libc::c_int, stage: i32) -> ! {
     let failure = RootlessChildFailure {
         stage,
