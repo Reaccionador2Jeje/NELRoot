@@ -29,6 +29,12 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
         run: cargo test --all-targets -- --test-threads=1
+      - name: Rootless runtime integration smoke test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y busybox-static
+          bash scripts/smoke-test-rootless-runtime.sh
+
       - name: Build Debian package smoke test
         run: |
           cargo build --release
