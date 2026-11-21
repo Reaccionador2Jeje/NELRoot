@@ -10,6 +10,23 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" engine status --help >/dev/null
 "$BINARY" run --help >/dev/null
 "$BINARY" shell --help >/dev/null
+"$BINARY" project --help >/dev/null
+"$BINARY" project create --help >/dev/null
+"$BINARY" project run --help >/dev/null
+"$BINARY" shell-rootless --help >/dev/null
+"$BINARY" run-rootless --help >/dev/null
+"$BINARY" host run --help >/dev/null
+
+TEST_HOME="$(mktemp -d)"
+trap 'rm -rf "$TEST_HOME"' EXIT
+NELROOT_HOME="$TEST_HOME" "$BINARY" project create smoke-project >/dev/null
+PROJECTS="$(NELROOT_HOME="$TEST_HOME" "$BINARY" project list)"
+[[ "$PROJECTS" == *"smoke-project"* ]]
+PROJECT_PATH="$(NELROOT_HOME="$TEST_HOME" "$BINARY" project path smoke-project)"
+[[ -d "$PROJECT_PATH" ]]
+NELROOT_HOME="$TEST_HOME" "$BINARY" host run --project smoke-project -- /bin/true
+NELROOT_HOME="$TEST_HOME" "$BINARY" project run smoke-project --host -- /bin/true
+
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
 "$BINARY" elf map --help >/dev/null

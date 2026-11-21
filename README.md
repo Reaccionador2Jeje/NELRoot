@@ -16,7 +16,7 @@ A major integration objective is to replace the PRoot-based Ubuntu backend in **
 
 NELRoot is also planned for native package-manager distribution: APT (`.deb`), DNF/Zypper (`.rpm`), Pacman (`.pkg.tar.zst`), APK and Termux packages. AtDev-maintained signed repositories are the initial target; inclusion in official distribution repositories requires their separate maintainer review and acceptance.
 
-See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. The first-party image distribution service is implemented as a separate `nelroot-hub` binary; see [docs/IMAGE_REGISTRIES.md](docs/IMAGE_REGISTRIES.md) for its API, storage layout and publishing workflow. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
+See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. The first-party image distribution service is implemented as a separate `nelroot-hub` binary; see [docs/IMAGE_REGISTRIES.md](docs/IMAGE_REGISTRIES.md) for its API, storage layout and publishing workflow. Signed native package repositories and broad package-manager integration remain future goals. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
 
 ## Install
 
@@ -93,6 +93,14 @@ nelroot image update ubuntu-noble --registry https://example.org/nelroot/index.j
 nelroot image clean
 
 nelroot logs --lines 50
+nelroot project create demo
+nelroot project list
+# Run on the Linux host
+nelroot project run demo --host -- make test
+# Or run inside an imported distro
+nelroot project run demo --image ubuntu -- make test
+# Pass build/runtime configuration (repeat --env KEY=VALUE)
+nelroot project run demo --image ubuntu --env RUST_LOG=debug --env APP_MODE=dev -- make test
 nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 # Linux only: map a static host-native PIE into memory, without executing it
@@ -106,10 +114,23 @@ nelroot engine status --json
 # Native Linux execution (Linux host + effective UID 0 and required capabilities)
 nelroot run ubuntu -- /bin/uname -a
 nelroot shell ubuntu
-# Rootless native launcher (no host root; Linux user + mount namespaces)
+# Rootless interactive shell (no host root)
+nelroot shell-rootless ubuntu
+# Share a persistent NELRoot project with the distro at /workspace
+nelroot shell-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /workspace
+# Run a project with tools installed inside the distro
+nelroot run-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /workspace -- /bin/sh -lc 'make test'
+# Run the same project directly on the Linux host (no guest isolation)
+nelroot host run --project demo -- make test
+# Unified developer command: choose --host or --image
+nelroot project run demo --host -- make test
+nelroot project run demo --image ubuntu -- make test
+# Rootless native launcher (no host root; user, mount and PID namespaces)
 nelroot run-rootless ubuntu -- /bin/uname -a
 # Optional, unsafe: retain host root credentials inside chroot
 nelroot shell ubuntu --keep-root
+# Rootless interactive shell (recommended for unprivileged Linux hosts)
+nelroot shell-rootless ubuntu
 ```
 
 Run `nelroot <command> --help` for command-specific help.
@@ -123,7 +144,7 @@ nelroot run-rootless <image> -- /bin/sh -c 'printf "NELRoot rootless OK\\n"'
 nelroot run-rootless <image> -- /bin/uname -m
 ```
 
-This backend is implemented directly with Linux user and private mount namespaces, UID/GID mapping, a read-only rootfs bind mount, `pivot_root`, a bounded temporary `/tmp`, and `no_new_privs`. It does not invoke PRoot, QEMU or Docker. The invoking host UID/GID remain unprivileged. The current milestone is same-architecture and still lacks PID-namespace supervision, signal forwarding, isolated networking, and guest `/proc` and `/dev` mounts. Kernel, container, seccomp or LSM policy can deny namespace or mount operations; NELRoot fails closed instead of falling back to chroot. See [docs/ROOTLESS_RUNTIME.md](docs/ROOTLESS_RUNTIME.md) for exact limits and prerequisites.
+This backend is implemented directly with Linux user, mount and PID namespaces, UID/GID mapping, a persistent writable OverlayFS root, `pivot_root`, guest `/proc`, and `no_new_privs`. The imported image remains the immutable lower layer; writes persist in a per-image upper layer. The guest runs under a supervised PID namespace; parent-death cleanup prevents the namespace from being orphaned if NELRoot exits unexpectedly. It does not invoke PRoot, QEMU or Docker. The invoking host UID/GID remain unprivileged. The current milestone is same-architecture and now includes a minimal `/dev` device set, devpts and `/dev/shm`. It still lacks isolated networking, resource limits, full host-supervisor signal forwarding, broader virtual filesystems and complete distribution validation. The guest PID 1 shim forwards common signals to its workload, reaps children and cleans up namespace descendants when the workload exits. Kernel, container, seccomp or LSM policy can deny namespace or mount operations; NELRoot fails closed instead of falling back to chroot. See [docs/ROOTLESS_RUNTIME.md](docs/ROOTLESS_RUNTIME.md) for exact limits and prerequisites.
 
 ### Native Linux runtime
 

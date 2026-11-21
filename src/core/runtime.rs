@@ -632,6 +632,14 @@ fn validate_rootless_launch(
             "rootfs must contain a real /tmp directory for the isolated writable tmpfs",
         ));
     }
+    let proc_dir = rootfs.join("proc");
+    let proc_metadata = std::fs::symlink_metadata(&proc_dir)?;
+    if proc_metadata.file_type().is_symlink() || !proc_metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs must contain a real /proc directory for the guest PID namespace",
+        ));
+    }
     // The rootless backend uses /run as pivot_root's put_old directory.
     // It may contain guest runtime files; do not require it to be empty.
     let run = rootfs.join("run");
@@ -664,6 +672,171 @@ fn validate_rootless_launch(
         ));
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn configure_parent_death_signal(expected_parent: libc::pid_t) -> Result<(), libc::c_int> {
+    if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0) } != 0 {
+        return Err(unsafe { *libc::__errno_location() });
+    }
+    if unsafe { libc::getppid() } != expected_parent {
+        return Err(libc::ECHILD);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+static GUEST_INIT_CHILD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[cfg(target_os = "linux")]
+extern "C" fn forward_guest_init_signal(signal: libc::c_int) {
+    let child = GUEST_INIT_CHILD_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if child > 0 {
+        // SAFETY: kill is async-signal-safe; the negative PID targets the
+        // workload process group established by the PID-1 shim.
+        unsafe { libc::kill(-child, signal) };
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn set_guest_init_signal_disposition(
+    signal: libc::c_int,
+    handler: usize,
+) -> Result<(), io::Error> {
+    // SAFETY: zero is a valid initial representation for sigaction on Linux.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    action.sa_flags = libc::SA_RESTART;
+    unsafe { libc::sigemptyset(&mut action.sa_mask) };
+    if unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn guest_init_signals() -> [libc::c_int; 8] {
+    [
+        libc::SIGTERM,
+        libc::SIGINT,
+        libc::SIGHUP,
+        libc::SIGQUIT,
+        libc::SIGUSR1,
+        libc::SIGUSR2,
+        libc::SIGWINCH,
+        libc::SIGCONT,
+    ]
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn reset_guest_workload_signals() {
+    for signal in guest_init_signals() {
+        // SAFETY: a zeroed sigaction with SIG_DFL and an empty mask is valid.
+        let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+        action.sa_sigaction = libc::SIG_DFL;
+        unsafe {
+            libc::sigemptyset(&mut action.sa_mask);
+            libc::sigaction(signal, &action, std::ptr::null_mut());
+        }
+    }
+}
+
+/// Run the workload as a child of PID 1, forwarding common signals and reaping
+/// every process in the guest PID namespace before the init shim exits.
+#[cfg(target_os = "linux")]
+unsafe fn run_guest_pid1(
+    program: *const libc::c_char,
+    argv: *const *const libc::c_char,
+    envp: *const *const libc::c_char,
+) -> ! {
+    for signal in guest_init_signals() {
+        if unsafe {
+            set_guest_init_signal_disposition(
+                signal,
+                forward_guest_init_signal as *const () as usize,
+            )
+        }
+        .is_err()
+        {
+            unsafe { libc::_exit(125) };
+        }
+    }
+
+    let child = unsafe { libc::fork() };
+    if child < 0 {
+        unsafe { libc::_exit(125) };
+    }
+    if child == 0 {
+        unsafe {
+            libc::setpgid(0, 0);
+            reset_guest_workload_signals();
+            libc::execve(program, argv, envp);
+            libc::_exit(127);
+        }
+    }
+
+    unsafe { libc::setpgid(child, child) };
+    GUEST_INIT_CHILD_PID.store(child, std::sync::atomic::Ordering::Relaxed);
+
+    let mut workload_status = 0;
+    let mut workload_reaped = false;
+    loop {
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(-1, &mut status, 0) };
+        if waited == child {
+            workload_status = status;
+            workload_reaped = true;
+            break;
+        }
+        if waited > 0 {
+            continue;
+        }
+        let errno = unsafe { *libc::__errno_location() };
+        if errno == libc::EINTR {
+            continue;
+        }
+        if errno == libc::ECHILD {
+            break;
+        }
+        unsafe { libc::_exit(125) };
+    }
+
+    // PID 1 must not leave daemonized descendants running after the command
+    // completes. kill(-1, ...) is scoped to this PID namespace.
+    unsafe {
+        libc::kill(-child, libc::SIGKILL);
+        libc::kill(-1, libc::SIGKILL);
+    }
+    loop {
+        let mut status = 0;
+        let waited = unsafe { libc::waitpid(-1, &mut status, 0) };
+        if waited > 0 {
+            if waited == child {
+                workload_status = status;
+                workload_reaped = true;
+            }
+            continue;
+        }
+        let errno = unsafe { *libc::__errno_location() };
+        if errno == libc::EINTR {
+            continue;
+        }
+        if errno == libc::ECHILD {
+            break;
+        }
+        unsafe { libc::_exit(125) };
+    }
+
+    if !workload_reaped {
+        unsafe { libc::_exit(125) };
+    }
+    if libc::WIFEXITED(workload_status) {
+        unsafe { libc::_exit(libc::WEXITSTATUS(workload_status)) };
+    }
+    if libc::WIFSIGNALED(workload_status) {
+        unsafe { libc::_exit(128 + libc::WTERMSIG(workload_status)) };
+    }
+    unsafe { libc::_exit(125) }
 }
 
 #[cfg(target_os = "linux")]
@@ -718,22 +891,204 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
     }
 }
 
-/// Launch a same-architecture program in a rootless user and private mount namespace.
+/// Prepare persistent, per-image OverlayFS storage for rootless sessions.
+#[cfg(target_os = "linux")]
+fn prepare_rootless_overlay_storage(
+    image_name: &str,
+) -> io::Result<(std::path::PathBuf, std::path::PathBuf, std::fs::File)> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::PermissionsExt;
+
+    if image_name.is_empty()
+        || image_name.len() > 64
+        || !image_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid container image name",
+        ));
+    }
+
+    let container_dir = crate::core::config::data_dir()
+        .join("containers")
+        .join(image_name);
+    std::fs::create_dir_all(&container_dir)?;
+    let metadata = std::fs::symlink_metadata(&container_dir)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container storage must be a real directory",
+        ));
+    }
+    std::fs::set_permissions(&container_dir, std::fs::Permissions::from_mode(0o700))?;
+
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(container_dir.join("container.lock"))?;
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::WouldBlock {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "this image already has an active NELRoot session; close it before starting another",
+            ));
+        }
+        return Err(error);
+    }
+
+    let upper = container_dir.join("upper");
+    let work = container_dir.join("work");
+    std::fs::create_dir_all(&upper)?;
+    std::fs::create_dir_all(&work)?;
+    for path in [&upper, &work] {
+        let metadata = std::fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "OverlayFS upper and work paths must be real directories",
+            ));
+        }
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        let value = path.to_string_lossy();
+        if value.contains(',') || value.contains(':') {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "container storage path contains an unsupported OverlayFS option character",
+            ));
+        }
+    }
+
+    if std::fs::read_dir(&work)?.next().is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "OverlayFS work directory is not empty; refusing unsafe reuse",
+        ));
+    }
+
+    Ok((upper, work, lock))
+}
+
+/// Validate a host project workspace before exposing it inside a guest.
+#[cfg(target_os = "linux")]
+fn validate_rootless_workspace(path: &Path) -> io::Result<std::path::PathBuf> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "workspace must be an existing real directory, not a symlink",
+        ));
+    }
+    let canonical = path.canonicalize()?;
+    let value = canonical.to_string_lossy();
+    if value.contains(',') || value.contains(':') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "workspace path contains an unsupported OverlayFS or mount option character",
+        ));
+    }
+    Ok(canonical)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_optional_guest_directory(path: &Path) -> io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "guest mountpoint {} must be a real directory",
+                    path.display()
+                ),
+            ))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_optional_guest_device(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::FileTypeExt;
+
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            let file_type = metadata.file_type();
+            if file_type.is_symlink() || !(file_type.is_file() || file_type.is_char_device()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "guest device mountpoint {} must be a regular file or character device",
+                        path.display()
+                    ),
+                ));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_rootless_device_mountpoints(rootfs: &Path, upper: &Path) -> io::Result<()> {
+    for base in [rootfs, upper] {
+        for directory in ["dev", "dev/pts", "dev/shm"] {
+            validate_optional_guest_directory(&base.join(directory))?;
+        }
+        for device in [
+            "dev/null",
+            "dev/zero",
+            "dev/full",
+            "dev/random",
+            "dev/urandom",
+        ] {
+            validate_optional_guest_device(&base.join(device))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_workspace_mountpoint(path: &Path) -> io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "guest /workspace must be a real directory when it already exists",
+            ))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Launch a same-architecture program in rootless user, mount, and PID namespaces.
 ///
 /// The parent pauses a child while installing its single-ID UID/GID maps. The
-/// child then creates a private mount namespace, bind-mounts the image read-only,
-/// mounts a bounded tmpfs over /tmp, pivots into the image, detaches the old
-/// root, enables no_new_privs, and execs the guest program. The image is not
-/// modified. PID and network namespace isolation are not implemented yet.
+/// child creates a private mount namespace and writable OverlayFS, then creates
+/// a PID namespace. Its first child becomes PID 1, enters the guest root, mounts
+/// procfs for that PID namespace, and execs the requested program. The outer
+/// child supervises PID 1 and forwards its exit status. Network isolation is
+/// intentionally not enabled: guest programs use host networking by default.
 #[cfg(target_os = "linux")]
 pub fn run_rootless_image(
     image_name: &str,
     program: &str,
     arguments: &[String],
     guest_cwd: &Path,
+    workspace: Option<&Path>,
+    env_overrides: &std::collections::BTreeMap<String, String>,
 ) -> Result<ExitStatus, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
 
+    let workspace = workspace.map(validate_rootless_workspace).transpose()?;
     let catalog = images::load_catalog()?;
     let image = catalog
         .images
@@ -751,6 +1106,12 @@ pub fn run_rootless_image(
             .ok_or("registered image has no root filesystem path")?,
     ))?;
 
+    let (upper_dir, work_dir, _container_lock) = prepare_rootless_overlay_storage(image_name)?;
+    if workspace.is_some() {
+        validate_workspace_mountpoint(&rootfs.join("workspace"))?;
+        validate_workspace_mountpoint(&upper_dir.join("workspace"))?;
+    }
+    validate_rootless_device_mountpoints(&rootfs, &upper_dir)?;
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
     let unique = format!(
@@ -767,8 +1128,52 @@ pub fn run_rootless_image(
         return Err(error.into());
     }
 
-    let root_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
     let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
+    let workspace_c = workspace
+        .as_ref()
+        .map(|path| CString::new(path.as_os_str().as_encoded_bytes()))
+        .transpose()?;
+    let workspace_target = target.join("workspace");
+    let workspace_target_c = CString::new(workspace_target.as_os_str().as_encoded_bytes())?;
+    let dev_dir_c = CString::new(target.join("dev").as_os_str().as_encoded_bytes())?;
+    let dev_pts_c = CString::new(target.join("dev/pts").as_os_str().as_encoded_bytes())?;
+    let dev_shm_c = CString::new(target.join("dev/shm").as_os_str().as_encoded_bytes())?;
+    let device_mounts = [
+        (
+            CString::new(target.join("dev/null").as_os_str().as_encoded_bytes())?,
+            c"/dev/null",
+        ),
+        (
+            CString::new(target.join("dev/zero").as_os_str().as_encoded_bytes())?,
+            c"/dev/zero",
+        ),
+        (
+            CString::new(target.join("dev/full").as_os_str().as_encoded_bytes())?,
+            c"/dev/full",
+        ),
+        (
+            CString::new(target.join("dev/random").as_os_str().as_encoded_bytes())?,
+            c"/dev/random",
+        ),
+        (
+            CString::new(target.join("dev/urandom").as_os_str().as_encoded_bytes())?,
+            c"/dev/urandom",
+        ),
+    ];
+    let devpts_options = CString::new("newinstance,ptmxmode=0666,mode=0620,gid=0")?;
+    let dev_shm_options = CString::new("mode=1777,size=64m")?;
+    for path in [&rootfs, &upper_dir, &work_dir] {
+        let value = path.to_string_lossy();
+        if value.contains(',') || value.contains(':') {
+            return Err("rootfs and container storage paths cannot contain commas or colons with OverlayFS mount options".into());
+        }
+    }
+    let overlay_options = CString::new(format!(
+        "lowerdir={},upperdir={},workdir={},userxattr",
+        rootfs.display(),
+        upper_dir.display(),
+        work_dir.display()
+    ))?;
     let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
     let program_c = CString::new(program)?;
     let mut argv = Vec::with_capacity(arguments.len() + 2);
@@ -779,12 +1184,29 @@ pub fn run_rootless_image(
     let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|value| value.as_ptr()).collect();
     argv_ptrs.push(std::ptr::null());
 
-    let env = [
-        CString::new("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")?,
-        CString::new("HOME=/tmp")?,
-        CString::new("USER=root")?,
-        CString::new("LOGNAME=root")?,
-    ];
+    let mut guest_env = std::collections::BTreeMap::from([
+        (
+            "PATH".to_owned(),
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned(),
+        ),
+        ("HOME".to_owned(), "/root".to_owned()),
+        ("USER".to_owned(), "root".to_owned()),
+        ("LOGNAME".to_owned(), "root".to_owned()),
+        ("SHELL".to_owned(), "/bin/sh".to_owned()),
+        ("TMPDIR".to_owned(), "/tmp".to_owned()),
+        ("PWD".to_owned(), guest_cwd.display().to_string()),
+        (
+            "TERM".to_owned(),
+            std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned()),
+        ),
+    ]);
+    for (key, value) in env_overrides {
+        guest_env.insert(key.clone(), value.clone());
+    }
+    let env: Vec<CString> = guest_env
+        .iter()
+        .map(|(key, value)| CString::new(format!("{key}={value}")))
+        .collect::<Result<_, _>>()?;
     let mut env_ptrs: Vec<*const libc::c_char> = env.iter().map(|value| value.as_ptr()).collect();
     env_ptrs.push(std::ptr::null());
 
@@ -817,6 +1239,7 @@ pub fn run_rootless_image(
         return Err(error.into());
     }
 
+    let expected_parent = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let error = io::Error::last_os_error();
@@ -838,6 +1261,11 @@ pub fn run_rootless_image(
             libc::close(release_pipe[1]);
             libc::close(error_pipe[0]);
 
+            if let Err(errno) = configure_parent_death_signal(expected_parent) {
+                let value = errno.clamp(1, 255) as u8;
+                libc::write(ready_pipe[1], (&value as *const u8).cast(), 1);
+                libc::_exit(125);
+            }
             if libc::unshare(libc::CLONE_NEWUSER) != 0 {
                 let errno = *libc::__errno_location();
                 let value = errno.clamp(1, 255) as u8;
@@ -856,6 +1284,12 @@ pub fn run_rootless_image(
                 libc::_exit(125);
             }
             libc::close(release_pipe[0]);
+            // UID/GID map installation happens while this child is paused.
+            // Re-arm the parent-death signal after mapping before any mounts.
+            if let Err(errno) = configure_parent_death_signal(expected_parent) {
+                *libc::__errno_location() = errno;
+                rootless_child_fail(error_pipe[1], 22);
+            }
 
             if libc::unshare(libc::CLONE_NEWNS) != 0 {
                 rootless_child_fail(error_pipe[1], 1);
@@ -871,29 +1305,140 @@ pub fn run_rootless_image(
                 rootless_child_fail(error_pipe[1], 2);
             }
             if libc::mount(
-                root_c.as_ptr(),
+                c"overlay".as_ptr(),
                 target_c.as_ptr(),
-                std::ptr::null(),
-                libc::MS_BIND as libc::c_ulong,
-                std::ptr::null(),
+                c"overlay".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                overlay_options.as_ptr().cast::<libc::c_void>(),
             ) != 0
             {
                 rootless_child_fail(error_pipe[1], 3);
             }
-            if libc::mount(
-                std::ptr::null(),
-                target_c.as_ptr(),
-                std::ptr::null(),
-                (libc::MS_BIND
-                    | libc::MS_REMOUNT
-                    | libc::MS_RDONLY
-                    | libc::MS_NOSUID
-                    | libc::MS_NODEV) as libc::c_ulong,
-                std::ptr::null(),
-            ) != 0
-            {
+            // Create minimal /dev mountpoints in the writable overlay. The
+            // imported rootfs and the persistent upper layer were checked for
+            // symlinks and unsafe file types before this child was forked.
+            for directory in [&dev_dir_c, &dev_pts_c, &dev_shm_c] {
+                if libc::mkdir(directory.as_ptr(), 0o755) != 0 {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 16);
+                    }
+                }
+            }
+            for (target_device, host_device) in &device_mounts {
+                let descriptor = libc::open(
+                    target_device.as_ptr(),
+                    libc::O_WRONLY
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_CLOEXEC
+                        | libc::O_NOFOLLOW,
+                    0o600,
+                );
+                if descriptor >= 0 {
+                    libc::close(descriptor);
+                } else {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 17);
+                    }
+                }
+                if libc::mount(
+                    host_device.as_ptr(),
+                    target_device.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 18);
+                }
+                if libc::mount(
+                    std::ptr::null(),
+                    target_device.as_ptr(),
+                    std::ptr::null(),
+                    (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID) as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 19);
+                }
+            }
+            if let Some(workspace_source) = workspace_c.as_ref() {
+                // The guest mountpoint is created in the writable overlay, not
+                // in the immutable imported image. Its lower/upper forms were
+                // checked for symlinks before the child was forked.
+                if libc::mkdir(workspace_target_c.as_ptr(), 0o755) != 0 {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 13);
+                    }
+                }
+                if libc::mount(
+                    workspace_source.as_ptr(),
+                    workspace_target_c.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 14);
+                }
+                if libc::mount(
+                    std::ptr::null(),
+                    workspace_target_c.as_ptr(),
+                    std::ptr::null(),
+                    (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID | libc::MS_NODEV)
+                        as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 15);
+                }
+            }
+            // unshare(CLONE_NEWPID) applies to subsequently created children.
+            // Keep this process as a supervisor; the next child becomes PID 1.
+            if libc::unshare(libc::CLONE_NEWPID) != 0 {
                 rootless_child_fail(error_pipe[1], 4);
             }
+            let supervisor_pid = libc::getpid();
+            let init_pid = libc::fork();
+            if init_pid < 0 {
+                rootless_child_fail(error_pipe[1], 4);
+            }
+            if init_pid == 0
+                && let Err(errno) = configure_parent_death_signal(supervisor_pid)
+            {
+                *libc::__errno_location() = errno;
+                rootless_child_fail(error_pipe[1], 22);
+            }
+            if init_pid > 0 {
+                let mut init_status = 0;
+                loop {
+                    let waited = libc::waitpid(init_pid, &mut init_status, 0);
+                    if waited == init_pid {
+                        break;
+                    }
+                    if waited < 0 {
+                        let errno = *libc::__errno_location();
+                        if errno == libc::EINTR {
+                            continue;
+                        }
+                        libc::_exit(125);
+                    }
+                }
+                if libc::WIFEXITED(init_status) {
+                    libc::_exit(libc::WEXITSTATUS(init_status));
+                }
+                if libc::WIFSIGNALED(init_status) {
+                    let signal = libc::WTERMSIG(init_status);
+                    libc::signal(signal, libc::SIG_DFL);
+                    libc::raise(signal);
+                    libc::_exit(128 + signal);
+                }
+                libc::_exit(125);
+            }
+            // This branch is PID 1 inside the new PID namespace.
             if libc::chdir(target_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 5);
             }
@@ -907,23 +1452,43 @@ pub fn run_rootless_image(
                 rootless_child_fail(error_pipe[1], 8);
             }
             if libc::mount(
-                c"tmpfs".as_ptr(),
-                c"/tmp".as_ptr(),
-                c"tmpfs".as_ptr(),
-                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
+                c"proc".as_ptr(),
+                c"/proc".as_ptr(),
+                c"proc".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
+                std::ptr::null(),
             ) != 0
             {
                 rootless_child_fail(error_pipe[1], 9);
             }
+            if libc::mount(
+                c"devpts".as_ptr(),
+                c"/dev/pts".as_ptr(),
+                c"devpts".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NOEXEC) as libc::c_ulong,
+                devpts_options.as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 20);
+            }
+            if libc::mount(
+                c"tmpfs".as_ptr(),
+                c"/dev/shm".as_ptr(),
+                c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
+                dev_shm_options.as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 21);
+            }
+
             if libc::chdir(cwd_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 10);
             }
             if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                 rootless_child_fail(error_pipe[1], 11);
             }
-            libc::execve(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
-            rootless_child_fail(error_pipe[1], 12);
+            run_guest_pid1(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
         }
     }
 
@@ -1003,16 +1568,26 @@ pub fn run_rootless_image(
         let stage = match failure.stage {
             1 => "create private mount namespace",
             2 => "make mount propagation private",
-            3 => "bind-mount rootfs",
-            4 => "remount rootfs read-only",
-            5 => "enter rootfs mount",
+            3 => "mount writable OverlayFS rootfs",
+            4 => "create PID namespace and init process",
+            5 => "enter writable overlay rootfs",
             6 => "pivot_root",
             7 => "change to guest root",
             8 => "detach old root",
-            9 => "mount writable /tmp",
+            9 => "mount guest /proc",
             10 => "change guest working directory",
             11 => "enable no_new_privs",
             12 => "execute guest program",
+            13 => "create guest /workspace mountpoint",
+            14 => "bind-mount host project workspace",
+            15 => "secure guest workspace mount flags",
+            16 => "create guest /dev mountpoints",
+            17 => "create guest device placeholders",
+            18 => "bind-mount a standard host device",
+            19 => "secure guest device mount flags",
+            20 => "mount guest devpts",
+            21 => "mount guest /dev/shm",
+            22 => "arm guest init parent-death cleanup",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
@@ -1320,6 +1895,110 @@ mod tests {
 
         assert!(validate_pivot_root_target(&root).is_err());
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rootless_workspace_validation_rejects_symlinks_and_non_directories() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-workspace-validation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let workspace = root.join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace should be created");
+        assert_eq!(
+            validate_rootless_workspace(&workspace).unwrap(),
+            workspace.canonicalize().unwrap()
+        );
+
+        let link = root.join("workspace-link");
+        symlink(&workspace, &link).expect("workspace symlink should be created");
+        assert!(validate_rootless_workspace(&link).is_err());
+
+        let file = root.join("not-a-directory");
+        std::fs::write(&file, "x").expect("test file should be created");
+        assert!(validate_rootless_workspace(&file).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test directory should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guest_workspace_mountpoint_must_be_a_real_directory_or_missing() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-workspace-mountpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&root).expect("test root should be created");
+        assert!(validate_workspace_mountpoint(&root.join("missing")).is_ok());
+
+        let directory = root.join("directory");
+        std::fs::create_dir(&directory).expect("test directory should be created");
+        assert!(validate_workspace_mountpoint(&directory).is_ok());
+
+        let file = root.join("file");
+        std::fs::write(&file, "x").expect("test file should be created");
+        assert!(validate_workspace_mountpoint(&file).is_err());
+
+        let link = root.join("link");
+        symlink(&directory, &link).expect("test symlink should be created");
+        assert!(validate_workspace_mountpoint(&link).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test root should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guest_device_mountpoints_reject_symlinks_and_unsafe_types() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-device-mountpoints-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let upper = root.join("upper");
+        std::fs::create_dir_all(root.join("dev")).expect("guest dev should be created");
+        std::fs::create_dir_all(&upper).expect("upper layer should be created");
+
+        assert!(validate_optional_guest_directory(&root.join("dev/pts")).is_ok());
+        assert!(validate_optional_guest_device(&root.join("dev/missing")).is_ok());
+
+        let regular_device = root.join("dev/null");
+        std::fs::write(&regular_device, "").expect("device placeholder should be created");
+        assert!(validate_optional_guest_device(&regular_device).is_ok());
+
+        let directory_device = root.join("dev/zero");
+        std::fs::create_dir(&directory_device).expect("directory placeholder should be created");
+        assert!(validate_optional_guest_device(&directory_device).is_err());
+
+        let symlink_device = root.join("dev/random");
+        symlink(&regular_device, &symlink_device).expect("device symlink should be created");
+        assert!(validate_optional_guest_device(&symlink_device).is_err());
+
+        let symlink_directory = root.join("dev/shm");
+        symlink(&upper, &symlink_directory).expect("mountpoint symlink should be created");
+        assert!(validate_optional_guest_directory(&symlink_directory).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test root should be removed");
     }
 
     #[test]

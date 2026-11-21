@@ -33,10 +33,15 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Synchronized disposable-child probe for user-namespace UID/GID mapping, private mount namespace and PID-1 assignment (diagnostic only; no rootfs or guest process).
 - [x] Initial guest VFS path normalization and root confinement with canonical symlink checks (inspection helpers only; not a security boundary for later opens).
 - [x] Linux root-confined file open and exclusive create using openat2(2), pinned root directory descriptors and RESOLVE_IN_ROOT (requires Linux 5.6+; no fallback on older kernels).
-- [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop (no namespace isolation or signal forwarding yet).
+- [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop.
+- [x] Parent-death cleanup for the rootless namespace supervisor and guest PID 1, with parent-PID race checks and post-UID-map re-arming.
 - [x] Linux child-side primitive for a private mount namespace with recursive-private propagation (requires a mapped user namespace; launch handshake and rootfs setup remain pending).
 - [x] Linux child-side pivot_root primitive for a read-only mounted rootfs, using the existing empty /run directory on the rootfs mount as put_old (does not launch or supervise a guest process).
-- [x] First rootless guest launcher with synchronized UID/GID mapping, private mount namespace, read-only rootfs, same-mount pivot_root, writable tmpfs /tmp, no_new_privs and exit-status propagation (PID/network isolation and guest /proc,/dev remain pending).
+- [x] Rootless guest launcher with synchronized UID/GID mapping, private mount namespace, persistent writable OverlayFS, pivot_root and no_new_privs.
+- [x] PID namespace with supervised guest PID 1 and guest /proc mount.
+- [x] Minimal guest /dev device nodes, devpts and bounded /dev/shm.
+- [x] Guest PID 1 common-signal forwarding, child-process reaping and namespace-scoped descendant cleanup after workload exit.
+- [ ] Host-supervisor forwarding of externally delivered signals, isolated networking, resource limits and port lifecycle management.
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
@@ -64,11 +69,14 @@ Target workflows:
 - [x] Open an interactive shell in a registered same-architecture rootfs on Linux hosts with chroot privileges (initial chroot backend; not a sandbox).
 - [x] Run explicit same-architecture Linux commands through the initial native chroot backend (Linux host + effective root/CAP_SYS_CHROOT required).
 - [ ] Run common Linux development commands and toolchains with a fully independent ABI and isolation layer.
-- Clone, build, test and compile projects.
-- Run local web servers, APIs, databases and development services where supported.
-- Expose and manage development ports safely.
-- Package projects into distributable artifacts.
-- Manage environment variables, working directories, processes and persistent project files.
+- [x] Create, list and locate persistent named project workspaces under `~/.nelroot/projects`.
+- [x] Bind-mount an explicitly selected host project directory into a rootless distro at `/workspace` with `nosuid,nodev`.
+- [x] Provide an explicit Linux host execution target for projects that need host-installed tools or native host integration (no guest isolation).
+- [x] Add a unified `nelroot project run` command that selects either a distro target (`--image`) or direct host execution (`--host`).
+- [ ] Clone, build, test and compile projects in distro workspaces across the supported distribution matrix.
+- [ ] Run local web servers, APIs, databases and development services where supported.
+- [ ] Expose and manage development ports safely.
+- [ ] Manage environment variables, working directories, processes and persistent project files.
 - Create, start, stop, inspect, export and remove named environments through simple commands.
 - Provide clear errors, sensible defaults, progress feedback and guided setup.
 
@@ -160,4 +168,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. It has an initial rootless user/mount-namespace launcher for same-architecture programs, plus a separate privileged chroot backend. The rootless launcher is not yet a complete container: it lacks PID namespace supervision, network isolation, /proc and /dev mounts, resource limits and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility and full process lifecycle support remain unverified.
+NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage, a guest /proc mount and a PID 1 shim that forwards common signals to its workload, reaps children and cleans up namespace descendants after workload exit. A separate privileged chroot backend also exists. The rootless launcher is not yet a complete developer environment: guest /dev is minimal; full host-supervisor signal forwarding, network isolation, resource limits, service/port management and broad distribution validation remain incomplete. Parent-death cleanup is implemented for the namespace supervisor and guest init. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.

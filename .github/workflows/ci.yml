@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nelroot-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: Format, lint and test
@@ -22,17 +26,26 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check shell scripts
-        run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh scripts/publish-archlinux-bootstrap.sh scripts/publish-void-rootfs.sh scripts/publish-fedora-container.sh scripts/publish-all-images.sh scripts/smoke-test-hub.sh packaging/build-deb.sh packaging/build-rpm.sh
+        run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh scripts/publish-archlinux-bootstrap.sh scripts/publish-void-rootfs.sh scripts/publish-fedora-container.sh scripts/publish-all-images.sh scripts/smoke-test-hub.sh scripts/smoke-test-rootless-runtime.sh scripts/smoke-test-distro-rootfs.sh packaging/build-deb.sh packaging/build-rpm.sh
       - name: Preview complete image publishing batch
         run: bash scripts/publish-all-images.sh --list
+      - name: Verify publisher works from scripts directory
+        working-directory: scripts
+        run: bash publish-all-images.sh --list
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
-        run: cargo test --all-targets
+        run: cargo test --all-targets -- --test-threads=1
+      - name: Rootless runtime integration smoke test (NELRoot native rootfs)
+        run: |
+          cargo build --release --bin nelroot
+          sudo apt-get update
+          sudo apt-get install -y busybox-static
+          bash scripts/smoke-test-rootless-runtime.sh
       - name: Build Debian package smoke test
         run: |
           cargo build --release
-          VERSION="$(sed -n 's/^version = \"\(.*\)\"/\1/p' Cargo.toml | head -n 1)"
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           bash packaging/build-deb.sh "$VERSION" x86_64-unknown-linux-gnu target/release/nelroot dist
           dpkg-deb --info "dist/nelroot_${VERSION}_amd64.deb"
           dpkg-deb --contents "dist/nelroot_${VERSION}_amd64.deb"
@@ -40,7 +53,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm
-          VERSION="$(sed -n 's/^version = \"\(.*\)\"/\1/p' Cargo.toml | head -n 1)"
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           bash packaging/build-rpm.sh "$VERSION" x86_64-unknown-linux-gnu target/release/nelroot dist
           rpm -qpl "dist/nelroot-$VERSION-x86_64.rpm"
       - name: Smoke-test CLI and NEXORA JSON contract
@@ -49,3 +62,49 @@ jobs:
         run: cargo build --release --bin nelroot-hub
       - name: Smoke-test first-party Image Hub API
         run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
+      - name: Upload NELRoot CLI for distro matrix
+        uses: actions/upload-artifact@v4
+        with:
+          name: nelroot-ci-x86_64
+          path: target/release/nelroot
+          retention-days: 1
+
+  runtime-distro-smoke:
+    name: Hub image availability / smoke (${{ matrix.distro }})
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: Ubuntu Base 24.04.5
+            image_id: atdev/ubuntu-24.04.5
+            local_name: ci-ubuntu
+            expected_id: ubuntu
+          - distro: Alpine Mini Rootfs
+            image_id: atdev/alpine-3.24.4
+            local_name: ci-alpine
+            expected_id: alpine
+          - distro: Arch Linux Bootstrap
+            image_id: atdev/archlinux-bootstrap
+            local_name: ci-arch
+            expected_id: arch
+          - distro: Void Linux glibc
+            image_id: atdev/void-20250202-glibc
+            local_name: ci-void
+            expected_id: void
+          - distro: Fedora Container Base
+            image_id: atdev/fedora-45
+            local_name: ci-fedora
+            expected_id: fedora
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download NELRoot CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nelroot-ci-x86_64
+          path: target/release
+      - name: Make NELRoot CLI executable
+        run: chmod +x target/release/nelroot
+      - name: Pull and smoke-test Hub image (if published)
+        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image_id }}" "${{ matrix.local_name }}" "${{ matrix.expected_id }}"

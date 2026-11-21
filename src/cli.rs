@@ -42,6 +42,11 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Manage persistent developer project workspaces.
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommands,
+    },
     /// Manage operating-system images.
     Image {
         #[command(subcommand)]
@@ -56,6 +61,12 @@ enum Commands {
     Engine {
         #[command(subcommand)]
         command: EngineCommands,
+    },
+    /// Run a project directly on the Linux host, outside any guest environment.
+    #[cfg(target_os = "linux")]
+    Host {
+        #[command(subcommand)]
+        command: HostCommands,
     },
     /// Execute a host-native program inside a registered image using Linux chroot.
     Run {
@@ -79,9 +90,27 @@ enum Commands {
         /// Guest working directory.
         #[arg(long, default_value = "/")]
         cwd: std::path::PathBuf,
+        /// Optional host project directory mounted at /workspace in the guest.
+        #[arg(long)]
+        workspace: Option<std::path::PathBuf>,
         /// Absolute guest executable and its arguments after --.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
+    },
+    /// Open an interactive shell using the rootless Linux runtime.
+    #[cfg(target_os = "linux")]
+    ShellRootless {
+        /// Registered image name.
+        image: String,
+        /// Guest shell executable.
+        #[arg(long, default_value = "/bin/sh")]
+        shell: String,
+        /// Guest working directory.
+        #[arg(long, default_value = "/")]
+        cwd: std::path::PathBuf,
+        /// Optional host project directory mounted at /workspace in the guest.
+        #[arg(long)]
+        workspace: Option<std::path::PathBuf>,
     },
     /// Open an interactive shell inside a registered image.
     Shell {
@@ -105,6 +134,42 @@ enum ConfigCommands {
     Path,
     /// Display the current configuration.
     Show,
+}
+
+#[derive(Debug, Subcommand)]
+enum ProjectCommands {
+    /// Create a persistent project directory under ~/.nelroot/projects.
+    Create {
+        /// Project name (letters, numbers, hyphens and underscores).
+        name: String,
+    },
+    /// List persistent project workspaces.
+    List,
+    /// Print the host path of a project workspace.
+    Path {
+        /// Project name.
+        name: String,
+    },
+    /// Run a project in a Linux distro or directly on the host.
+    Run {
+        /// Project name.
+        name: String,
+        /// Registered distro image to run the project in.
+        #[arg(long, conflicts_with = "host", required_unless_present = "host")]
+        image: Option<String>,
+        /// Run directly on the host Linux installation (no guest isolation).
+        #[arg(long, conflicts_with = "image")]
+        host: bool,
+        /// Guest working directory when --image is selected.
+        #[arg(long, default_value = "/workspace")]
+        cwd: std::path::PathBuf,
+        /// Environment override KEY=VALUE (repeatable; applied in host and guest mode).
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
+        /// Executable and arguments after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -364,6 +429,45 @@ enum EngineCommands {
     },
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug, Subcommand)]
+enum HostCommands {
+    /// Execute a command using the host Linux kernel and host-installed tools.
+    Run {
+        /// Run from a NELRoot project directory.
+        #[arg(long, conflicts_with = "cwd")]
+        project: Option<String>,
+        /// Explicit host working directory (defaults to the current directory).
+        #[arg(long)]
+        cwd: Option<std::path::PathBuf>,
+        /// Host executable and arguments after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
+    },
+}
+
+fn parse_env_overrides(
+    entries: &[String],
+) -> Result<std::collections::BTreeMap<String, String>, Box<dyn std::error::Error>> {
+    let mut values = std::collections::BTreeMap::new();
+    for entry in entries {
+        let (key, value) = entry.split_once('=').ok_or("--env expects KEY=VALUE")?;
+        if key.is_empty()
+            || key.as_bytes().contains(&0)
+            || key.contains('=')
+            || value.as_bytes().contains(&0)
+            || !key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            || key.as_bytes()[0].is_ascii_digit()
+        {
+            return Err(format!("invalid environment assignment: {key}").into());
+        }
+        values.insert(key.to_owned(), value.to_owned());
+    }
+    Ok(values)
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -512,6 +616,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Configuration", path.display());
             ui::key("Image catalog", images::catalog_path().display());
             ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Projects", config::projects_dir().display());
             ui::key("Cache", config::cache_dir().display());
             ui::key("Logs", config::logs_dir().display());
             ui::key("Runtime state", config::runtime_dir().display());
@@ -522,6 +627,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Configuration", config::config_path().display());
             ui::key("Image catalog", images::catalog_path().display());
             ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Projects", config::projects_dir().display());
             ui::key("Cache", config::cache_dir().display());
             ui::key("Logs", config::logs_dir().display());
             ui::key("Runtime state", config::runtime_dir().display());
@@ -539,6 +645,182 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Configuration not initialized. Run nelroot setup first.");
                 } else {
                     print!("{}", std::fs::read_to_string(path)?);
+                }
+            }
+        },
+        Commands::Project { command } => match command {
+            ProjectCommands::Create { name } => {
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
+                {
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
+                }
+                config::initialize()?;
+                let path = config::projects_dir().join(&name);
+                match std::fs::symlink_metadata(&path) {
+                    Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                        return Err(
+                            "project path already exists and is not a real directory".into()
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        std::fs::create_dir(&path)?;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+                ui::good(&format!("Project workspace ready: {name}"));
+                ui::key("Host path", path.display());
+                ui::key("Guest mount", "/workspace");
+            }
+            ProjectCommands::List => {
+                config::initialize()?;
+                let mut projects = Vec::new();
+                for entry in std::fs::read_dir(config::projects_dir())? {
+                    let entry = entry?;
+                    let metadata = std::fs::symlink_metadata(entry.path())?;
+                    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+                        projects.push(entry.file_name().to_string_lossy().into_owned());
+                    }
+                }
+                projects.sort();
+                if projects.is_empty() {
+                    ui::muted("No projects yet. Create one with 'nelroot project create <name>'.");
+                } else {
+                    for project in projects {
+                        println!("{project}");
+                    }
+                }
+            }
+            ProjectCommands::Path { name } => {
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
+                {
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
+                }
+                let path = config::projects_dir().join(name);
+                let metadata = std::fs::symlink_metadata(&path)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err("project path must be a real directory".into());
+                }
+                println!("{}", path.display());
+            }
+            ProjectCommands::Run {
+                name,
+                image,
+                host,
+                cwd,
+                env,
+                command,
+            } => {
+                let env_overrides = parse_env_overrides(&env)?;
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
+                {
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
+                }
+                config::initialize()?;
+                let workspace = config::projects_dir().join(&name);
+                let metadata = std::fs::symlink_metadata(&workspace)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err("project workspace must be an existing real directory".into());
+                }
+                let program = command.first().ok_or("missing project executable")?;
+                if host {
+                    ui::banner("Project execution on Linux host");
+                    ui::key("Project", &name);
+                    ui::key("Working directory", workspace.display());
+                    ui::warn("Host mode has no distro or namespace isolation.");
+                    let status = std::process::Command::new(program)
+                        .args(&command[1..])
+                        .envs(env_overrides.iter())
+                        .current_dir(&workspace)
+                        .status()?;
+                    if !status.success() {
+                        use std::os::unix::process::ExitStatusExt;
+                        std::process::exit(status.code().unwrap_or_else(|| {
+                            status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                        }));
+                    }
+                } else {
+                    let image = image.as_deref().ok_or("select --image or --host")?;
+                    ui::banner("Project execution in Linux distro");
+                    ui::key("Project", &name);
+                    ui::key("Distro", image);
+                    ui::key("Guest workspace", "/workspace");
+                    let status = runtime::run_rootless_image(
+                        image,
+                        program,
+                        &command[1..],
+                        &cwd,
+                        Some(&workspace),
+                        &env_overrides,
+                    )?;
+                    if !status.success() {
+                        use std::os::unix::process::ExitStatusExt;
+                        std::process::exit(status.code().unwrap_or_else(|| {
+                            status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                        }));
+                    }
+                }
+            }
+        },
+        #[cfg(target_os = "linux")]
+        Commands::Host { command } => match command {
+            HostCommands::Run {
+                project,
+                cwd,
+                command,
+            } => {
+                let program = command.first().ok_or("missing host executable")?;
+                let working_directory = if let Some(name) = project {
+                    if name.is_empty()
+                        || name.len() > 64
+                        || !name.chars().all(|character| {
+                            character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                        })
+                    {
+                        return Err(
+                            "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                        );
+                    }
+                    config::projects_dir().join(name)
+                } else {
+                    cwd.unwrap_or(std::env::current_dir()?)
+                };
+                let metadata = std::fs::symlink_metadata(&working_directory)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(
+                        "host project working directory must be an existing real directory".into(),
+                    );
+                }
+                ui::banner("Linux host execution");
+                ui::key("Executable", program);
+                ui::key("Working directory", working_directory.display());
+                ui::warn(
+                    "This command runs directly on the host; it has no distro or namespace isolation.",
+                );
+                let status = std::process::Command::new(program)
+                    .args(&command[1..])
+                    .current_dir(working_directory)
+                    .status()?;
+                if !status.success() {
+                    std::process::exit(status.code().unwrap_or(128));
                 }
             }
         },
@@ -1295,6 +1577,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::RunRootless {
             image,
             cwd,
+            workspace,
             command,
         } => {
             let program = command.first().ok_or("missing guest executable")?;
@@ -1302,9 +1585,54 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::banner("Rootless Linux runtime");
             ui::key("Image", &image);
             ui::key("Executable", program);
-            ui::good("Host UID/GID remain unprivileged; rootfs is read-only except /tmp.");
-            ui::warn("PID/network namespaces and /proc and /dev mounts are not implemented yet.");
-            let status = runtime::run_rootless_image(&image, program, arguments, &cwd)?;
+            ui::good("Host UID/GID remain unprivileged; guest writes persist in OverlayFS.");
+            ui::good("Guest PID namespace, /proc, standard /dev devices and devpts are enabled.");
+            ui::good("Host networking remains shared; no network namespace is created.");
+            if let Some(path) = workspace.as_ref() {
+                ui::key(
+                    "Project workspace",
+                    format!("{} -> /workspace", path.display()),
+                );
+            }
+            let status = runtime::run_rootless_image(
+                &image,
+                program,
+                arguments,
+                &cwd,
+                workspace.as_deref(),
+                &std::collections::BTreeMap::new(),
+            )?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(128));
+            }
+        }
+        #[cfg(target_os = "linux")]
+        Commands::ShellRootless {
+            image,
+            shell,
+            cwd,
+            workspace,
+        } => {
+            ui::banner("Rootless interactive Linux shell");
+            ui::key("Image", &image);
+            ui::key("Shell", &shell);
+            ui::good(
+                "Guest runs with persistent storage, PID isolation, /proc and standard /dev devices.",
+            );
+            if let Some(path) = workspace.as_ref() {
+                ui::key(
+                    "Project workspace",
+                    format!("{} -> /workspace", path.display()),
+                );
+            }
+            let status = runtime::run_rootless_image(
+                &image,
+                &shell,
+                &["-i".to_owned()],
+                &cwd,
+                workspace.as_deref(),
+                &std::collections::BTreeMap::new(),
+            )?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
@@ -1331,4 +1659,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod env_override_tests {
+    use super::parse_env_overrides;
+
+    #[test]
+    fn parses_repeatable_environment_overrides() {
+        let values = parse_env_overrides(&[
+            "MODE=dev".to_owned(),
+            "EMPTY=".to_owned(),
+            "MODE=release".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(values.get("MODE").map(String::as_str), Some("release"));
+        assert_eq!(values.get("EMPTY").map(String::as_str), Some(""));
+    }
+
+    #[test]
+    fn rejects_invalid_environment_keys_and_missing_equals() {
+        for entry in ["", "MISSING", "9BAD=value", "BAD-KEY=value", "=value"] {
+            assert!(parse_env_overrides(&[entry.to_owned()]).is_err(), "{entry}");
+        }
+    }
 }
