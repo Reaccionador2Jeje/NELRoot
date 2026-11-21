@@ -1,48 +1,65 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${1:?usage: smoke-test-distro-rootfs.sh IMAGE LOCAL_NAME}"
-LOCAL_NAME="${2:?usage: smoke-test-distro-rootfs.sh IMAGE LOCAL_NAME}"
+IMAGE_ID="${1:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME}"
+LOCAL_NAME="${2:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME}"
 NELROOT_BIN="${NELROOT_BIN:-target/release/nelroot}"
+HUB_URL="${NELROOT_HUB_URL:-https://nelroot-image-hub-production.up.railway.app}"
 WORK="$(mktemp -d)"
-CONTAINER_ID=""
-cleanup() {
-  if [[ -n "$CONTAINER_ID" ]]; then docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true; fi
-  rm -rf "$WORK"
-}
-trap cleanup EXIT
+trap 'rm -rf "$WORK"' EXIT
 
-docker pull "$IMAGE"
-CONTAINER_ID="$(docker create --entrypoint /bin/sh "$IMAGE" -c 'exit 0')"
-ROOTFS="$WORK/rootfs"
-mkdir -p "$ROOTFS"
-docker export "$CONTAINER_ID" | tar -xf - -C "$ROOTFS"
-docker rm "$CONTAINER_ID" >/dev/null
-CONTAINER_ID=""
+for command_name in curl python3; do
+  command -v "$command_name" >/dev/null 2>&1 || {
+    echo "Required command not found: $command_name" >&2
+    exit 1
+  }
+done
+[[ -x "$NELROOT_BIN" ]] || { echo "NELROOT_BIN is not executable: $NELROOT_BIN" >&2; exit 1; }
 
+ARCH="$(uname -m)"
+echo "Checking first-party NELRoot Image Hub for $IMAGE_ID ($ARCH)..."
+if ! curl --fail --location --silent --show-error --retry 2 \
+    --proto '=https' --proto-redir '=https' \
+    "$HUB_URL/v1/catalog" -o "$WORK/catalog.json"; then
+  echo "ERROR: could not read the NELRoot Image Hub catalog." >&2
+  exit 1
+fi
 
-# A distro image may ship transient runtime files; the pivot_root put_old
-# directory must be a dedicated empty mountpoint in this test rootfs.
-rm -rf "$ROOTFS/run"
-mkdir -p "$ROOTFS/run" "$ROOTFS/tmp" "$ROOTFS/proc" "$ROOTFS/dev/pts" "$ROOTFS/dev/shm" "$ROOTFS/workspace"
-chmod 1777 "$ROOTFS/tmp" "$ROOTFS/dev/shm"
+if ! python3 - "$WORK/catalog.json" "$IMAGE_ID" "$ARCH" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    catalog = json.load(stream)
+found = any(
+    entry.get("id") == sys.argv[2]
+    and entry.get("architecture") == sys.argv[3]
+    for entry in catalog.get("images", [])
+)
+sys.exit(0 if found else 1)
+PY
+then
+  echo "SKIP: $IMAGE_ID ($ARCH) is not published in the first-party NELRoot Image Hub catalog yet."
+  exit 0
+fi
 
 export HOME="$WORK/home"
 mkdir -p "$HOME"
-ARCH="$(uname -m)"
-"$NELROOT_BIN" image register "$LOCAL_NAME" "$ROOTFS" --architecture "$ARCH"
-if OUTPUT="$("$NELROOT_BIN" run-rootless "$LOCAL_NAME" -- /bin/sh -c 'printf "DISTRO_ROOTFS_OK\\n"; uname -m; printf "DISTRO_ID="; . /etc/os-release; printf "%s\\n" "${ID:-unknown}"')" 2>&1; then
-  printf '%s\\n' "$OUTPUT"
-  grep -q '^DISTRO_ROOTFS_OK$' <<<"$OUTPUT"
+# hub-pull verifies the catalog, manifest, archive size and SHA-256 before
+# extracting and registering the rootfs. No Docker daemon or Docker Hub used.
+"$NELROOT_BIN" image hub-pull "$IMAGE_ID" --hub "$HUB_URL" --architecture "$ARCH" --name "$LOCAL_NAME"
+
+if OUTPUT="$("$NELROOT_BIN" run-rootless "$LOCAL_NAME" -- /bin/sh -c 'printf "NELROOT_HUB_ROOTFS_OK\\n"; uname -m; printf "DISTRO_ID="; . /etc/os-release; printf "%s\\n" "${ID:-unknown}"' 2>&1)"; then
+  printf '%s\n' "$OUTPUT"
+  grep -q '^NELROOT_HUB_ROOTFS_OK$' <<<"$OUTPUT"
   grep -q "^$ARCH$" <<<"$OUTPUT"
   grep -q '^DISTRO_ID=' <<<"$OUTPUT"
-  echo "Rootfs smoke test passed: $IMAGE"
+  echo "First-party Hub rootfs smoke test passed: $IMAGE_ID"
 else
   STATUS=$?
   if grep -Fq "rootless runtime failed to create private mount namespace: Operation not permitted" <<<"$OUTPUT"; then
-    echo "SKIP: runner policy blocks rootless mount namespaces; image registration passed for $IMAGE."
+    echo "SKIP: runner policy blocks rootless mount namespaces; verified Hub pull and image registration passed for $IMAGE_ID."
     exit 0
   fi
-  printf '%s\\n' "$OUTPUT" >&2
+  printf '%s\n' "$OUTPUT" >&2
   exit "$STATUS"
 fi
