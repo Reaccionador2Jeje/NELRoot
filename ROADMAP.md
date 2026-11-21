@@ -36,7 +36,9 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Initial owned child-process supervisor with poll, wait, terminate, exit-status propagation and best-effort kill/reap on drop (no namespace isolation or signal forwarding yet).
 - [x] Linux child-side primitive for a private mount namespace with recursive-private propagation (requires a mapped user namespace; launch handshake and rootfs setup remain pending).
 - [x] Linux child-side pivot_root primitive for a read-only mounted rootfs, using the existing empty /run directory on the rootfs mount as put_old (does not launch or supervise a guest process).
-- [x] First rootless guest launcher with synchronized UID/GID mapping, private mount namespace, read-only rootfs, same-mount pivot_root, writable tmpfs /tmp, no_new_privs and exit-status propagation (PID/network isolation and guest /proc,/dev remain pending).
+- [x] Rootless guest launcher with synchronized UID/GID mapping, private mount namespace, persistent writable OverlayFS, pivot_root and no_new_privs.
+- [x] PID namespace with supervised guest PID 1 and guest /proc mount.
+- [ ] Guest /dev, devpts, shared memory, isolated networking, resource limits and full signal/descendant lifecycle handling.
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
@@ -64,11 +66,12 @@ Target workflows:
 - [x] Open an interactive shell in a registered same-architecture rootfs on Linux hosts with chroot privileges (initial chroot backend; not a sandbox).
 - [x] Run explicit same-architecture Linux commands through the initial native chroot backend (Linux host + effective root/CAP_SYS_CHROOT required).
 - [ ] Run common Linux development commands and toolchains with a fully independent ABI and isolation layer.
-- Clone, build, test and compile projects.
-- Run local web servers, APIs, databases and development services where supported.
-- Expose and manage development ports safely.
-- Package projects into distributable artifacts.
-- Manage environment variables, working directories, processes and persistent project files.
+- [ ] Create persistent named project workspaces and mount them into selected distro environments.
+- [ ] Clone, build, test and compile projects in a distro workspace.
+- [ ] Provide an explicit host-Linux execution target for projects that need host tools, kernel interfaces or native host integration.
+- [ ] Run local web servers, APIs, databases and development services where supported.
+- [ ] Expose and manage development ports safely.
+- [ ] Manage environment variables, working directories, processes and persistent project files.
 - Create, start, stop, inspect, export and remove named environments through simple commands.
 - Provide clear errors, sensible defaults, progress feedback and guided setup.
 
@@ -160,4 +163,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. It has an initial rootless user/mount-namespace launcher for same-architecture programs, plus a separate privileged chroot backend. The rootless launcher is not yet a complete container: it lacks PID namespace supervision, network isolation, /proc and /dev mounts, resource limits and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility and full process lifecycle support remain unverified.
+NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage and a guest /proc mount, plus a separate privileged chroot backend. The rootless launcher is not yet a complete developer environment: it lacks guest /dev and devpts, network isolation, resource limits, project workspace mounts, full process lifecycle support and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.
