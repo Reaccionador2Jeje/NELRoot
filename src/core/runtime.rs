@@ -896,7 +896,7 @@ pub fn run_rootless_image(
             if libc::chdir(target_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 5);
             }
-            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) != 0 {
+            if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run/lock".as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 6);
             }
             if libc::chdir(c"/".as_ptr()) != 0 {
