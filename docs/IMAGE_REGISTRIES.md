@@ -311,7 +311,7 @@ It currently includes:
 
 | Distribution | Release | Hub architectures |
 |---|---|---|
-| Ubuntu Base | 24.04.5 | `x86_64`, `aarch64` |
+| Ubuntu Base | 24.04.5 | `x86_64`, `aarch64`, `arm`, `ppc64le`, `riscv64`, `s390x` |
 | Alpine Mini Root Filesystem | 3.24.4 | `x86_64`, `aarch64`, `armv7`, `riscv64` |
 
 The script runs sequentially, checks the live catalog before each publish, and
@@ -337,7 +337,7 @@ Optional overrides:
     ALPINE_VERSION=3.24.4 ./scripts/publish-all-images.sh
 
 The command requires `curl`, `python3`, and the `nelroot` CLI on the
-publishing machine. It uploads the six variants listed above; it does not
+publishing machine. It uploads the ten variants listed above; it does not
 claim to mirror every Linux distribution or every architecture in existence.
 The catalog can be searched after publishing:
 
