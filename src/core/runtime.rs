@@ -1241,11 +1241,11 @@ pub fn run_rootless_image(
             if init_pid < 0 {
                 rootless_child_fail(error_pipe[1], 4);
             }
-            if init_pid == 0 {
-                if let Err(errno) = configure_parent_death_signal(supervisor_pid) {
-                    *libc::__errno_location() = errno;
-                    rootless_child_fail(error_pipe[1], 22);
-                }
+            if init_pid == 0
+                && let Err(errno) = configure_parent_death_signal(supervisor_pid)
+            {
+                *libc::__errno_location() = errno;
+                rootless_child_fail(error_pipe[1], 22);
             }
             if init_pid > 0 {
                 let mut init_status = 0;
