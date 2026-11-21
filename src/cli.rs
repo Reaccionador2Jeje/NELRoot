@@ -42,6 +42,11 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Manage persistent developer project workspaces.
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommands,
+    },
     /// Manage operating-system images.
     Image {
         #[command(subcommand)]
@@ -123,6 +128,22 @@ enum ConfigCommands {
     Path,
     /// Display the current configuration.
     Show,
+}
+
+#[derive(Debug, Subcommand)]
+enum ProjectCommands {
+    /// Create a persistent project directory under ~/.nelroot/projects.
+    Create {
+        /// Project name (letters, numbers, hyphens and underscores).
+        name: String,
+    },
+    /// List persistent project workspaces.
+    List,
+    /// Print the host path of a project workspace.
+    Path {
+        /// Project name.
+        name: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -558,6 +579,68 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     print!("{}", std::fs::read_to_string(path)?);
                 }
+            }
+        },
+        Commands::Project { command } => match command {
+            ProjectCommands::Create { name } => {
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+                {
+                    return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                }
+                config::initialize()?;
+                let path = config::projects_dir().join(&name);
+                match std::fs::symlink_metadata(&path) {
+                    Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                        return Err("project path already exists and is not a real directory".into());
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        std::fs::create_dir(&path)?;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+                ui::good(&format!("Project workspace ready: {name}"));
+                ui::key("Host path", path.display());
+                ui::key("Guest mount", "/workspace");
+            }
+            ProjectCommands::List => {
+                config::initialize()?;
+                let mut projects = Vec::new();
+                for entry in std::fs::read_dir(config::projects_dir())? {
+                    let entry = entry?;
+                    let metadata = std::fs::symlink_metadata(entry.path())?;
+                    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+                        projects.push(entry.file_name().to_string_lossy().into_owned());
+                    }
+                }
+                projects.sort();
+                if projects.is_empty() {
+                    ui::muted("No projects yet. Create one with 'nelroot project create <name>'.");
+                } else {
+                    for project in projects {
+                        println!("{project}");
+                    }
+                }
+            }
+            ProjectCommands::Path { name } => {
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+                {
+                    return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                }
+                let path = config::projects_dir().join(name);
+                let metadata = std::fs::symlink_metadata(&path)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err("project path must be a real directory".into());
+                }
+                println!("{}", path.display());
             }
         },
         Commands::Image { command } => match command {
