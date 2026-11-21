@@ -267,7 +267,7 @@ impl X86_64Interpreter {
         if carry {
             flags |= FLAG_CF;
         }
-        if result.to_le_bytes()[0].count_ones() % 2 == 0 {
+        if result.to_le_bytes()[0].count_ones().is_multiple_of(2) {
             flags |= FLAG_PF;
         }
         if auxiliary {
@@ -352,10 +352,9 @@ impl X86_64Interpreter {
             if matches!(
                 self.step(context, dispatcher)?,
                 StepOutcome::ProcessExited { .. }
-            ) {
-                if let GuestProcessState::Exited { code } = context.process {
-                    return Ok(CpuStopReason::ProcessExited { code });
-                }
+            ) && let GuestProcessState::Exited { code } = context.process
+            {
+                return Ok(CpuStopReason::ProcessExited { code });
             }
         }
         Ok(CpuStopReason::StepLimitReached)
