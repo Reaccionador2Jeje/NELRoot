@@ -20,6 +20,26 @@ pub struct RootlessNamespaceInfo {
     pub max_user_namespaces: Option<u64>,
 }
 
+/// Configurable resource limits for a rootless guest process.
+#[derive(Debug, Clone, Copy)]
+pub struct ResourceLimits {
+    pub address_space_bytes: u64,
+    pub cpu_seconds: u64,
+    pub max_open_files: u64,
+    pub max_file_size_bytes: u64,
+}
+
+impl Default for ResourceLimits {
+    fn default() -> Self {
+        Self {
+            address_space_bytes: 512 * 1024 * 1024,
+            cpu_seconds: 300,
+            max_open_files: 256,
+            max_file_size_bytes: 64 * 1024 * 1024,
+        }
+    }
+}
+
 impl RootlessNamespaceInfo {
     /// Whether kernel settings appear to permit an unprivileged user namespace.
     pub fn potentially_available(self) -> bool {
@@ -724,13 +744,14 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
 /// child then creates a private mount namespace, bind-mounts the image read-only,
 /// mounts a bounded tmpfs over /tmp, pivots into the image, detaches the old
 /// root, enables no_new_privs, and execs the guest program. The image is not
-/// modified. PID and network namespace isolation are not implemented yet.
+/// modified. PID namespace isolation is not implemented yet; network isolation uses a private network namespace.
 #[cfg(target_os = "linux")]
 pub fn run_rootless_image(
     image_name: &str,
     program: &str,
     arguments: &[String],
     guest_cwd: &Path,
+    limits: ResourceLimits,
 ) -> Result<ExitStatus, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
 
@@ -857,6 +878,11 @@ pub fn run_rootless_image(
             }
             libc::close(release_pipe[0]);
 
+            // Aislar la red del invitado en su propio namespace.
+            if libc::unshare(libc::CLONE_NEWNET) != 0 {
+                rootless_child_fail(error_pipe[1], 13);
+            }
+
             if libc::unshare(libc::CLONE_NEWNS) != 0 {
                 rootless_child_fail(error_pipe[1], 1);
             }
@@ -870,6 +896,49 @@ pub fn run_rootless_image(
             {
                 rootless_child_fail(error_pipe[1], 2);
             }
+            // Crear un namespace PID privado para el invitado.
+            if libc::unshare(libc::CLONE_NEWPID) != 0 {
+                rootless_child_fail(error_pipe[1], 14);
+            }
+
+            // Crear PID 1: ejecutará el programa invitado.
+            let init_pid = libc::fork();
+            if init_pid < 0 {
+                rootless_child_fail(error_pipe[1], 15);
+            }
+
+            // El proceso original actúa como supervisor.
+            if init_pid > 0 {
+                libc::close(error_pipe[1]);
+
+                let mut status = 0;
+                loop {
+                    let waited = libc::waitpid(init_pid, &mut status, 0);
+
+                    if waited == init_pid {
+                        break;
+                    }
+
+                    if waited < 0 {
+                        let errno = *libc::__errno_location();
+                        if errno == libc::EINTR {
+                            continue;
+                        }
+                        libc::_exit(125);
+                    }
+                }
+
+                if libc::WIFEXITED(status) {
+                    libc::_exit(libc::WEXITSTATUS(status));
+                }
+
+                if libc::WIFSIGNALED(status) {
+                    libc::_exit(128 + libc::WTERMSIG(status));
+                }
+
+                libc::_exit(125);
+            }
+
             if libc::mount(
                 root_c.as_ptr(),
                 target_c.as_ptr(),
@@ -880,6 +949,49 @@ pub fn run_rootless_image(
             {
                 rootless_child_fail(error_pipe[1], 3);
             }
+
+            // Preparar los montajes privados antes de hacer read-only la raíz.
+            if libc::chdir(target_c.as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 5);
+            }
+
+            if libc::mount(
+                c"proc".as_ptr(),
+                c"proc".as_ptr(),
+                c"proc".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 16);
+            }
+
+            if libc::mount(
+                c"tmpfs".as_ptr(),
+                c"dev".as_ptr(),
+                c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NOEXEC) as libc::c_ulong,
+                c"mode=755,size=4m".as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 17);
+            }
+
+            if libc::mount(
+                c"tmpfs".as_ptr(),
+                c"tmp".as_ptr(),
+                c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 9);
+            }
+
+            if libc::chdir(c"/".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 7);
+            }
+
             if libc::mount(
                 std::ptr::null(),
                 target_c.as_ptr(),
@@ -906,22 +1018,32 @@ pub fn run_rootless_image(
             if libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) != 0 {
                 rootless_child_fail(error_pipe[1], 8);
             }
-            if libc::mount(
-                c"tmpfs".as_ptr(),
-                c"/tmp".as_ptr(),
-                c"tmpfs".as_ptr(),
-                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
-            ) != 0
-            {
-                rootless_child_fail(error_pipe[1], 9);
-            }
             if libc::chdir(cwd_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 10);
             }
             if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                 rootless_child_fail(error_pipe[1], 11);
             }
+            // Aplicar límites configurables al proceso invitado.
+            let resource_limits = [
+                (libc::RLIMIT_AS, limits.address_space_bytes),
+                (libc::RLIMIT_CPU, limits.cpu_seconds),
+                (libc::RLIMIT_NOFILE, limits.max_open_files),
+                (libc::RLIMIT_FSIZE, limits.max_file_size_bytes),
+                (libc::RLIMIT_CORE, 0),
+            ];
+
+            for (resource, value) in resource_limits {
+                let limit = libc::rlimit {
+                    rlim_cur: value as libc::rlim_t,
+                    rlim_max: value as libc::rlim_t,
+                };
+
+                if libc::setrlimit(resource, &limit) != 0 {
+                    rootless_child_fail(error_pipe[1], 18);
+                }
+            }
+
             libc::execve(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
             rootless_child_fail(error_pipe[1], 12);
         }
@@ -1013,6 +1135,11 @@ pub fn run_rootless_image(
             10 => "change guest working directory",
             11 => "enable no_new_privs",
             12 => "execute guest program",
+            13 => "create private network namespace",
+            14 => "create private PID namespace",
+            15 => "start guest init process",
+            16 => "mount guest /proc",
+            17 => "mount private guest /dev",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);

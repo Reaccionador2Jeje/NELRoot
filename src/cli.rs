@@ -6,6 +6,47 @@ use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, regist
 use nelroot::core::{cpu, stack};
 #[cfg(target_os = "linux")]
 use nelroot::core::{memory, relocation};
+fn parse_size(value: &str) -> Result<u64, String> {
+    let value = value.trim().to_ascii_uppercase();
+
+    let (number, multiplier) = if let Some(v) = value
+        .strip_suffix("GIB")
+        .or_else(|| value.strip_suffix("GB"))
+        .or_else(|| value.strip_suffix("G"))
+    {
+        (v, 1024_u64.pow(3))
+    } else if let Some(v) = value
+        .strip_suffix("MIB")
+        .or_else(|| value.strip_suffix("MB"))
+        .or_else(|| value.strip_suffix("M"))
+    {
+        (v, 1024_u64.pow(2))
+    } else if let Some(v) = value
+        .strip_suffix("KIB")
+        .or_else(|| value.strip_suffix("KB"))
+        .or_else(|| value.strip_suffix("K"))
+    {
+        (v, 1024_u64)
+    } else if let Some(v) = value.strip_suffix("B") {
+        (v, 1_u64)
+    } else {
+        (value.as_str(), 1_u64)
+    };
+
+    let amount: u64 = number
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid size: {value}"))?;
+
+    if amount == 0 {
+        return Err("size must be greater than zero".into());
+    }
+
+    amount
+        .checked_mul(multiplier)
+        .ok_or_else(|| "size is too large".into())
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "nelroot",
@@ -79,6 +120,18 @@ enum Commands {
         /// Guest working directory.
         #[arg(long, default_value = "/")]
         cwd: std::path::PathBuf,
+        /// Maximum virtual address space per process (e.g. 512M, 1G).
+        #[arg(long, default_value = "512M", value_parser = parse_size)]
+        memory: u64,
+        /// Maximum cumulative CPU time per process, in seconds.
+        #[arg(long, default_value_t = 300)]
+        cpu_time: u64,
+        /// Maximum number of open file descriptors per process.
+        #[arg(long, default_value_t = 256)]
+        max_files: u64,
+        /// Maximum individual file size (e.g. 64M, 1G).
+        #[arg(long, default_value = "64M", value_parser = parse_size)]
+        max_file_size: u64,
         /// Absolute guest executable and its arguments after --.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
@@ -1295,16 +1348,34 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::RunRootless {
             image,
             cwd,
+            memory,
+            cpu_time,
+            max_files,
+            max_file_size,
             command,
         } => {
             let program = command.first().ok_or("missing guest executable")?;
             let arguments = &command[1..];
+
+            let limits = runtime::ResourceLimits {
+                address_space_bytes: memory,
+                cpu_seconds: cpu_time,
+                max_open_files: max_files,
+                max_file_size_bytes: max_file_size,
+            };
+
             ui::banner("Rootless Linux runtime");
             ui::key("Image", &image);
             ui::key("Executable", program);
-            ui::good("Host UID/GID remain unprivileged; rootfs is read-only except /tmp.");
-            ui::warn("PID/network namespaces and /proc and /dev mounts are not implemented yet.");
-            let status = runtime::run_rootless_image(&image, program, arguments, &cwd)?;
+            ui::key("Virtual memory limit", &format!("{memory} bytes/process"));
+            ui::key("CPU time limit", &format!("{cpu_time} seconds/process"));
+            ui::key("Open files limit", &max_files.to_string());
+            ui::key("File size limit", &format!("{max_file_size} bytes"));
+            ui::good("Resource limits configured; rootfs is read-only except temporary mounts.");
+            ui::warn("Private /dev is minimal; standard device nodes are not provided yet.");
+
+            let status = runtime::run_rootless_image(&image, program, arguments, &cwd, limits)?;
+
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
