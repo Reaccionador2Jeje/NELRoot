@@ -64,10 +64,6 @@ already_published() {
 
     curl --fail --location --silent --show-error --retry 3 \
         --proto '=https' --proto-redir '=https' \
-        "$HUB_URL/v1/catalog" -o "$catalog_file"
-
-    curl --fail --location --silent --show-error --retry 3 \
-        --proto '=https' --proto-redir '=https' \
         "$HUB_URL/v1/catalog" -o "$catalog_file" || return 2
 
     local result
