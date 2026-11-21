@@ -30,7 +30,9 @@ EOF
 ARCH="$(uname -m)"
 "$NELROOT_BIN" image register rootless-smoke "$WORK/rootfs" --architecture "$ARCH"
 
-if OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "ROOTLESS_SMOKE_OK\\n"; /bin/uname -m; /bin/sh -c "sleep 1 & exit 0"')" 2>&1; then
+# Capture stderr inside the command substitution: the runtime's namespace
+# policy error is reported on stderr, and CI must classify it as a skip.
+if OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "ROOTLESS_SMOKE_OK\\n"; /bin/uname -m; /bin/sh -c "sleep 1 & exit 0"' 2>&1)"; then
   printf '%s\n' "$OUTPUT"
   grep -q '^ROOTLESS_SMOKE_OK$' <<<"$OUTPUT"
   grep -q "^$ARCH$" <<<"$OUTPUT"
@@ -38,7 +40,7 @@ if OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "R
 else
   STATUS=$?
   if grep -Fq "rootless runtime failed to create private mount namespace: Operation not permitted" <<<"$OUTPUT"; then
-    echo "SKIP: CI runner policy blocks rootless mount namespaces; rootfs registration passed."
+    echo "SKIP: CI runner policy blocks rootless mount namespaces; NELRoot native rootfs registration passed."
     exit 0
   fi
   printf '%s\n' "$OUTPUT" >&2
