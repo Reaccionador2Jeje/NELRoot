@@ -1031,14 +1031,20 @@ pub fn run_rootless_image(
     argv_ptrs.push(std::ptr::null());
 
     let mut guest_env = std::collections::BTreeMap::from([
-        ("PATH".to_owned(), "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned()),
+        (
+            "PATH".to_owned(),
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned(),
+        ),
         ("HOME".to_owned(), "/root".to_owned()),
         ("USER".to_owned(), "root".to_owned()),
         ("LOGNAME".to_owned(), "root".to_owned()),
         ("SHELL".to_owned(), "/bin/sh".to_owned()),
         ("TMPDIR".to_owned(), "/tmp".to_owned()),
         ("PWD".to_owned(), guest_cwd.display().to_string()),
-        ("TERM".to_owned(), std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned())),
+        (
+            "TERM".to_owned(),
+            std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned()),
+        ),
     ]);
     for (key, value) in env_overrides {
         guest_env.insert(key.clone(), value.clone());
