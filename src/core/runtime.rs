@@ -830,6 +830,54 @@ fn validate_rootless_workspace(path: &Path) -> io::Result<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
+fn validate_optional_guest_directory(path: &Path) -> io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => Err(
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("guest mountpoint {} must be a real directory", path.display()),
+            ),
+        ),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_optional_guest_device(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::FileTypeExt;
+
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            let file_type = metadata.file_type();
+            if file_type.is_symlink() || !(file_type.is_file() || file_type.is_char_device()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("guest device mountpoint {} must be a regular file or character device", path.display()),
+                ));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_rootless_device_mountpoints(rootfs: &Path, upper: &Path) -> io::Result<()> {
+    for base in [rootfs, upper] {
+        for directory in ["dev", "dev/pts", "dev/shm"] {
+            validate_optional_guest_directory(&base.join(directory))?;
+        }
+        for device in ["dev/null", "dev/zero", "dev/full", "dev/random", "dev/urandom"] {
+            validate_optional_guest_device(&base.join(device))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 fn validate_workspace_mountpoint(path: &Path) -> io::Result<()> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
@@ -885,6 +933,7 @@ pub fn run_rootless_image(
         validate_workspace_mountpoint(&rootfs.join("workspace"))?;
         validate_workspace_mountpoint(&upper_dir.join("workspace"))?;
     }
+    validate_rootless_device_mountpoints(&rootfs, &upper_dir)?;
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
     let unique = format!(
@@ -908,6 +957,18 @@ pub fn run_rootless_image(
         .transpose()?;
     let workspace_target = target.join("workspace");
     let workspace_target_c = CString::new(workspace_target.as_os_str().as_encoded_bytes())?;
+    let dev_dir_c = CString::new(target.join("dev").as_os_str().as_encoded_bytes())?;
+    let dev_pts_c = CString::new(target.join("dev/pts").as_os_str().as_encoded_bytes())?;
+    let dev_shm_c = CString::new(target.join("dev/shm").as_os_str().as_encoded_bytes())?;
+    let device_mounts = [
+        (CString::new(target.join("dev/null").as_os_str().as_encoded_bytes())?, c"/dev/null"),
+        (CString::new(target.join("dev/zero").as_os_str().as_encoded_bytes())?, c"/dev/zero"),
+        (CString::new(target.join("dev/full").as_os_str().as_encoded_bytes())?, c"/dev/full"),
+        (CString::new(target.join("dev/random").as_os_str().as_encoded_bytes())?, c"/dev/random"),
+        (CString::new(target.join("dev/urandom").as_os_str().as_encoded_bytes())?, c"/dev/urandom"),
+    ];
+    let devpts_options = CString::new("newinstance,ptmxmode=0666,mode=0620,gid=0")?;
+    let dev_shm_options = CString::new("mode=1777,size=64m")?;
     for path in [&rootfs, &upper_dir, &work_dir] {
         let value = path.to_string_lossy();
         if value.contains(',') || value.contains(':') {
@@ -1038,6 +1099,52 @@ pub fn run_rootless_image(
             {
                 rootless_child_fail(error_pipe[1], 3);
             }
+            // Create minimal /dev mountpoints in the writable overlay. The
+            // imported rootfs and the persistent upper layer were checked for
+            // symlinks and unsafe file types before this child was forked.
+            for directory in [&dev_dir_c, &dev_pts_c, &dev_shm_c] {
+                if libc::mkdir(directory.as_ptr(), 0o755) != 0 {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 16);
+                    }
+                }
+            }
+            for (target_device, host_device) in &device_mounts {
+                let descriptor = libc::open(
+                    target_device.as_ptr(),
+                    libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    0o600,
+                );
+                if descriptor >= 0 {
+                    libc::close(descriptor);
+                } else {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 17);
+                    }
+                }
+                if libc::mount(
+                    host_device.as_ptr(),
+                    target_device.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 18);
+                }
+                if libc::mount(
+                    std::ptr::null(),
+                    target_device.as_ptr(),
+                    std::ptr::null(),
+                    (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID) as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 19);
+                }
+            }
             if let Some(workspace_source) = workspace_c.as_ref() {
                 // The guest mountpoint is created in the writable overlay, not
                 // in the immutable imported image. Its lower/upper forms were
@@ -1127,6 +1234,26 @@ pub fn run_rootless_image(
             ) != 0
             {
                 rootless_child_fail(error_pipe[1], 9);
+            }
+            if libc::mount(
+                c"devpts".as_ptr(),
+                c"/dev/pts".as_ptr(),
+                c"devpts".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NOEXEC) as libc::c_ulong,
+                devpts_options.as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 20);
+            }
+            if libc::mount(
+                c"tmpfs".as_ptr(),
+                c"/dev/shm".as_ptr(),
+                c"tmpfs".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
+                dev_shm_options.as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
+                rootless_child_fail(error_pipe[1], 21);
             }
 
             if libc::chdir(cwd_c.as_ptr()) != 0 {
@@ -1229,6 +1356,12 @@ pub fn run_rootless_image(
             13 => "create guest /workspace mountpoint",
             14 => "bind-mount host project workspace",
             15 => "secure guest workspace mount flags",
+            16 => "create guest /dev mountpoints",
+            17 => "create guest device placeholders",
+            18 => "bind-mount a standard host device",
+            19 => "secure guest device mount flags",
+            20 => "mount guest devpts",
+            21 => "mount guest /dev/shm",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
