@@ -887,7 +887,7 @@ pub fn run_rootless_image(
         CString::new("HOME=/root")?,
         CString::new("USER=root")?,
         CString::new("LOGNAME=root")?,
-        CString::new("SHELL=/bin/bash")?,
+        CString::new("SHELL=/bin/sh")?,
         CString::new("TMPDIR=/tmp")?,
         CString::new(format!("PWD={}", guest_cwd.display()))?,
         CString::new(format!(
