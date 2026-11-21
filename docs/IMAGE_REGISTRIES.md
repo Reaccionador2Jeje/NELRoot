@@ -384,3 +384,10 @@ Examples:
     bash scripts/publish-fedora-container.sh aarch64
 
 These scripts publish to the first-party NELRoot Hub and do not use Docker Hub. They require the publishing token in `NELROOT_HUB_PUBLISH_TOKEN`.
+
+
+## Publishing the official image set through GitHub Actions
+
+The repository includes a manual workflow, `NELRoot Image Hub - Publish official images`, under Actions. It requires the repository secret `NELROOT_HUB_PUBLISH_TOKEN` and a maintainer to start it with `workflow_dispatch`. Choose a family (or `all`) to run the existing verified upstream publisher scripts. The workflow does not publish on pull requests or ordinary pushes. It builds the `nelroot` CLI, installs the required archive tools, and runs `scripts/publish-all-images.sh`; already-cataloged image/architecture pairs are skipped.
+
+CI's distro matrix checks catalog presence first. A missing image is explicitly logged as `SKIP: not published`; this is not a distro compatibility pass. If the image is present, CI pulls it from the first-party Hub and validates its registered rootfs. Guest execution is attempted, but hosted runners may block the required mount namespace; that policy skip is distinct from a successful guest launch. The test also checks the expected `/etc/os-release` distro ID.
