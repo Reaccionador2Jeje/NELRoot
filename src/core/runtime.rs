@@ -1766,6 +1766,46 @@ mod tests {
         std::fs::remove_dir_all(&root).expect("test root should be removed");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guest_device_mountpoints_reject_symlinks_and_unsafe_types() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-device-mountpoints-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let upper = root.join("upper");
+        std::fs::create_dir_all(root.join("dev")).expect("guest dev should be created");
+        std::fs::create_dir_all(&upper).expect("upper layer should be created");
+
+        assert!(validate_optional_guest_directory(&root.join("dev/pts")).is_ok());
+        assert!(validate_optional_guest_device(&root.join("dev/missing")).is_ok());
+
+        let regular_device = root.join("dev/null");
+        std::fs::write(&regular_device, "").expect("device placeholder should be created");
+        assert!(validate_optional_guest_device(&regular_device).is_ok());
+
+        let directory_device = root.join("dev/zero");
+        std::fs::create_dir(&directory_device).expect("directory placeholder should be created");
+        assert!(validate_optional_guest_device(&directory_device).is_err());
+
+        let symlink_device = root.join("dev/random");
+        symlink(&regular_device, &symlink_device).expect("device symlink should be created");
+        assert!(validate_optional_guest_device(&symlink_device).is_err());
+
+        let symlink_directory = root.join("dev/shm");
+        symlink(&upper, &symlink_directory).expect("mountpoint symlink should be created");
+        assert!(validate_optional_guest_directory(&symlink_directory).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test root should be removed");
+    }
+
     #[test]
     fn architecture_aliases_are_explicit() {
         assert!(host_architecture_matches(match std::env::consts::ARCH {
