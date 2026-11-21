@@ -1,0 +1,49 @@
+name: NELRoot Image Hub - Publish official images
+
+on:
+  workflow_dispatch:
+    inputs:
+      family:
+        description: Official rootfs family to publish to the first-party NELRoot Image Hub
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - ubuntu
+          - alpine
+          - arch
+          - void
+          - fedora
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish official ${{ inputs.family }} rootfs images
+    runs-on: ubuntu-latest
+    env:
+      NELROOT_HUB_PUBLISH_TOKEN: ${{ secrets.NELROOT_HUB_PUBLISH_TOKEN }}
+      NELROOT_HUB_URL: https://nelroot-image-hub-production.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install official archive tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl python3 tar xz-utils zstd
+      - name: Build NELRoot publisher CLI
+        run: cargo build --release --bin nelroot
+      - name: Configure publisher PATH
+        run: echo "$GITHUB_WORKSPACE/target/release" >> "$GITHUB_PATH"
+      - name: Validate publishing secret
+        shell: bash
+        run: |
+          if [[ -z "${NELROOT_HUB_PUBLISH_TOKEN:-}" || ${#NELROOT_HUB_PUBLISH_TOKEN} -lt 32 ]]; then
+            echo "::error::Set repository secret NELROOT_HUB_PUBLISH_TOKEN (at least 32 characters) before running this workflow."
+            exit 1
+          fi
+      - name: Publish selected official rootfs family
+        run: bash scripts/publish-all-images.sh --only "${{ inputs.family }}"
