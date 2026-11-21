@@ -80,7 +80,7 @@ impl GuestStack {
 
 /// Build argc, argv + NULL, envp + NULL, auxv + AT_NULL, then strings and AT_RANDOM.
 pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<dyn Error>> {
-    if config.stack_top == 0 || config.stack_top % STACK_ALIGNMENT != 0 {
+    if config.stack_top == 0 || !config.stack_top.is_multiple_of(STACK_ALIGNMENT) {
         return Err("guest stack top must be non-zero and 16-byte aligned".into());
     }
     if config.argv.is_empty() {
