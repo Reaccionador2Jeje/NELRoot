@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Resolve publisher paths from the repository root, independent of caller cwd.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+cd "$REPO_ROOT"
+
 # Publish every official rootfs variant currently supported by the NELRoot
 # image publisher. Runs sequentially and skips image/architecture pairs already
 # present in the Hub catalog.
