@@ -106,10 +106,14 @@ nelroot engine status --json
 # Native Linux execution (Linux host + effective UID 0 and required capabilities)
 nelroot run ubuntu -- /bin/uname -a
 nelroot shell ubuntu
-# Rootless native launcher (no host root; Linux user + mount namespaces)
+# Rootless interactive shell (no host root)
+nelroot shell-rootless ubuntu
+# Rootless native launcher (no host root; user, mount and PID namespaces)
 nelroot run-rootless ubuntu -- /bin/uname -a
 # Optional, unsafe: retain host root credentials inside chroot
 nelroot shell ubuntu --keep-root
+# Rootless interactive shell (recommended for unprivileged Linux hosts)
+nelroot shell-rootless ubuntu
 ```
 
 Run `nelroot <command> --help` for command-specific help.
