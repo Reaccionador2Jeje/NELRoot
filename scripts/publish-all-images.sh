@@ -28,16 +28,12 @@ readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nelroot-publish-all.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 ONLY="all"
+LIST=0
 while (($#)); do
     case "$1" in
         --list)
-            if [[ "${2:-}" == "--only" ]]; then
-                shift
-                ONLY="${2:-}"
-                shift
-            else
-                shift
-            fi
+            LIST=1
+            shift
             ;;
         --only)
             [[ $# -ge 2 ]] || { echo "ERROR: --only requires a distro name." >&2; exit 2; }
@@ -60,7 +56,7 @@ case "$ONLY" in
         ;;
 esac
 
-if [[ "${ONLY}" == "list" ]]; then
+if (( LIST )); then
     printf '%s\n' \
         "Ubuntu Base 24.04.5: amd64 (x86_64), arm64 (aarch64), armhf (arm), ppc64el (ppc64le), riscv64, s390x" \
         "Alpine Mini Rootfs ${ALPINE_VERSION}: x86_64, aarch64, armv7, riscv64" \
