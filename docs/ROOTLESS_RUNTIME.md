@@ -21,17 +21,19 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 
 ## Implementation order
 
-- [x] Read-only policy probe for user namespace sysctls and visible procfs namespace interfaces.
-- [ ] Add a small Linux-only namespace backend with typed errors and explicit feature flags.
-- [x] Add a fail-closed single-ID UID/GID mapping writer for a paused child already inside a user namespace (parent/child synchronization and launch protocol remain unimplemented).
-- [ ] Create private mount namespace and make propagation private.
-- [x] Add an owned child-process supervisor with polling, wait, exit-status propagation and best-effort cleanup (process primitive only; no namespaces or guest root setup).
-- [ ] Enter the validated rootfs and start a supervised child process.
-- [ ] Add PID namespace supervision and signal/exit propagation.
-- [ ] Add optional read-only `/proc`, minimal `/dev`, and other guest mounts only after mount isolation is proven.
-- [ ] Add resource limits and an explicit security profile.
-- [ ] Add opt-in networking and port forwarding.
-- [ ] Run integration tests against minimal Debian, Ubuntu, Alpine and Fedora rootfs images.
+- [x] Read-only policy probe for user-namespace sysctls and visible procfs namespace interfaces.
+- [x] Disposable user-namespace creation probe with errno reporting.
+- [x] Fail-closed single-ID UID/GID mapping writer and paused-child synchronization protocol.
+- [x] Private mount namespace creation and recursive-private propagation.
+- [x] Validated read-only rootfs bind mount with `nosuid` and `nodev`.
+- [x] Root transition with `pivot_root`, old-root detachment and bounded temporary `/tmp`.
+- [x] Linux CLI launcher: `nelroot run-rootless <image> -- <absolute-program> [args...]`.
+- [x] Child setup failure reporting, rollback, exit-status propagation and rootfs cleanup.
+- [ ] PID-namespace supervision, guest PID 1 lifecycle and signal forwarding.
+- [ ] Optional guest `/proc`, minimal `/dev`, and other virtual filesystem mounts.
+- [ ] Resource limits and an explicit security profile.
+- [ ] Opt-in network namespace isolation and port forwarding.
+- [ ] End-to-end integration tests against minimal Debian, Ubuntu, Alpine and Fedora rootfs images.
 
 ## Capability reporting
 
@@ -96,8 +98,8 @@ does it release the child to create a mount namespace and set recursive-private
 propagation. The parent waits for and checks the child's exit status.
 
 This is a diagnostic probe, not the runtime launcher: it exits immediately,
-does not mount or pivot into an image rootfs, does not create a PID namespace,
-and does not supervise guest workloads. Kernel, container, seccomp, or LSM
+does not mount or pivot into an image rootfs, and does not supervise guest
+workloads. The separate PID-namespace probe verifies PID 1 assignment only. Kernel, container, seccomp, or LSM
 policy may deny any stage; failures are returned rather than bypassed.
 
 
