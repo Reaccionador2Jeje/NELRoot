@@ -106,7 +106,7 @@ and its published SHA-256 list from cdimage.ubuntu.com, verifies the archive,
 generates a schema-v1 manifest, and uploads it through `nelroot image hub-publish`.
 No Docker Hub account or Docker daemon is involved.
 
-The script supports the x86_64 and AArch64 rootfs variants. It requires
+The script supports all six official Ubuntu Base architectures: amd64, arm64, armhf, ppc64el, riscv64 and s390x. It requires
 `curl`, `sha256sum`, `python3`, a recent NELRoot CLI, and the Hub publishing
 token supplied through the environment:
 
@@ -349,7 +349,7 @@ upstream formats are normalized to the Hub schema-v1 tar.gz format before
 publication. The upstream archive checksum is verified before extraction.
 
 The command requires `curl`, `python3`, and the `nelroot` CLI on the
-publishing machine. It uploads the 21 variants listed above; it does not
+publishing machine. It uploads the 18 variants listed above; it does not
 claim to mirror every Linux distribution or every architecture in existence.
 The catalog can be searched after publishing:
 
