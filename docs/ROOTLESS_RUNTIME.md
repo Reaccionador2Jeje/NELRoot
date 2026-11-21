@@ -1,6 +1,6 @@
 # Rootless Linux runtime: implementation contract
 
-This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, guest device mounts, full signal/process lifecycle and distribution compatibility remain incomplete.
+This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, complete signal/process lifecycle and distribution compatibility remain incomplete. The guest receives a bounded standard-device set, devpts and a bounded /dev/shm tmpfs.
 
 ## Goal
 
@@ -31,8 +31,9 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 - [x] Guest `/proc` mounted from inside the new PID namespace.
 - [x] Linux CLI launcher: `nelroot run-rootless <image> -- <absolute-program> [args...]`.
 - [x] Child setup failure reporting, exit-status propagation and runtime mount cleanup.
-- [ ] Guest `/dev`, devpts, shared memory and other virtual filesystem mounts.
-- [ ] Full signal forwarding and robust reaping of arbitrary guest descendants.
+- [x] Minimal guest `/dev` with bind-mounted `null`, `zero`, `full`, `random` and `urandom` devices.
+- [x] Guest devpts instance and bounded `/dev/shm` tmpfs.
+- [ ] Additional virtual filesystems and complete signal forwarding/descendant reaping.
 - [ ] Resource limits and an explicit security profile.
 - [ ] Opt-in network namespace isolation and port forwarding.
 - [ ] End-to-end integration tests against minimal Debian, Ubuntu, Alpine and Fedora rootfs images.
@@ -161,7 +162,7 @@ The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args.
 
 This path rejects host UID 0, never falls back to chroot, and keeps the imported rootfs unchanged by placing guest writes in a persistent OverlayFS upper layer. The guest process runs as PID 1 inside a new PID namespace, and NELRoot mounts procfs from inside that namespace. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
-Explicit limitations: guest `/dev`, devpts, shared memory, network isolation, resource limits and complete signal/descendant lifecycle handling are not implemented. The host network namespace remains visible. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
+Explicit limitations: the guest `/dev` is intentionally minimal; devices such as `/dev/console` and some distribution-specific device nodes are not provided. Network isolation, resource limits and complete signal/descendant lifecycle handling are not implemented. The host network namespace remains visible. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
 
 Examples:
 
