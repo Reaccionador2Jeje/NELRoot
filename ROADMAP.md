@@ -38,7 +38,8 @@ This roadmap describes goals, not claims that the features are already implement
 - [x] Linux child-side pivot_root primitive for a read-only mounted rootfs, using the existing empty /run directory on the rootfs mount as put_old (does not launch or supervise a guest process).
 - [x] Rootless guest launcher with synchronized UID/GID mapping, private mount namespace, persistent writable OverlayFS, pivot_root and no_new_privs.
 - [x] PID namespace with supervised guest PID 1 and guest /proc mount.
-- [ ] Guest /dev, devpts, shared memory, isolated networking, resource limits and full signal/descendant lifecycle handling.
+- [x] Minimal guest /dev device nodes, devpts and bounded /dev/shm.
+- [ ] Isolated networking, resource limits and full signal/descendant lifecycle handling.
 - [ ] Full independent NELRoot runtime and process lifecycle (ELF loader, syscall layer, VFS, namespaces and supervision).
 - [x] ELF64 inspection/parser module (first bounded runtime milestone).
 - [x] ELF64 little-endian metadata inspection parser with bounded file size and program-header validation.
@@ -164,4 +165,4 @@ The runtime integration contract is documented in [docs/NEXORA_INTEGRATION.md](d
 
 ## Current reality
 
-NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage and a guest /proc mount, plus a separate privileged chroot backend. The rootless launcher is not yet a complete developer environment: it lacks guest /dev and devpts, network isolation, resource limits, full process lifecycle support and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.
+NELRoot is still in early development. It has a rootless user/mount/PID-namespace launcher for same-architecture programs, persistent writable OverlayFS storage and a guest /proc mount, plus a separate privileged chroot backend. The rootless launcher is not yet a complete developer environment: it has only a minimal guest /dev and devpts setup; it still lacks network isolation, resource limits, full process lifecycle support and broad distribution validation. NELRoot does not boot a separate guest kernel or yet implement a complete independent ELF loader and Linux syscall ABI. Android/Termux compatibility remains unverified.
