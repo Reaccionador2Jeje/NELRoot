@@ -43,9 +43,10 @@ with `id`, `name`, `version`, `distribution`, `release`,
 `rootfs`. The rootfs object contains `format` (`tar.gz` in schema v1),
 `size_bytes`, `sha256`, and an HTTPS `download_url`.
 
-Schema v1 restricts identifiers and architectures, rejects duplicate catalog
-IDs, requires HTTPS URLs without embedded credentials, enforces SHA-256
-syntax, and applies metadata size and collection limits. The archive digest is
+Schema v1 restricts identifiers and architectures, rejects duplicate
+(image ID, architecture) pairs while allowing one logical distribution to publish
+multiple architecture variants, requires HTTPS URLs without embedded credentials,
+enforces SHA-256 syntax, and applies metadata size and collection limits. The archive digest is
 verified before import by the existing image download pipeline.
 
 ## Current first-party CLI
@@ -90,10 +91,42 @@ command-line argument:
 Before uploading, the client validates the manifest, verifies the archive's
 exact size and SHA-256, and enforces the 512 MiB artifact limit. The server
 stores the archive by digest and publishes an immutable manifest/catalog entry.
-A published image ID cannot be reused.
+A published image ID cannot be reused for the same architecture. The same
+logical image ID may be published once per supported architecture.
 
 The CLI does not yet provide account management, scoped credentials or
 credential rotation.
+
+
+## Publishing the official Ubuntu Base rootfs
+
+The repository includes a reproducible helper for publishing Ubuntu Base 24.04.5
+directly into the first-party Hub. It downloads the official Ubuntu Base archive
+and its published SHA-256 list from cdimage.ubuntu.com, verifies the archive,
+generates a schema-v1 manifest, and uploads it through `nelroot image hub-publish`.
+No Docker Hub account or Docker daemon is involved.
+
+The script supports the x86_64 and AArch64 rootfs variants. It requires
+`curl`, `sha256sum`, `python3`, a recent NELRoot CLI, and the Hub publishing
+token supplied through the environment:
+
+    export NELROOT_HUB_PUBLISH_TOKEN='your-long-publishing-token'
+    ./scripts/publish-ubuntu-base.sh amd64
+    ./scripts/publish-ubuntu-base.sh arm64
+    unset NELROOT_HUB_PUBLISH_TOKEN
+
+The default Hub URL is the production NELRoot Image Hub. Override it with
+`NELROOT_HUB_URL` when publishing to a staging instance. The resulting image ID
+is `atdev/ubuntu-24.04.5`; architecture is selected separately by the pull
+command:
+
+    nelroot image hub-remote-search ubuntu --hub https://nelroot-image-hub-production.up.railway.app
+    nelroot image hub-pull atdev/ubuntu-24.04.5 --hub https://nelroot-image-hub-production.up.railway.app --architecture x86_64
+    nelroot image hub-pull atdev/ubuntu-24.04.5 --hub https://nelroot-image-hub-production.up.railway.app --architecture aarch64
+
+This is Ubuntu Base (a minimal root filesystem), not a bootable ISO or a
+desktop installation. Publishing is a separate operator action; adding the
+script does not automatically populate the live Hub catalog.
 
 ## Ed25519 manifest signatures
 
