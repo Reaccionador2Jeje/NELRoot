@@ -37,6 +37,10 @@ pub fn runtime_dir() -> PathBuf {
     data_dir().join("run")
 }
 
+pub fn projects_dir() -> PathBuf {
+    data_dir().join("projects")
+}
+
 pub fn config_path() -> PathBuf {
     data_dir().join("config.toml")
 }
@@ -51,6 +55,7 @@ pub fn initialize() -> Result<PathBuf, Box<dyn std::error::Error>> {
         cache_dir().join("downloads"),
         logs_dir(),
         runtime_dir(),
+        projects_dir(),
     ] {
         fs::create_dir_all(path)?;
     }
