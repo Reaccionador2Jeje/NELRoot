@@ -1,6 +1,6 @@
 # Rootless Linux runtime: implementation contract
 
-This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, graceful signal forwarding and complete descendant lifecycle handling remain incomplete. Both namespace supervisor and guest PID 1 now use parent-death cleanup to avoid orphaning a namespace if its parent exits unexpectedly. Distribution compatibility remains incomplete. The guest receives a bounded standard-device set, devpts and a bounded /dev/shm tmpfs.
+This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher exists with persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. The guest PID 1 shim forwards common signals to its workload, reaps child processes and cleans up namespace descendants after the main workload exits. The outer host supervisor still lacks full external signal forwarding. Network isolation, resource limits and broad distro compatibility remain incomplete. Both namespace supervisor and guest PID 1 use parent-death cleanup. The guest receives a bounded standard-device set, devpts and a bounded /dev/shm tmpfs.
 
 ## Goal
 
@@ -163,7 +163,7 @@ The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args.
 
 This path rejects host UID 0, never falls back to chroot, and keeps the imported rootfs unchanged by placing guest writes in a persistent OverlayFS upper layer. The guest process runs as PID 1 inside a new PID namespace, and NELRoot mounts procfs from inside that namespace. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
-Explicit limitations: the guest `/dev` is intentionally minimal; devices such as `/dev/console` and some distribution-specific device nodes are not provided. Network isolation, resource limits and complete signal/descendant lifecycle handling are not implemented. The host network namespace remains visible. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
+Explicit limitations: the guest `/dev` is intentionally minimal; devices such as `/dev/console` and some distribution-specific device nodes are not provided. The host supervisor does not yet fully forward externally delivered signals to the runtime session. Network isolation and resource limits are not implemented, and the host network namespace remains visible. Guest PID 1 forwards common signals to its direct workload, reaps children and terminates remaining namespace processes when the workload exits. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
 
 Examples:
 
