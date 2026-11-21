@@ -29,17 +29,16 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
         run: cargo test --all-targets -- --test-threads=1
-      - name: Rootless runtime integration smoke test
+      - name: Rootless runtime integration smoke test (NELRoot native rootfs)
         run: |
           cargo build --release --bin nelroot
           sudo apt-get update
           sudo apt-get install -y busybox-static
           bash scripts/smoke-test-rootless-runtime.sh
-
       - name: Build Debian package smoke test
         run: |
           cargo build --release
-          VERSION="$(sed -n 's/^version = \"\(.*\)\"/\1/p' Cargo.toml | head -n 1)"
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           bash packaging/build-deb.sh "$VERSION" x86_64-unknown-linux-gnu target/release/nelroot dist
           dpkg-deb --info "dist/nelroot_${VERSION}_amd64.deb"
           dpkg-deb --contents "dist/nelroot_${VERSION}_amd64.deb"
@@ -47,7 +46,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm
-          VERSION="$(sed -n 's/^version = \"\(.*\)\"/\1/p' Cargo.toml | head -n 1)"
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           bash packaging/build-rpm.sh "$VERSION" x86_64-unknown-linux-gnu target/release/nelroot dist
           rpm -qpl "dist/nelroot-$VERSION-x86_64.rpm"
       - name: Smoke-test CLI and NEXORA JSON contract
@@ -58,36 +57,33 @@ jobs:
         run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
 
   runtime-distro-smoke:
-    name: Rootless rootfs smoke (${{ matrix.distro }})
+    name: First-party Hub rootfs smoke (${{ matrix.distro }})
     needs: check
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - distro: Debian stable
-            image: debian:stable-slim
-            local_name: ci-debian
-          - distro: Ubuntu 24.04
-            image: ubuntu:24.04
+          - distro: Ubuntu Base 24.04.5
+            image_id: atdev/ubuntu-24.04.5
             local_name: ci-ubuntu
-          - distro: Alpine 3.22
-            image: alpine:3.22
+          - distro: Alpine Mini Rootfs
+            image_id: atdev/alpine-3.24.4
             local_name: ci-alpine
-          - distro: Fedora
-            image: fedora:latest
-            local_name: ci-fedora
-          - distro: Arch Linux
-            image: archlinux:latest
+          - distro: Arch Linux Bootstrap
+            image_id: atdev/archlinux-bootstrap
             local_name: ci-arch
-          - distro: Void Linux
-            image: ghcr.io/void-linux/void-glibc:latest
+          - distro: Void Linux glibc
+            image_id: atdev/void-20250202-glibc
             local_name: ci-void
+          - distro: Fedora Container Base
+            image_id: atdev/fedora-45
+            local_name: ci-fedora
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build NELRoot
         run: cargo build --release --bin nelroot
-      - name: Test native distro rootfs
-        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image }}" "${{ matrix.local_name }}"
+      - name: Test rootfs from NELRoot Image Hub
+        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image_id }}" "${{ matrix.local_name }}"
