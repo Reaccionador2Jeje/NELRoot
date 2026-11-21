@@ -686,8 +686,7 @@ unsafe fn configure_parent_death_signal(expected_parent: libc::pid_t) -> Result<
 }
 
 #[cfg(target_os = "linux")]
-static GUEST_INIT_CHILD_PID: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
+static GUEST_INIT_CHILD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 #[cfg(target_os = "linux")]
 extern "C" fn forward_guest_init_signal(signal: libc::c_int) {
