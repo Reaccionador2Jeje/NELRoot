@@ -28,8 +28,24 @@ case "${1:-amd64}" in
         readonly UBUNTU_ARCH="arm64"
         readonly NELROOT_ARCH="aarch64"
         ;;
+    armhf|arm)
+        readonly UBUNTU_ARCH="armhf"
+        readonly NELROOT_ARCH="arm"
+        ;;
+    ppc64el|ppc64le)
+        readonly UBUNTU_ARCH="ppc64el"
+        readonly NELROOT_ARCH="ppc64le"
+        ;;
+    riscv64)
+        readonly UBUNTU_ARCH="riscv64"
+        readonly NELROOT_ARCH="riscv64"
+        ;;
+    s390x)
+        readonly UBUNTU_ARCH="s390x"
+        readonly NELROOT_ARCH="s390x"
+        ;;
     *)
-        echo "Usage: $0 [amd64|arm64]" >&2
+        echo "Usage: $0 [amd64|arm64|armhf|ppc64el|riscv64|s390x]" >&2
         exit 2
         ;;
 esac
