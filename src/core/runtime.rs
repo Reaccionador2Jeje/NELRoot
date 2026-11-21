@@ -832,12 +832,15 @@ fn validate_rootless_workspace(path: &Path) -> io::Result<std::path::PathBuf> {
 #[cfg(target_os = "linux")]
 fn validate_optional_guest_directory(path: &Path) -> io::Result<()> {
     match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => Err(
-            io::Error::new(
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("guest mountpoint {} must be a real directory", path.display()),
-            ),
-        ),
+                format!(
+                    "guest mountpoint {} must be a real directory",
+                    path.display()
+                ),
+            ))
+        }
         Ok(_) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
@@ -870,7 +873,13 @@ fn validate_rootless_device_mountpoints(rootfs: &Path, upper: &Path) -> io::Resu
         for directory in ["dev", "dev/pts", "dev/shm"] {
             validate_optional_guest_directory(&base.join(directory))?;
         }
-        for device in ["dev/null", "dev/zero", "dev/full", "dev/random", "dev/urandom"] {
+        for device in [
+            "dev/null",
+            "dev/zero",
+            "dev/full",
+            "dev/random",
+            "dev/urandom",
+        ] {
             validate_optional_guest_device(&base.join(device))?;
         }
     }
@@ -961,11 +970,26 @@ pub fn run_rootless_image(
     let dev_pts_c = CString::new(target.join("dev/pts").as_os_str().as_encoded_bytes())?;
     let dev_shm_c = CString::new(target.join("dev/shm").as_os_str().as_encoded_bytes())?;
     let device_mounts = [
-        (CString::new(target.join("dev/null").as_os_str().as_encoded_bytes())?, c"/dev/null"),
-        (CString::new(target.join("dev/zero").as_os_str().as_encoded_bytes())?, c"/dev/zero"),
-        (CString::new(target.join("dev/full").as_os_str().as_encoded_bytes())?, c"/dev/full"),
-        (CString::new(target.join("dev/random").as_os_str().as_encoded_bytes())?, c"/dev/random"),
-        (CString::new(target.join("dev/urandom").as_os_str().as_encoded_bytes())?, c"/dev/urandom"),
+        (
+            CString::new(target.join("dev/null").as_os_str().as_encoded_bytes())?,
+            c"/dev/null",
+        ),
+        (
+            CString::new(target.join("dev/zero").as_os_str().as_encoded_bytes())?,
+            c"/dev/zero",
+        ),
+        (
+            CString::new(target.join("dev/full").as_os_str().as_encoded_bytes())?,
+            c"/dev/full",
+        ),
+        (
+            CString::new(target.join("dev/random").as_os_str().as_encoded_bytes())?,
+            c"/dev/random",
+        ),
+        (
+            CString::new(target.join("dev/urandom").as_os_str().as_encoded_bytes())?,
+            c"/dev/urandom",
+        ),
     ];
     let devpts_options = CString::new("newinstance,ptmxmode=0666,mode=0620,gid=0")?;
     let dev_shm_options = CString::new("mode=1777,size=64m")?;
@@ -1113,7 +1137,11 @@ pub fn run_rootless_image(
             for (target_device, host_device) in &device_mounts {
                 let descriptor = libc::open(
                     target_device.as_ptr(),
-                    libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                    libc::O_WRONLY
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_CLOEXEC
+                        | libc::O_NOFOLLOW,
                     0o600,
                 );
                 if descriptor >= 0 {
