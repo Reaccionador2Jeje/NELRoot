@@ -150,6 +150,23 @@ enum ProjectCommands {
         /// Project name.
         name: String,
     },
+    /// Run a project in a Linux distro or directly on the host.
+    Run {
+        /// Project name.
+        name: String,
+        /// Registered distro image to run the project in.
+        #[arg(long, conflicts_with = "host", required_unless_present = "host")]
+        image: Option<String>,
+        /// Run directly on the host Linux installation (no guest isolation).
+        #[arg(long, conflicts_with = "image")]
+        host: bool,
+        /// Guest working directory when --image is selected.
+        #[arg(long, default_value = "/workspace")]
+        cwd: std::path::PathBuf,
+        /// Executable and arguments after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -672,6 +689,70 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     return Err("project path must be a real directory".into());
                 }
                 println!("{}", path.display());
+            }
+            ProjectCommands::Run {
+                name,
+                image,
+                host,
+                cwd,
+                command,
+            } => {
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
+                {
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
+                }
+                config::initialize()?;
+                let workspace = config::projects_dir().join(&name);
+                let metadata = std::fs::symlink_metadata(&workspace)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err("project workspace must be an existing real directory".into());
+                }
+                let program = command.first().ok_or("missing project executable")?;
+                if host {
+                    ui::banner("Project execution on Linux host");
+                    ui::key("Project", &name);
+                    ui::key("Working directory", workspace.display());
+                    ui::warn("Host mode has no distro or namespace isolation.");
+                    let status = std::process::Command::new(program)
+                        .args(&command[1..])
+                        .current_dir(&workspace)
+                        .status()?;
+                    if !status.success() {
+                        use std::os::unix::process::ExitStatusExt;
+                        std::process::exit(
+                            status.code().unwrap_or_else(|| {
+                                status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                            }),
+                        );
+                    }
+                } else {
+                    let image = image.as_deref().ok_or("select --image or --host")?;
+                    ui::banner("Project execution in Linux distro");
+                    ui::key("Project", &name);
+                    ui::key("Distro", image);
+                    ui::key("Guest workspace", "/workspace");
+                    let status = runtime::run_rootless_image(
+                        image,
+                        program,
+                        &command[1..],
+                        &cwd,
+                        Some(&workspace),
+                    )?;
+                    if !status.success() {
+                        use std::os::unix::process::ExitStatusExt;
+                        std::process::exit(
+                            status.code().unwrap_or_else(|| {
+                                status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                            }),
+                        );
+                    }
+                }
             }
         },
         #[cfg(target_os = "linux")]
