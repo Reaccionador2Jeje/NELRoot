@@ -808,6 +808,42 @@ fn prepare_rootless_overlay_storage(
     Ok((upper, work, lock))
 }
 
+/// Validate a host project workspace before exposing it inside a guest.
+#[cfg(target_os = "linux")]
+fn validate_rootless_workspace(path: &Path) -> io::Result<std::path::PathBuf> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "workspace must be an existing real directory, not a symlink",
+        ));
+    }
+    let canonical = path.canonicalize()?;
+    let value = canonical.to_string_lossy();
+    if value.contains(',') || value.contains(':') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "workspace path contains an unsupported OverlayFS or mount option character",
+        ));
+    }
+    Ok(canonical)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_workspace_mountpoint(path: &Path) -> io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => Err(
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "guest /workspace must be a real directory when it already exists",
+            ),
+        ),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 /// Launch a same-architecture program in rootless user, mount, and PID namespaces.
 ///
 /// The parent pauses a child while installing its single-ID UID/GID maps. The
@@ -822,9 +858,11 @@ pub fn run_rootless_image(
     program: &str,
     arguments: &[String],
     guest_cwd: &Path,
+    workspace: Option<&Path>,
 ) -> Result<ExitStatus, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
 
+    let workspace = workspace.map(validate_rootless_workspace).transpose()?;
     let catalog = images::load_catalog()?;
     let image = catalog
         .images
@@ -843,6 +881,8 @@ pub fn run_rootless_image(
     ))?;
 
     let (upper_dir, work_dir, _container_lock) = prepare_rootless_overlay_storage(image_name)?;
+    validate_workspace_mountpoint(&rootfs.join("workspace"))?;
+    validate_workspace_mountpoint(&upper_dir.join("workspace"))?;
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
     let unique = format!(
@@ -860,6 +900,12 @@ pub fn run_rootless_image(
     }
 
     let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
+    let workspace_c = workspace
+        .as_ref()
+        .map(|path| CString::new(path.as_os_str().as_encoded_bytes()))
+        .transpose()?;
+    let workspace_target = target.join("workspace");
+    let workspace_target_c = CString::new(workspace_target.as_os_str().as_encoded_bytes())?;
     for path in [&rootfs, &upper_dir, &work_dir] {
         let value = path.to_string_lossy();
         if value.contains(',') || value.contains(':') {
@@ -989,6 +1035,38 @@ pub fn run_rootless_image(
             ) != 0
             {
                 rootless_child_fail(error_pipe[1], 3);
+            }
+            if let Some(workspace_source) = workspace_c.as_ref() {
+                // The guest mountpoint is created in the writable overlay, not
+                // in the immutable imported image. Its lower/upper forms were
+                // checked for symlinks before the child was forked.
+                if libc::mkdir(workspace_target_c.as_ptr(), 0o755) != 0 {
+                    let errno = *libc::__errno_location();
+                    if errno != libc::EEXIST {
+                        rootless_child_fail(error_pipe[1], 13);
+                    }
+                }
+                if libc::mount(
+                    workspace_source.as_ptr(),
+                    workspace_target_c.as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 14);
+                }
+                if libc::mount(
+                    std::ptr::null(),
+                    workspace_target_c.as_ptr(),
+                    std::ptr::null(),
+                    (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID | libc::MS_NODEV)
+                        as libc::c_ulong,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    rootless_child_fail(error_pipe[1], 15);
+                }
             }
             // unshare(CLONE_NEWPID) applies to subsequently created children.
             // Keep this process as a supervisor; the next child becomes PID 1.
@@ -1146,6 +1224,9 @@ pub fn run_rootless_image(
             10 => "change guest working directory",
             11 => "enable no_new_privs",
             12 => "execute guest program",
+            13 => "create guest /workspace mountpoint",
+            14 => "bind-mount host project workspace",
+            15 => "secure guest workspace mount flags",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
