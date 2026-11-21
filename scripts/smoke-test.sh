@@ -12,6 +12,7 @@ BINARY="${1:-target/release/nelroot}"
 "$BINARY" shell --help >/dev/null
 "$BINARY" project --help >/dev/null
 "$BINARY" project create --help >/dev/null
+"$BINARY" project run --help >/dev/null
 "$BINARY" shell-rootless --help >/dev/null
 "$BINARY" run-rootless --help >/dev/null
 "$BINARY" host run --help >/dev/null
@@ -24,6 +25,7 @@ PROJECTS="$(NELROOT_HOME="$TEST_HOME" "$BINARY" project list)"
 PROJECT_PATH="$(NELROOT_HOME="$TEST_HOME" "$BINARY" project path smoke-project)"
 [[ -d "$PROJECT_PATH" ]]
 NELROOT_HOME="$TEST_HOME" "$BINARY" host run --project smoke-project -- /bin/true
+NELROOT_HOME="$TEST_HOME" "$BINARY" project run smoke-project --host -- /bin/true
 
 "$BINARY" elf inspect "$BINARY" >/dev/null
 "$BINARY" elf plan "$BINARY" >/dev/null
