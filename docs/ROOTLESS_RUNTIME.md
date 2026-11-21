@@ -33,7 +33,8 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 - [x] Child setup failure reporting, exit-status propagation and runtime mount cleanup.
 - [x] Minimal guest `/dev` with bind-mounted `null`, `zero`, `full`, `random` and `urandom` devices.
 - [x] Guest devpts instance and bounded `/dev/shm` tmpfs.
-- [ ] Additional virtual filesystems and complete signal forwarding/descendant reaping.
+- [x] Guest PID 1 workload shim with common signal forwarding, child-process reaping and namespace-scoped descendant cleanup after the main workload exits.
+- [ ] Host-supervisor signal forwarding for externally delivered signals and additional virtual filesystems.
 - [ ] Resource limits and an explicit security profile.
 - [ ] Opt-in network namespace isolation and port forwarding.
 - [ ] End-to-end integration tests against minimal Debian, Ubuntu, Alpine and Fedora rootfs images.
