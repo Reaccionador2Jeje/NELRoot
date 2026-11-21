@@ -748,7 +748,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::warn("Host mode has no distro or namespace isolation.");
                     let status = std::process::Command::new(program)
                         .args(&command[1..])
-                        .envs(env_overrides.iter().map(|(key, value)| (key, value)))
+                        .envs(env_overrides.iter())
                         .current_dir(&workspace)
                         .status()?;
                     if !status.success() {
