@@ -71,11 +71,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Explicitly install Rust target
+        run: rustup target add "${{ matrix.target }}"
       - name: Set up Android NDK
         if: matrix.target == 'aarch64-linux-android'
         uses: android-actions/setup-android@v3
         with:
-          # 'tools' is deprecated and makes sdkmanager fail on current SDK repositories.
           packages: platform-tools
       - name: Install Android NDK
         if: matrix.target == 'aarch64-linux-android'
@@ -227,7 +228,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_meta.outputs.tag }}
           target_commitish: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          prerelease: ${{ github.event_name == 'workflow_run' }}
+          prerelease: ${{ github.event.workflow_run != null }}
           generate_release_notes: true
           files: |
             release-assets/*
