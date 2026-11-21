@@ -22,7 +22,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check shell scripts
-        run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh packaging/build-deb.sh packaging/build-rpm.sh
+        run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh scripts/smoke-test-hub.sh packaging/build-deb.sh packaging/build-rpm.sh
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
@@ -43,3 +43,7 @@ jobs:
           rpm -qpl "dist/nelroot-$VERSION-x86_64.rpm"
       - name: Smoke-test CLI and NEXORA JSON contract
         run: bash scripts/smoke-test.sh target/release/nelroot
+      - name: Build NELRoot Image Hub server
+        run: cargo build --release --bin nelroot-hub
+      - name: Smoke-test first-party Image Hub API
+        run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
