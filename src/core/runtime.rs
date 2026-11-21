@@ -1078,14 +1078,14 @@ pub fn run_rootless_image(
         let stage = match failure.stage {
             1 => "create private mount namespace",
             2 => "make mount propagation private",
-            3 => "bind-mount rootfs",
-            4 => "enter writable overlay rootfs",
-            5 => "pivot_root",
-            6 => "change to guest root",
-            7 => "detach old root",
-            8 => "change guest working directory",
-            9 => "enable no_new_privs",
-            10 => "execute guest program",
+            3 => "mount writable OverlayFS rootfs",
+            5 => "enter writable overlay rootfs",
+            6 => "pivot_root",
+            7 => "change to guest root",
+            8 => "detach old root",
+            10 => "change guest working directory",
+            11 => "enable no_new_privs",
+            12 => "execute guest program",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
