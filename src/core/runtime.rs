@@ -339,8 +339,7 @@ fn wait_for_child(pid: libc::pid_t) -> io::Result<libc::c_int> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn probe_rootless_user_mount_and_pid_namespaces(
-) -> std::io::Result<UserNamespaceMapping> {
+pub fn probe_rootless_user_mount_and_pid_namespaces() -> std::io::Result<UserNamespaceMapping> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "rootless user, mount, and PID namespace probes are only available on Linux",

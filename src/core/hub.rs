@@ -663,8 +663,7 @@ mod tests {
             distribution: "Ubuntu".into(),
             architecture: architecture.into(),
             description: "Official Ubuntu Base rootfs".into(),
-            manifest_url: "https://hub.example/v1/manifests/".to_owned()
-                + &"a".repeat(64),
+            manifest_url: "https://hub.example/v1/manifests/".to_owned() + &"a".repeat(64),
             manifest_sha256: "a".repeat(64),
             tags: vec!["ubuntu".into()],
         };
