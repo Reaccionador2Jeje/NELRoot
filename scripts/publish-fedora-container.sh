@@ -20,7 +20,7 @@ trap 'rm -rf "$WORK"' EXIT
 for cmd in curl sha256sum awk tar xz python3 nelroot; do command -v "$cmd" >/dev/null || { echo "Missing command: $cmd" >&2; exit 1; }; done
 mkdir -p "$WORK/rootfs"
 curl -fsSL --retry 3 "$BASE/$CHECKSUM" -o "$WORK/$CHECKSUM"
-NAME="$(awk '$2 ~ /^\\*?Fedora-Container-Base-.*\\.tar\\.xz$/ {sub(/^\\*/, "", $2); print $2; exit}' "$WORK/$CHECKSUM")"
+NAME="$(awk '$2 ~ /^\*?Fedora-Container-Base-.*\.tar\.xz$/ {sub(/^\*/, "", $2); print $2; exit}' "$WORK/$CHECKSUM")"
 [[ -n "$NAME" ]] || { echo "Fedora CHECKSUM has no Container Base tar.xz entry" >&2; exit 1; }
 URL="$BASE/$NAME"
 curl -fL --retry 3 "$URL" -o "$WORK/$NAME"
