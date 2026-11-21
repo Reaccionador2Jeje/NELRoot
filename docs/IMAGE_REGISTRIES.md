@@ -301,3 +301,46 @@ Alpine CDN. Set `NELROOT_HUB_URL` to publish to a staging Hub. The image ID is
 
 Publishing remains an explicit operator action. Adding this script does not
 automatically upload or populate the live catalog.
+
+
+## One-command publishing for all supported official images
+
+Use `scripts/publish-all-images.sh` to populate the first-party Hub with every
+official rootfs variant currently wired into the repository's publishers.
+It currently includes:
+
+| Distribution | Release | Hub architectures |
+|---|---|---|
+| Ubuntu Base | 24.04.5 | `x86_64`, `aarch64` |
+| Alpine Mini Root Filesystem | 3.24.4 | `x86_64`, `aarch64`, `armv7`, `riscv64` |
+
+The script runs sequentially, checks the live catalog before each publish, and
+skips an image/architecture pair that is already present. If it cannot read the
+catalog, it refuses to publish that item rather than risking duplicate entries.
+It verifies each upstream archive using the checksum published by the
+distribution and then delegates manifest validation and publishing to the
+NELRoot CLI.
+
+Preview the current batch:
+
+    ./scripts/publish-all-images.sh --list
+
+Publish the entire batch with one command:
+
+    export NELROOT_HUB_PUBLISH_TOKEN='your-long-publishing-token'
+    ./scripts/publish-all-images.sh
+    unset NELROOT_HUB_PUBLISH_TOKEN
+
+Optional overrides:
+
+    NELROOT_HUB_URL=https://your-staging-hub.example ./scripts/publish-all-images.sh
+    ALPINE_VERSION=3.24.4 ./scripts/publish-all-images.sh
+
+The command requires `curl`, `python3`, and the `nelroot` CLI on the
+publishing machine. It uploads the six variants listed above; it does not
+claim to mirror every Linux distribution or every architecture in existence.
+The catalog can be searched after publishing:
+
+    nelroot image hub-remote-search linux --hub https://nelroot-image-hub-production.up.railway.app
+
+The batch is sequential and reports published, skipped, and failed counts.
