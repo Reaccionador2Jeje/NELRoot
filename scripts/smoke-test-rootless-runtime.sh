@@ -42,7 +42,38 @@ if OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "R
   printf '%s\n' "$OUTPUT"
   grep -q '^ROOTLESS_SMOKE_OK$' <<<"$OUTPUT"
   grep -q "^$ARCH$" <<<"$OUTPUT"
-  echo "Rootless runtime integration smoke test passed."
+
+  # Verify that the per-image OverlayFS upper layer survives a fresh launch.
+  "$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'printf "NELROOT_OVERLAY_PERSISTED\\n" > /tmp/nelroot-overlay-persistence'
+  PERSIST_OUTPUT="$("$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'test -f /tmp/nelroot-overlay-persistence && printf "NELROOT_OVERLAY_PERSISTED\\n"' 2>&1)"
+  grep -q '^NELROOT_OVERLAY_PERSISTED
+  write_summary "### NELRoot native rootfs smoke" "" "**PASS:** native rootfs registered; guest launch, architecture, persistent OverlayFS and exit-status propagation verified."
+else
+  STATUS=$?
+  if grep -Fq "rootless runtime failed to create private mount namespace: Operation not permitted" <<<"$OUTPUT"; then
+    echo "SKIP: CI runner policy blocks rootless mount namespaces; NELRoot native rootfs registration passed."
+    write_summary "### NELRoot native rootfs smoke" "" "**PASS:** native rootfs registered." "**SKIP:** guest launch blocked by runner mount-namespace policy."
+    exit 0
+  fi
+  printf '%s\n' "$OUTPUT" >&2
+  exit "$STATUS"
+fi
+ <<<"$PERSIST_OUTPUT"
+
+  # Verify guest exit status is propagated to the host CLI.
+  if "$NELROOT_BIN" run-rootless rootless-smoke -- /bin/sh -c 'exit 23'; then
+    echo "Expected guest exit code 23, but the command returned success." >&2
+    exit 1
+  else
+    GUEST_STATUS=$?
+    [[ "$GUEST_STATUS" == "23" ]] || {
+      echo "Expected guest exit code 23, received $GUEST_STATUS." >&2
+      exit 1
+    }
+  fi
+
+  echo "Rootless runtime integration smoke test passed (launch, architecture, persistent OverlayFS and exit status)."
+
   write_summary "### NELRoot native rootfs smoke" "" "**PASS:** native rootfs registered and guest command executed."
 else
   STATUS=$?
