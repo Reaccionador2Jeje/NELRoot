@@ -1671,7 +1671,8 @@ mod env_override_tests {
             "MODE=dev".to_owned(),
             "EMPTY=".to_owned(),
             "MODE=release".to_owned(),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(values.get("MODE").map(String::as_str), Some("release"));
         assert_eq!(values.get("EMPTY").map(String::as_str), Some(""));
     }
