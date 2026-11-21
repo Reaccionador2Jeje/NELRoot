@@ -270,3 +270,34 @@ Current limits and deployment boundaries:
 - The CLI now supports public catalog search, verified image pull/update and
   bearer-token image publishing. Interactive account management, scoped
   credentials, moderation and credential rotation are still not implemented.
+
+
+## Publishing Alpine Linux Mini Root Filesystem
+
+The repository includes `scripts/publish-alpine-minirootfs.sh` for publishing
+official Alpine Linux Mini Root Filesystem archives to the first-party Hub.
+The default version is 3.24.4. The script downloads the architecture-specific
+archive and its official SHA-256 sidecar from the Alpine CDN, verifies the
+archive, generates a schema-v1 manifest, and publishes through the NELRoot Hub
+API. It does not use Docker Hub.
+
+Supported variants are `x86_64`, `aarch64`, `armv7` and `riscv64`.
+The Hub must be configured with a publishing token, supplied only through the
+environment:
+
+    export NELROOT_HUB_PUBLISH_TOKEN='your-long-publishing-token'
+    ./scripts/publish-alpine-minirootfs.sh x86_64
+    ./scripts/publish-alpine-minirootfs.sh aarch64
+    ./scripts/publish-alpine-minirootfs.sh armv7
+    ./scripts/publish-alpine-minirootfs.sh riscv64
+    unset NELROOT_HUB_PUBLISH_TOKEN
+
+Set `ALPINE_VERSION` to select another stable version available on the official
+Alpine CDN. Set `NELROOT_HUB_URL` to publish to a staging Hub. The image ID is
+`atdev/alpine-VERSION`; architecture is selected separately when pulling:
+
+    nelroot image hub-remote-search alpine --hub https://nelroot-image-hub-production.up.railway.app
+    nelroot image hub-pull atdev/alpine-3.24.4 --hub https://nelroot-image-hub-production.up.railway.app --architecture x86_64
+
+Publishing remains an explicit operator action. Adding this script does not
+automatically upload or populate the live catalog.
