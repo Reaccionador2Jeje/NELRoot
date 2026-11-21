@@ -1262,7 +1262,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn pivot_root_validation_requires_a_real_tmp_directory() {
+    fn pivot_root_validation_requires_real_run_lock_and_tmp_directories() {
         let unique = format!(
             "nelroot-pivot-test-{}-{}",
             std::process::id(),
@@ -1273,7 +1273,7 @@ mod tests {
         );
         let root = std::env::temp_dir().join(unique);
         std::fs::create_dir_all(root.join("tmp")).expect("test /tmp should be created");
-        std::fs::create_dir(root.join("run")).expect("test /run should be created");
+        std::fs::create_dir_all(root.join("run/lock")).expect("test /run/lock should be created");
 
         let (validated_root, validated_tmp) =
             validate_pivot_root_target(&root).expect("real /run and /tmp should validate");
@@ -1285,7 +1285,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn pivot_root_validation_rejects_nonempty_run_directory() {
+    fn pivot_root_validation_rejects_nonempty_run_lock_directory() {
         let unique = format!(
             "nelroot-pivot-nonempty-run-{}-{}",
             std::process::id(),
@@ -1296,8 +1296,8 @@ mod tests {
         );
         let root = std::env::temp_dir().join(unique);
         std::fs::create_dir_all(root.join("tmp")).expect("test /tmp should be created");
-        std::fs::create_dir_all(root.join("run")).expect("test /run should be created");
-        std::fs::write(root.join("run/occupied"), "x").expect("test file should be created");
+        std::fs::create_dir_all(root.join("run/lock")).expect("test /run/lock should be created");
+        std::fs::write(root.join("run/lock/occupied"), "x").expect("test file should be created");
 
         assert!(validate_pivot_root_target(&root).is_err());
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
@@ -1315,7 +1315,7 @@ mod tests {
                 .as_nanos()
         );
         let root = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(root.join("run")).expect("test /run should be created");
+        std::fs::create_dir_all(root.join("run/lock")).expect("test /run/lock should be created");
 
         assert!(validate_pivot_root_target(&root).is_err());
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
