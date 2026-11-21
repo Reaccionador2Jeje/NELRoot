@@ -29,6 +29,9 @@ jobs:
         run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh scripts/publish-archlinux-bootstrap.sh scripts/publish-void-rootfs.sh scripts/publish-fedora-container.sh scripts/publish-all-images.sh scripts/smoke-test-hub.sh scripts/smoke-test-rootless-runtime.sh scripts/smoke-test-distro-rootfs.sh packaging/build-deb.sh packaging/build-rpm.sh
       - name: Preview complete image publishing batch
         run: bash scripts/publish-all-images.sh --list
+      - name: Verify publisher works from scripts directory
+        working-directory: scripts
+        run: bash publish-all-images.sh --list
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
