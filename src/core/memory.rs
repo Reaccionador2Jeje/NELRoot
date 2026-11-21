@@ -475,11 +475,7 @@ impl MappedElf {
 
             if needs_read
                 && unsafe {
-                    libc::mprotect(
-                        page.cast(),
-                        self.page_size,
-                        permissions | libc::PROT_READ,
-                    )
+                    libc::mprotect(page.cast(), self.page_size, permissions | libc::PROT_READ)
                 } != 0
             {
                 return Err("could not temporarily grant read access to an ELF loader page");
