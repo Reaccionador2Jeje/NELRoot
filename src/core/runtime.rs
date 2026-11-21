@@ -176,7 +176,6 @@ pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespac
 
     // SAFETY: the child performs only close/unshare/read/write/mount/_exit
     // syscalls after fork and never resumes normal Rust execution.
-    let expected_parent = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let error = io::Error::last_os_error();
@@ -1075,6 +1074,7 @@ pub fn run_rootless_image(
         return Err(error.into());
     }
 
+    let expected_parent = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let error = io::Error::last_os_error();
