@@ -857,7 +857,10 @@ fn validate_optional_guest_device(path: &Path) -> io::Result<()> {
             if file_type.is_symlink() || !(file_type.is_file() || file_type.is_char_device()) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    format!("guest device mountpoint {} must be a regular file or character device", path.display()),
+                    format!(
+                        "guest device mountpoint {} must be a regular file or character device",
+                        path.display()
+                    ),
                 ));
             }
             Ok(())
