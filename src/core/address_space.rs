@@ -91,7 +91,7 @@ impl GuestAddressSpace {
         if start >= end {
             return Err("guest region must have a non-empty range");
         }
-        if start % GUEST_PAGE_SIZE != 0 || end % GUEST_PAGE_SIZE != 0 {
+        if !start.is_multiple_of(GUEST_PAGE_SIZE) || !end.is_multiple_of(GUEST_PAGE_SIZE) {
             return Err("guest region boundaries must be 4096-byte aligned");
         }
         if permissions.write && permissions.execute {
