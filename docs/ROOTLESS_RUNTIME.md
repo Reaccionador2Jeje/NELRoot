@@ -157,12 +157,13 @@ pivot_root, and NELRoot returns those errors without falling back to chroot.
 
 ## First rootless guest launcher
 
-The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, pivots into the image using its existing empty `/run/lock` directory as `put_old`, detaches the previous root, mounts a bounded tmpfs over guest `/tmp`, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
+The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]` and `nelroot shell-rootless <image>`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, mounts a persistent writable OverlayFS over the validated image, creates a PID namespace, and forks the guest init process as PID 1. That process pivots into the guest root, detaches the previous root, mounts procfs for its PID namespace, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent supervises PID 1 and returns its exit status.
 
 This path rejects host UID 0, never falls back to chroot, and keeps the imported rootfs unchanged by placing guest writes in a persistent OverlayFS upper layer. The guest process runs as PID 1 inside a new PID namespace, and NELRoot mounts procfs from inside that namespace. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
 Explicit limitations: guest `/dev`, devpts, shared memory, network isolation, resource limits and complete signal/descendant lifecycle handling are not implemented. The host network namespace remains visible. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
 
-Example:
+Examples:
 
     nelroot run-rootless alpine -- /bin/sh -c 'printf "rootless OK\\n"'
+    nelroot shell-rootless alpine
