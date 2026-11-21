@@ -832,12 +832,12 @@ fn validate_rootless_workspace(path: &Path) -> io::Result<std::path::PathBuf> {
 #[cfg(target_os = "linux")]
 fn validate_workspace_mountpoint(path: &Path) -> io::Result<()> {
     match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => Err(
-            io::Error::new(
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "guest /workspace must be a real directory when it already exists",
-            ),
-        ),
+            ))
+        }
         Ok(_) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
