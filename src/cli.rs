@@ -574,6 +574,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Configuration", path.display());
             ui::key("Image catalog", images::catalog_path().display());
             ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Projects", config::projects_dir().display());
             ui::key("Cache", config::cache_dir().display());
             ui::key("Logs", config::logs_dir().display());
             ui::key("Runtime state", config::runtime_dir().display());
@@ -584,6 +585,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Configuration", config::config_path().display());
             ui::key("Image catalog", images::catalog_path().display());
             ui::key("Image storage", images::image_store_dir().display());
+            ui::key("Projects", config::projects_dir().display());
             ui::key("Cache", config::cache_dir().display());
             ui::key("Logs", config::logs_dir().display());
             ui::key("Runtime state", config::runtime_dir().display());
