@@ -323,7 +323,7 @@ NELRoot CLI.
 
 Preview the current batch:
 
-    ./scripts/publish-all-images.sh --list
+    bash scripts/publish-all-images.sh --list
 
 Publish the entire batch with one command:
 
