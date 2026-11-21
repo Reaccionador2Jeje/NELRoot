@@ -2,7 +2,8 @@
 set -euo pipefail
 
 IMAGE_ID="${1:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME}"
-LOCAL_NAME="${2:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME}"
+LOCAL_NAME="${2:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME EXPECTED_DISTRO_ID}"
+EXPECTED_DISTRO_ID="${3:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME EXPECTED_DISTRO_ID}"
 NELROOT_BIN="${NELROOT_BIN:-target/release/nelroot}"
 HUB_URL="${NELROOT_HUB_URL:-https://nelroot-image-hub-production.up.railway.app}"
 WORK="$(mktemp -d)"
@@ -52,7 +53,7 @@ if OUTPUT="$("$NELROOT_BIN" run-rootless "$LOCAL_NAME" -- /bin/sh -c 'printf "NE
   printf '%s\n' "$OUTPUT"
   grep -q '^NELROOT_HUB_ROOTFS_OK$' <<<"$OUTPUT"
   grep -q "^$ARCH$" <<<"$OUTPUT"
-  grep -q '^DISTRO_ID=' <<<"$OUTPUT"
+  grep -Fxq "DISTRO_ID=$EXPECTED_DISTRO_ID" <<<"$OUTPUT"
   echo "First-party Hub rootfs smoke test passed: $IMAGE_ID"
 else
   STATUS=$?
