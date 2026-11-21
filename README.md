@@ -99,6 +99,8 @@ nelroot project list
 nelroot project run demo --host -- make test
 # Or run inside an imported distro
 nelroot project run demo --image ubuntu -- make test
+# Pass build/runtime configuration (repeat --env KEY=VALUE)
+nelroot project run demo --image ubuntu --env RUST_LOG=debug --env APP_MODE=dev -- make test
 nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 # Linux only: map a static host-native PIE into memory, without executing it
