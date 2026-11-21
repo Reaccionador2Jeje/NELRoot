@@ -930,6 +930,7 @@ pub fn run_rootless_image(
     arguments: &[String],
     guest_cwd: &Path,
     workspace: Option<&Path>,
+    env_overrides: &std::collections::BTreeMap<String, String>,
 ) -> Result<ExitStatus, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
 
@@ -1029,19 +1030,23 @@ pub fn run_rootless_image(
     let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|value| value.as_ptr()).collect();
     argv_ptrs.push(std::ptr::null());
 
-    let env = [
-        CString::new("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")?,
-        CString::new("HOME=/root")?,
-        CString::new("USER=root")?,
-        CString::new("LOGNAME=root")?,
-        CString::new("SHELL=/bin/sh")?,
-        CString::new("TMPDIR=/tmp")?,
-        CString::new(format!("PWD={}", guest_cwd.display()))?,
-        CString::new(format!(
-            "TERM={}",
-            std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned())
-        ))?,
-    ];
+    let mut guest_env = std::collections::BTreeMap::from([
+        ("PATH".to_owned(), "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned()),
+        ("HOME".to_owned(), "/root".to_owned()),
+        ("USER".to_owned(), "root".to_owned()),
+        ("LOGNAME".to_owned(), "root".to_owned()),
+        ("SHELL".to_owned(), "/bin/sh".to_owned()),
+        ("TMPDIR".to_owned(), "/tmp".to_owned()),
+        ("PWD".to_owned(), guest_cwd.display().to_string()),
+        ("TERM".to_owned(), std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned())),
+    ]);
+    for (key, value) in env_overrides {
+        guest_env.insert(key.clone(), value.clone());
+    }
+    let env: Vec<CString> = guest_env
+        .iter()
+        .map(|(key, value)| CString::new(format!("{key}={value}")))
+        .collect::<Result<_, _>>()?;
     let mut env_ptrs: Vec<*const libc::c_char> = env.iter().map(|value| value.as_ptr()).collect();
     env_ptrs.push(std::ptr::null());
 
