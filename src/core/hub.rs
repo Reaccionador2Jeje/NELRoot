@@ -655,6 +655,31 @@ mod tests {
     }
 
     #[test]
+    fn catalog_allows_multiple_architectures_but_rejects_duplicate_variants() {
+        let entry = |architecture: &str| HubCatalogEntry {
+            id: "atdev/ubuntu-24.04.5".into(),
+            name: "Ubuntu Base".into(),
+            version: "24.04.5".into(),
+            distribution: "Ubuntu".into(),
+            architecture: architecture.into(),
+            description: "Official Ubuntu Base rootfs".into(),
+            manifest_url: "https://hub.example/v1/manifests/".to_owned()
+                + &"a".repeat(64),
+            manifest_sha256: "a".repeat(64),
+            tags: vec!["ubuntu".into()],
+        };
+        let mut catalog = HubCatalog {
+            schema_version: 1,
+            generated_at: "unix:1".into(),
+            images: vec![entry("x86_64"), entry("aarch64")],
+        };
+
+        assert!(validate_catalog(&catalog).is_ok());
+        catalog.images.push(entry("x86_64"));
+        assert!(validate_catalog(&catalog).is_err());
+    }
+
+    #[test]
     fn generated_local_image_names_are_safe_and_bounded() {
         let value = manifest();
         let name = local_image_name(&value);
