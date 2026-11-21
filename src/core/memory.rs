@@ -463,14 +463,44 @@ impl MappedElf {
             return Err("ELF copy range includes an unmapped page");
         }
         let mut bytes = vec![0_u8; length];
-        // SAFETY: the complete range is within this owned mmap reservation,
-        // and every covered page belongs to a PT_LOAD mapping.
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                self.base.as_ptr().add(offset),
-                bytes.as_mut_ptr(),
-                length,
-            );
+        let mut copied = 0_usize;
+        while copied < length {
+            let current_offset = offset + copied;
+            let page_index = current_offset / self.page_size;
+            let page_offset = current_offset % self.page_size;
+            let chunk = (self.page_size - page_offset).min(length - copied);
+            let permissions = self.page_permissions[page_index].native();
+            let page = unsafe { self.base.as_ptr().add(page_index * self.page_size) };
+            let needs_read = permissions & libc::PROT_READ == 0;
+
+            if needs_read
+                && unsafe {
+                    libc::mprotect(
+                        page.cast(),
+                        self.page_size,
+                        permissions | libc::PROT_READ,
+                    )
+                } != 0
+            {
+                return Err("could not temporarily grant read access to an ELF loader page");
+            }
+
+            // SAFETY: the page is mapped and temporarily readable when needed;
+            // source and destination ranges are bounded and do not overlap.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    page.add(page_offset),
+                    bytes.as_mut_ptr().add(copied),
+                    chunk,
+                );
+            }
+
+            if needs_read
+                && unsafe { libc::mprotect(page.cast(), self.page_size, permissions) } != 0
+            {
+                return Err("could not restore ELF loader page permissions after copying");
+            }
+            copied += chunk;
         }
         Ok(bytes)
     }
