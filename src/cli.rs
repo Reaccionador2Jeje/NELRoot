@@ -1106,7 +1106,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     .err()
                                     .and_then(std::io::Error::raw_os_error)
                             },
-                            {"name": "rootless_process_runtime", "status": "not_implemented"},
+                            {
+                                "name": "rootless_process_runtime",
+                                "status": if cfg!(target_os = "linux") {
+                                    "implemented_not_end_to_end_verified"
+                                } else {
+                                    "not_implemented"
+                                }
+                            },
                             {"name": "guest_memory_backing", "status": "model_available_not_execution"},
                             {"name": "guest_syscall_abi", "status": "model_available_connected_to_guest_interpreter"},
                             {
@@ -1134,6 +1141,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "guest_cpu_interpreter", "status": "bounded_x86_64_instruction_subset_available"},
                             {"name": "full_linux_cpu_compatibility", "status": "not_implemented"}
                         ],
+                        "rootless_guest_execution": {
+                            "implemented": cfg!(target_os = "linux"),
+                            "available": false,
+                            "backend": "linux_user_mount_namespace_pivot_root",
+                            "same_architecture_only": true,
+                            "verified": false,
+                            "reason": "The rootless launcher is implemented, but this status command does not perform a complete image launch. Run nelroot run-rootless to verify this host and image."
+                        },
                         "guest_execution": {
                             "available": runtime::supported() && runtime::has_required_privileges(),
                             "backend": "linux_chroot_host_kernel",
