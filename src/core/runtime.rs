@@ -1536,6 +1536,70 @@ mod tests {
         std::fs::remove_dir_all(&root).expect("test rootfs should be removed");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rootless_workspace_validation_rejects_symlinks_and_non_directories() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-workspace-validation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let workspace = root.join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace should be created");
+        assert_eq!(
+            validate_rootless_workspace(&workspace).unwrap(),
+            workspace.canonicalize().unwrap()
+        );
+
+        let link = root.join("workspace-link");
+        symlink(&workspace, &link).expect("workspace symlink should be created");
+        assert!(validate_rootless_workspace(&link).is_err());
+
+        let file = root.join("not-a-directory");
+        std::fs::write(&file, "x").expect("test file should be created");
+        assert!(validate_rootless_workspace(&file).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test directory should be removed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guest_workspace_mountpoint_must_be_a_real_directory_or_missing() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "nelroot-workspace-mountpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&root).expect("test root should be created");
+        assert!(validate_workspace_mountpoint(&root.join("missing")).is_ok());
+
+        let directory = root.join("directory");
+        std::fs::create_dir(&directory).expect("test directory should be created");
+        assert!(validate_workspace_mountpoint(&directory).is_ok());
+
+        let file = root.join("file");
+        std::fs::write(&file, "x").expect("test file should be created");
+        assert!(validate_workspace_mountpoint(&file).is_err());
+
+        let link = root.join("link");
+        symlink(&directory, &link).expect("test symlink should be created");
+        assert!(validate_workspace_mountpoint(&link).is_err());
+
+        std::fs::remove_dir_all(&root).expect("test root should be removed");
+    }
+
     #[test]
     fn architecture_aliases_are_explicit() {
         assert!(host_architecture_matches(match std::env::consts::ARCH {
