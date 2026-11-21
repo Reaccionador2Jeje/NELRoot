@@ -49,11 +49,15 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(value: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    if value.len() % 2 != 0 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err("key or signature must be an even-length hexadecimal string".into());
     }
     let mut bytes = Vec::with_capacity(value.len() / 2);
-    for pair in value.as_bytes().chunks_exact(2) {
+    let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
+        return Err("key or signature must contain complete hexadecimal byte pairs".into());
+    }
+    for pair in pairs {
         let text = std::str::from_utf8(pair)?;
         bytes.push(u8::from_str_radix(text, 16)?);
     }
