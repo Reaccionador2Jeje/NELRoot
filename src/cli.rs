@@ -690,8 +690,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         })
                     {
                         return Err(
-                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
-                    );
+                            "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                        );
                     }
                     config::projects_dir().join(name)
                 } else {
