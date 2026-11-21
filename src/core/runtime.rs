@@ -1119,6 +1119,12 @@ pub fn run_rootless_image(
                 libc::_exit(125);
             }
             libc::close(release_pipe[0]);
+            // UID/GID map installation happens while this child is paused.
+            // Re-arm the parent-death signal after mapping before any mounts.
+            if let Err(errno) = configure_parent_death_signal(expected_parent) {
+                *libc::__errno_location() = errno;
+                rootless_child_fail(error_pipe[1], 22);
+            }
 
             if libc::unshare(libc::CLONE_NEWNS) != 0 {
                 rootless_child_fail(error_pipe[1], 1);
