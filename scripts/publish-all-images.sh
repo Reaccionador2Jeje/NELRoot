@@ -10,7 +10,11 @@ set -Eeuo pipefail
 #   bash scripts/publish-all-images.sh
 #
 # Optional:
-#   NELROOT_HUB_URL, ALPINE_VERSION
+#   NELROOT_HUB_URL, ALPINE_VERSION, VOID_RELEASE_DATE,
+#   FEDORA_VERSION, FEDORA_COMPOSE
+#
+# Select a subset:
+#   --only ubuntu|alpine|arch|void|fedora|others
 
 readonly HUB_URL="${NELROOT_HUB_URL:-https://nelroot-image-hub-production.up.railway.app}"
 ALPINE_VERSION="${ALPINE_VERSION:-3.24.4}"
@@ -23,7 +27,40 @@ readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nelroot-publish-all.XXXXXX")"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-if [[ "${1:-}" == "--list" ]]; then
+ONLY="all"
+while (($#)); do
+    case "$1" in
+        --list)
+            if [[ "${2:-}" == "--only" ]]; then
+                shift
+                ONLY="${2:-}"
+                shift
+            else
+                shift
+            fi
+            ;;
+        --only)
+            [[ $# -ge 2 ]] || { echo "ERROR: --only requires a distro name." >&2; exit 2; }
+            ONLY="$2"
+            shift 2
+            ;;
+        *)
+            echo "Usage: $0 [--list] [--only ubuntu|alpine|arch|void|fedora|others]" >&2
+            exit 2
+            ;;
+    esac
+done
+
+case "$ONLY" in
+    all|ubuntu|alpine|arch|void|fedora|others) ;;
+    *)
+        echo "ERROR: unknown distro selection: $ONLY" >&2
+        echo "Choose: ubuntu, alpine, arch, void, fedora, or others." >&2
+        exit 2
+        ;;
+esac
+
+if [[ "${ONLY}" == "list" ]]; then
     printf '%s\n' \
         "Ubuntu Base 24.04.5: amd64 (x86_64), arm64 (aarch64), armhf (arm), ppc64el (ppc64le), riscv64, s390x" \
         "Alpine Mini Rootfs ${ALPINE_VERSION}: x86_64, aarch64, armv7, riscv64" \
@@ -31,11 +68,6 @@ if [[ "${1:-}" == "--list" ]]; then
         "Void Linux ROOTFS ${VOID_RELEASE_DATE} (glibc): x86_64, aarch64, armv7" \
         "Fedora Container Base ${FEDORA_VERSION}.${FEDORA_COMPOSE}: x86_64, aarch64, ppc64le, s390x"
     exit 0
-fi
-
-if [[ $# -ne 0 ]]; then
-    echo "Usage: $0 [--list]" >&2
-    exit 2
 fi
 
 if [[ -z "${NELROOT_HUB_PUBLISH_TOKEN:-}" ]]; then
@@ -95,6 +127,10 @@ PY
 
 publish_one() {
     local family="$1"
+    if [[ "$ONLY" != "all" && "$ONLY" != "$family" ]] &&
+       ! { [[ "$ONLY" == "others" ]] && [[ "$family" != "ubuntu" ]]; }; then
+        return 0
+    fi
     local image_id="$2"
     local nelroot_arch="$3"
     local publisher="$4"
@@ -157,7 +193,11 @@ publish_one() {
 }
 
 echo "NELRoot Image Hub: $HUB_URL"
-echo "Publishing all currently supported official rootfs variants."
+if [[ "$ONLY" == "all" ]]; then
+    echo "Publishing all currently supported official rootfs variants."
+else
+    echo "Publishing selected distro set: $ONLY"
+fi
 echo "Existing catalog entries will be skipped; uploads run sequentially."
 
 publish_one ubuntu "$UBUNTU_ID" x86_64 scripts/publish-ubuntu-base.sh amd64
