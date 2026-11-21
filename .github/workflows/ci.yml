@@ -57,7 +57,7 @@ jobs:
         run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
 
   runtime-distro-smoke:
-    name: First-party Hub rootfs smoke (${{ matrix.distro }})
+    name: Hub image availability / smoke (${{ matrix.distro }})
     needs: check
     runs-on: ubuntu-latest
     strategy:
@@ -67,23 +67,28 @@ jobs:
           - distro: Ubuntu Base 24.04.5
             image_id: atdev/ubuntu-24.04.5
             local_name: ci-ubuntu
+            expected_id: ubuntu
           - distro: Alpine Mini Rootfs
             image_id: atdev/alpine-3.24.4
             local_name: ci-alpine
+            expected_id: alpine
           - distro: Arch Linux Bootstrap
             image_id: atdev/archlinux-bootstrap
             local_name: ci-arch
+            expected_id: arch
           - distro: Void Linux glibc
             image_id: atdev/void-20250202-glibc
             local_name: ci-void
+            expected_id: void
           - distro: Fedora Container Base
             image_id: atdev/fedora-45
             local_name: ci-fedora
+            expected_id: fedora
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build NELRoot
         run: cargo build --release --bin nelroot
-      - name: Test rootfs from NELRoot Image Hub
-        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image_id }}" "${{ matrix.local_name }}"
+      - name: Pull and smoke-test Hub image (if published)
+        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image_id }}" "${{ matrix.local_name }}" "${{ matrix.expected_id }}"
