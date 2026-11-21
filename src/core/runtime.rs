@@ -523,20 +523,20 @@ fn validate_pivot_root_target(
         ));
     }
     let root = rootfs_mount_target.canonicalize()?;
-    let run = root.join("run");
-    let run_meta = std::fs::symlink_metadata(&run).map_err(|error| {
+    let put_old = root.join("run/lock");
+    let put_old_meta = std::fs::symlink_metadata(&put_old).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("rootfs must contain an empty real /run directory for pivot_root: {error}"),
+            format!("rootfs must contain an empty real /run/lock directory for pivot_root: {error}"),
         )
     })?;
-    if run_meta.file_type().is_symlink()
-        || !run_meta.is_dir()
-        || std::fs::read_dir(&run)?.next().is_some()
+    if put_old_meta.file_type().is_symlink()
+        || !put_old_meta.is_dir()
+        || std::fs::read_dir(&put_old)?.next().is_some()
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "rootfs /run must be an existing empty real directory for pivot_root",
+            "rootfs /run/lock must be an existing empty real directory for pivot_root",
         ));
     }
     let tmp = root.join("tmp");
@@ -558,7 +558,7 @@ fn validate_pivot_root_target(
 /// Enter a previously bind-mounted rootfs and detach the previous root.
 ///
 /// Call only in the isolated child after UID/GID mapping and private mount
-/// namespace setup. The empty /run directory is used as pivot_root's put_old
+/// namespace setup. The empty /run/lock directory is used as pivot_root's put_old
 /// on the same rootfs mount; after detaching the old root, a bounded tmpfs is
 /// mounted over /tmp. The imported rootfs is never modified.
 #[cfg(target_os = "linux")]
@@ -569,13 +569,13 @@ pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
     if unsafe { libc::chdir(root_c.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    if unsafe { libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) } != 0 {
+    if unsafe { libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run/lock".as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
     if unsafe { libc::chdir(c"/".as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    if unsafe { libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) } != 0 {
+    if unsafe { libc::umount2(c"/run/lock".as_ptr(), libc::MNT_DETACH) } != 0 {
         return Err(io::Error::last_os_error());
     }
     if unsafe {
@@ -630,15 +630,15 @@ fn validate_rootless_launch(
             "rootfs must contain a real /tmp directory for the isolated writable tmpfs",
         ));
     }
-    let run = rootfs.join("run");
-    let run_metadata = std::fs::symlink_metadata(&run)?;
-    if run_metadata.file_type().is_symlink()
-        || !run_metadata.is_dir()
-        || std::fs::read_dir(&run)?.next().is_some()
+    let put_old = rootfs.join("run/lock");
+    let put_old_metadata = std::fs::symlink_metadata(&put_old)?;
+    if put_old_metadata.file_type().is_symlink()
+        || !put_old_metadata.is_dir()
+        || std::fs::read_dir(&put_old)?.next().is_some()
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "rootfs /run must be an existing empty real directory for pivot_root",
+            "rootfs /run/lock must be an existing empty real directory for pivot_root",
         ));
     }
     let root = rootfs.canonicalize()?;
