@@ -13,12 +13,12 @@ set -Eeuo pipefail
 #   NELROOT_HUB_URL, ALPINE_VERSION
 
 readonly HUB_URL="${NELROOT_HUB_URL:-https://nelroot-image-hub-production.up.railway.app}"
-readonly ALPINE_VERSION="${ALPINE_VERSION:-3.24.4}"
+ALPINE_VERSION="${ALPINE_VERSION:-3.24.4}"
 readonly UBUNTU_ID="atdev/ubuntu-24.04.5"
 readonly ALPINE_ID="atdev/alpine-${ALPINE_VERSION}"
-readonly VOID_RELEASE_DATE="${VOID_RELEASE_DATE:-20250202}"
-readonly FEDORA_VERSION="${FEDORA_VERSION:-45}"
-readonly FEDORA_COMPOSE="${FEDORA_COMPOSE:-1.4}"
+VOID_RELEASE_DATE="${VOID_RELEASE_DATE:-20250202}"
+FEDORA_VERSION="${FEDORA_VERSION:-45}"
+FEDORA_COMPOSE="${FEDORA_COMPOSE:-1.4}"
 readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nelroot-publish-all.XXXXXX")"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
