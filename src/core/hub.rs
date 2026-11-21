@@ -222,12 +222,14 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
         }
     }
 
+    // One logical image may publish multiple architecture-specific rootfs
+    // artifacts. Only the (image ID, architecture) pair must be unique.
     let mut identifiers = HashSet::with_capacity(catalog.images.len());
     for entry in &catalog.images {
-        if !identifiers.insert(entry.id.as_str()) {
+        if !identifiers.insert((entry.id.as_str(), entry.architecture.as_str())) {
             return Err(format!(
-                "catalog contains duplicate image id '{}'",
-                entry.id
+                "catalog contains duplicate image '{}' for architecture '{}'",
+                entry.id, entry.architecture
             ));
         }
     }
