@@ -66,7 +66,12 @@ already_published() {
         --proto '=https' --proto-redir '=https' \
         "$HUB_URL/v1/catalog" -o "$catalog_file"
 
-    python3 - "$catalog_file" "$image_id" "$architecture" <<'PY'
+    curl --fail --location --silent --show-error --retry 3 \
+        --proto '=https' --proto-redir '=https' \
+        "$HUB_URL/v1/catalog" -o "$catalog_file" || return 2
+
+    local result
+    result="$(python3 - "$catalog_file" "$image_id" "$architecture" <<'PY'
 import json
 import sys
 
@@ -78,8 +83,12 @@ found = any(
     and image.get("architecture") == sys.argv[3]
     for image in catalog.get("images", [])
 )
-raise SystemExit(0 if found else 1)
+print("yes" if found else "no")
 PY
+)" || return 2
+
+    [[ "$result" == "yes" ]] && return 0
+    return 1
 }
 
 publish_one() {
@@ -94,9 +103,18 @@ publish_one() {
     echo "Image: $image_id ($nelroot_arch)"
     echo "============================================================"
 
+    local catalog_status=0
     if already_published "$image_id" "$nelroot_arch"; then
         echo "SKIP: this image/architecture is already in the Hub catalog."
         ((skipped += 1))
+        return 0
+    else
+        catalog_status=$?
+    fi
+
+    if (( catalog_status != 1 )); then
+        echo "ERROR: could not safely inspect the Hub catalog; refusing to publish." >&2
+        ((failed += 1))
         return 0
     fi
 
