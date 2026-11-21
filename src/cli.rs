@@ -62,6 +62,12 @@ enum Commands {
         #[command(subcommand)]
         command: EngineCommands,
     },
+    /// Run a project directly on the Linux host, outside any guest environment.
+    #[cfg(target_os = "linux")]
+    Host {
+        #[command(subcommand)]
+        command: HostCommands,
+    },
     /// Execute a host-native program inside a registered image using Linux chroot.
     Run {
         /// Registered image name.
@@ -403,6 +409,23 @@ enum EngineCommands {
     },
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug, Subcommand)]
+enum HostCommands {
+    /// Execute a command using the host Linux kernel and host-installed tools.
+    Run {
+        /// Run from a NELRoot project directory.
+        #[arg(long, conflicts_with = "cwd")]
+        project: Option<String>,
+        /// Explicit host working directory (defaults to the current directory).
+        #[arg(long)]
+        cwd: Option<std::path::PathBuf>,
+        /// Host executable and arguments after --.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
+        command: Vec<String>,
+    },
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -641,6 +664,44 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     return Err("project path must be a real directory".into());
                 }
                 println!("{}", path.display());
+            }
+        },
+        #[cfg(target_os = "linux")]
+        Commands::Host { command } => match command {
+            HostCommands::Run {
+                project,
+                cwd,
+                command,
+            } => {
+                let program = command.first().ok_or("missing host executable")?;
+                let working_directory = if let Some(name) = project {
+                    if name.is_empty()
+                        || name.len() > 64
+                        || !name.chars().all(|character| {
+                            character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                        })
+                    {
+                        return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                    }
+                    config::projects_dir().join(name)
+                } else {
+                    cwd.unwrap_or(std::env::current_dir()?)
+                };
+                let metadata = std::fs::symlink_metadata(&working_directory)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err("host project working directory must be an existing real directory".into());
+                }
+                ui::banner("Linux host execution");
+                ui::key("Executable", program);
+                ui::key("Working directory", working_directory.display());
+                ui::warn("This command runs directly on the host; it has no distro or namespace isolation.");
+                let status = std::process::Command::new(program)
+                    .args(&command[1..])
+                    .current_dir(working_directory)
+                    .status()?;
+                if !status.success() {
+                    std::process::exit(status.code().unwrap_or(128));
+                }
             }
         },
         Commands::Image { command } => match command {
