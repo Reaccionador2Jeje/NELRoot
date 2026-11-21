@@ -201,11 +201,13 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
             }
 
             // Recover the old managed image if an update was interrupted after backup.
-            if path.is_dir() && is_old && name.starts_with('.') {
-                if let Some((image_name, _)) = name
+            if path.is_dir()
+                && is_old
+                && name.starts_with('.')
+                && let Some((image_name, _)) = name
                     .strip_prefix('.')
                     .and_then(|value| value.split_once(".backup-"))
-                {
+            {
                     let destination = store.join(image_name);
                     if !destination.exists() {
                         fs::rename(&path, destination)?;
