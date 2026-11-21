@@ -632,6 +632,14 @@ fn validate_rootless_launch(
             "rootfs must contain a real /tmp directory for the isolated writable tmpfs",
         ));
     }
+    let proc_dir = rootfs.join("proc");
+    let proc_metadata = std::fs::symlink_metadata(&proc_dir)?;
+    if proc_metadata.file_type().is_symlink() || !proc_metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs must contain a real /proc directory for the guest PID namespace",
+        ));
+    }
     // The rootless backend uses /run as pivot_root's put_old directory.
     // It may contain guest runtime files; do not require it to be empty.
     let run = rootfs.join("run");
@@ -800,13 +808,14 @@ fn prepare_rootless_overlay_storage(
     Ok((upper, work, lock))
 }
 
-/// Launch a same-architecture program in a rootless user and private mount namespace.
+/// Launch a same-architecture program in rootless user, mount, and PID namespaces.
 ///
 /// The parent pauses a child while installing its single-ID UID/GID maps. The
-/// child then creates a private mount namespace, bind-mounts the image read-only,
-/// mounts a bounded tmpfs over /tmp, pivots into the image, detaches the old
-/// root, enables no_new_privs, and execs the guest program. The image is not
-/// modified. PID and network namespace isolation are not implemented yet.
+/// child creates a private mount namespace and writable OverlayFS, then creates
+/// a PID namespace. Its first child becomes PID 1, enters the guest root, mounts
+/// procfs for that PID namespace, and execs the requested program. The outer
+/// child supervises PID 1 and forwards its exit status. Network isolation is
+/// intentionally not enabled: guest programs use host networking by default.
 #[cfg(target_os = "linux")]
 pub fn run_rootless_image(
     image_name: &str,
@@ -878,6 +887,9 @@ pub fn run_rootless_image(
         CString::new("HOME=/root")?,
         CString::new("USER=root")?,
         CString::new("LOGNAME=root")?,
+        CString::new("SHELL=/bin/bash")?,
+        CString::new("TMPDIR=/tmp")?,
+        CString::new(format!("PWD={}", guest_cwd.display()))?,
         CString::new(format!(
             "TERM={}",
             std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned())
@@ -978,6 +990,42 @@ pub fn run_rootless_image(
             {
                 rootless_child_fail(error_pipe[1], 3);
             }
+            // unshare(CLONE_NEWPID) applies to subsequently created children.
+            // Keep this process as a supervisor; the next child becomes PID 1.
+            if libc::unshare(libc::CLONE_NEWPID) != 0 {
+                rootless_child_fail(error_pipe[1], 4);
+            }
+            let init_pid = libc::fork();
+            if init_pid < 0 {
+                rootless_child_fail(error_pipe[1], 4);
+            }
+            if init_pid > 0 {
+                let mut init_status = 0;
+                loop {
+                    let waited = libc::waitpid(init_pid, &mut init_status, 0);
+                    if waited == init_pid {
+                        break;
+                    }
+                    if waited < 0 {
+                        let errno = *libc::__errno_location();
+                        if errno == libc::EINTR {
+                            continue;
+                        }
+                        libc::_exit(125);
+                    }
+                }
+                if libc::WIFEXITED(init_status) {
+                    libc::_exit(libc::WEXITSTATUS(init_status));
+                }
+                if libc::WIFSIGNALED(init_status) {
+                    let signal = libc::WTERMSIG(init_status);
+                    libc::signal(signal, libc::SIG_DFL);
+                    libc::raise(signal);
+                    libc::_exit(128 + signal);
+                }
+                libc::_exit(125);
+            }
+            // This branch is PID 1 inside the new PID namespace.
             if libc::chdir(target_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 5);
             }
@@ -989,6 +1037,15 @@ pub fn run_rootless_image(
             }
             if libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) != 0 {
                 rootless_child_fail(error_pipe[1], 8);
+            }
+            if libc::mount(
+                c"proc".as_ptr(),
+                c"/proc".as_ptr(),
+                c"proc".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC) as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0 {
+                rootless_child_fail(error_pipe[1], 9);
             }
 
             if libc::chdir(cwd_c.as_ptr()) != 0 {
@@ -1079,10 +1136,12 @@ pub fn run_rootless_image(
             1 => "create private mount namespace",
             2 => "make mount propagation private",
             3 => "mount writable OverlayFS rootfs",
+            4 => "create PID namespace and init process",
             5 => "enter writable overlay rootfs",
             6 => "pivot_root",
             7 => "change to guest root",
             8 => "detach old root",
+            9 => "mount guest /proc",
             10 => "change guest working directory",
             11 => "enable no_new_privs",
             12 => "execute guest program",
