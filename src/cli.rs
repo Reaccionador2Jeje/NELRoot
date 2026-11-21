@@ -1602,6 +1602,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 arguments,
                 &cwd,
                 workspace.as_deref(),
+                &std::collections::BTreeMap::new(),
             )?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
@@ -1632,6 +1633,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 &["-i".to_owned()],
                 &cwd,
                 workspace.as_deref(),
+                &std::collections::BTreeMap::new(),
             )?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
@@ -1659,4 +1661,27 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod env_override_tests {
+    use super::parse_env_overrides;
+
+    #[test]
+    fn parses_repeatable_environment_overrides() {
+        let values = parse_env_overrides(&[
+            "MODE=dev".to_owned(),
+            "EMPTY=".to_owned(),
+            "MODE=release".to_owned(),
+        ]).unwrap();
+        assert_eq!(values.get("MODE").map(String::as_str), Some("release"));
+        assert_eq!(values.get("EMPTY").map(String::as_str), Some(""));
+    }
+
+    #[test]
+    fn rejects_invalid_environment_keys_and_missing_equals() {
+        for entry in ["", "MISSING", "9BAD=value", "BAD-KEY=value", "=value"] {
+            assert!(parse_env_overrides(&[entry.to_owned()]).is_err(), "{entry}");
+        }
+    }
 }
