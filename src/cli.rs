@@ -725,11 +725,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .status()?;
                     if !status.success() {
                         use std::os::unix::process::ExitStatusExt;
-                        std::process::exit(
-                            status.code().unwrap_or_else(|| {
-                                status.signal().map(|signal| 128 + signal).unwrap_or(1)
-                            }),
-                        );
+                        std::process::exit(status.code().unwrap_or_else(|| {
+                            status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                        }));
                     }
                 } else {
                     let image = image.as_deref().ok_or("select --image or --host")?;
@@ -746,11 +744,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     )?;
                     if !status.success() {
                         use std::os::unix::process::ExitStatusExt;
-                        std::process::exit(
-                            status.code().unwrap_or_else(|| {
-                                status.signal().map(|signal| 128 + signal).unwrap_or(1)
-                            }),
-                        );
+                        std::process::exit(status.code().unwrap_or_else(|| {
+                            status.signal().map(|signal| 128 + signal).unwrap_or(1)
+                        }));
                     }
                 }
             }
