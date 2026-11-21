@@ -23,6 +23,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check shell scripts
         run: bash -n scripts/install.sh scripts/smoke-test.sh scripts/publish-ubuntu-base.sh scripts/publish-alpine-minirootfs.sh scripts/publish-all-images.sh scripts/smoke-test-hub.sh packaging/build-deb.sh packaging/build-rpm.sh
+      - name: Preview complete image publishing batch
+        run: bash scripts/publish-all-images.sh --list
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Run tests
