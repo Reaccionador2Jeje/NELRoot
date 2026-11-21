@@ -156,17 +156,18 @@ impl SyscallDispatcher {
         result
     }
 
-    pub fn dispatch(
-        &self,
-        context: &mut SyscallContext,
-        registers: GuestSyscallRegisters,
-    ) -> i64 {
+    pub fn dispatch(&self, context: &mut SyscallContext, registers: GuestSyscallRegisters) -> i64 {
         if context.process != GuestProcessState::Running {
             return -errno::EINVAL;
         }
 
         match registers.number {
-            x86_64::WRITE => self.write(context, registers.args[0], registers.args[1], registers.args[2]),
+            x86_64::WRITE => self.write(
+                context,
+                registers.args[0],
+                registers.args[1],
+                registers.args[2],
+            ),
             x86_64::EXIT | x86_64::EXIT_GROUP => {
                 context.process = GuestProcessState::Exited {
                     code: registers.args[0] as u8 as i32,
@@ -209,12 +210,14 @@ mod tests {
 
     fn context() -> SyscallContext {
         let mut layout = GuestAddressSpace::new();
-        layout.reserve_region(
-            0x1000,
-            0x2000,
-            GuestPermissions::READ_WRITE,
-            GuestRegionKind::Stack,
-        ).unwrap();
+        layout
+            .reserve_region(
+                0x1000,
+                0x2000,
+                GuestPermissions::READ_WRITE,
+                GuestRegionKind::Stack,
+            )
+            .unwrap();
         let mut memory = GuestMemory::from_address_space(&layout).unwrap();
         memory.write(0x1100, b"hello NELRoot").unwrap();
         SyscallContext::new(memory)
@@ -313,10 +316,8 @@ mod tests {
     #[test]
     fn unknown_syscalls_return_enosys() {
         let mut context = context();
-        let result = SyscallDispatcher.dispatch(
-            &mut context,
-            GuestSyscallRegisters::new(9999, [0; 6]),
-        );
+        let result =
+            SyscallDispatcher.dispatch(&mut context, GuestSyscallRegisters::new(9999, [0; 6]));
         assert_eq!(result, -errno::ENOSYS);
     }
 

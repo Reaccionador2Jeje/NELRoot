@@ -4,8 +4,13 @@
 //! AtDev-hosted catalog. Server-side publishing lives in the Hub service.
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fs, io::Read, path::{Path, PathBuf}};
 use sha2::{Digest, Sha256};
+use std::{
+    collections::HashSet,
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 const MAX_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CATALOG_ENTRIES: usize = 100_000;
@@ -77,7 +82,9 @@ fn valid_identifier(value: &str) -> bool {
         })
         && !value.starts_with('/')
         && !value.ends_with('/')
-        && !value.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+        && !value
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
 }
 
 fn valid_text(value: &str, max_len: usize) -> bool {
@@ -125,19 +132,24 @@ pub fn validate_manifest(manifest: &HubManifest) -> Result<(), String> {
         ("license", image.license.as_str(), 64),
     ] {
         if !valid_text(value, limit) {
-            return Err(format!("image {field} is empty or exceeds its length limit"));
+            return Err(format!(
+                "image {field} is empty or exceeds its length limit"
+            ));
         }
     }
     if !valid_architecture(&image.architecture) {
-        return Err(format!("unsupported image architecture: {}", image.architecture));
+        return Err(format!(
+            "unsupported image architecture: {}",
+            image.architecture
+        ));
     }
     if image.description.len() > 2048 || image.description.contains('\0') {
         return Err("image description exceeds its length limit".into());
     }
-    if image.tags.len() > 64
-        || image.tags.iter().any(|tag| !valid_text(tag, 48))
-    {
-        return Err("image tags must be non-empty and no longer than 48 bytes (maximum 64 tags)".into());
+    if image.tags.len() > 64 || image.tags.iter().any(|tag| !valid_text(tag, 48)) {
+        return Err(
+            "image tags must be non-empty and no longer than 48 bytes (maximum 64 tags)".into(),
+        );
     }
 
     if image.rootfs.format != "tar.gz" {
@@ -171,7 +183,10 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
 
     for entry in &catalog.images {
         if !valid_identifier(&entry.id) {
-            return Err(format!("catalog contains an invalid image id: {}", entry.id));
+            return Err(format!(
+                "catalog contains an invalid image id: {}",
+                entry.id
+            ));
         }
         if !valid_text(&entry.name, 128)
             || !valid_text(&entry.version, 64)
@@ -179,7 +194,10 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
             || entry.description.len() > 2048
             || entry.description.contains('\0')
         {
-            return Err(format!("catalog entry '{}' has invalid text metadata", entry.id));
+            return Err(format!(
+                "catalog entry '{}' has invalid text metadata",
+                entry.id
+            ));
         }
         if !valid_architecture(&entry.architecture) {
             return Err(format!(
@@ -207,7 +225,10 @@ pub fn validate_catalog(catalog: &HubCatalog) -> Result<(), String> {
     let mut identifiers = HashSet::with_capacity(catalog.images.len());
     for entry in &catalog.images {
         if !identifiers.insert(entry.id.as_str()) {
-            return Err(format!("catalog contains duplicate image id '{}'", entry.id));
+            return Err(format!(
+                "catalog contains duplicate image id '{}'",
+                entry.id
+            ));
         }
     }
     Ok(())
@@ -252,9 +273,7 @@ pub fn load_catalog(path: &Path) -> Result<HubCatalog, Box<dyn std::error::Error
 }
 
 /// Fetch and validate a first-party Hub catalog over HTTPS.
-pub fn fetch_remote_catalog(
-    hub_url: &str,
-) -> Result<HubCatalog, Box<dyn std::error::Error>> {
+pub fn fetch_remote_catalog(hub_url: &str) -> Result<HubCatalog, Box<dyn std::error::Error>> {
     let base = reqwest::Url::parse(hub_url)?;
     if base.scheme() != "https"
         || base.host_str().is_none()
@@ -263,7 +282,9 @@ pub fn fetch_remote_catalog(
         || base.query().is_some()
         || base.fragment().is_some()
     {
-        return Err("Hub URL must be an HTTPS base URL without credentials, query or fragment".into());
+        return Err(
+            "Hub URL must be an HTTPS base URL without credentials, query or fragment".into(),
+        );
     }
 
     let endpoint = base.join("/v1/catalog")?;
@@ -330,21 +351,32 @@ pub fn fetch_remote_manifest(
     if response.url().scheme() != "https" {
         return Err("manifest request redirected to a non-HTTPS URL".into());
     }
-    if response.content_length().is_some_and(|length| length > MAX_METADATA_BYTES) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_METADATA_BYTES)
+    {
         return Err("remote manifest exceeds the 8 MiB metadata limit".into());
     }
     let mut bytes = Vec::new();
-    response.take(MAX_METADATA_BYTES + 1).read_to_end(&mut bytes)?;
+    response
+        .take(MAX_METADATA_BYTES + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_METADATA_BYTES {
         return Err("remote manifest exceeds the 8 MiB metadata limit".into());
     }
     let digest = format!("{:x}", Sha256::digest(&bytes));
     if !digest.eq_ignore_ascii_case(expected_sha256) {
-        return Err(format!("manifest SHA-256 mismatch: expected {expected_sha256}, received {digest}").into());
+        return Err(format!(
+            "manifest SHA-256 mismatch: expected {expected_sha256}, received {digest}"
+        )
+        .into());
     }
     let manifest: HubManifest = serde_json::from_slice(&bytes)?;
     validate_manifest(&manifest).map_err(|error| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("invalid remote NELRoot Hub manifest: {error}"))
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid remote NELRoot Hub manifest: {error}"),
+        )
     })?;
     Ok(manifest)
 }
@@ -371,13 +403,26 @@ fn remote_image(
 }
 
 fn local_image_name(manifest: &HubManifest) -> String {
-    let normalized = manifest.image.id.chars()
-        .map(|character| if character.is_ascii_alphanumeric() { character.to_ascii_lowercase() } else { '-' })
+    let normalized = manifest
+        .image
+        .id
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
     let suffix = format!("-{}", manifest.image.architecture);
     let max_prefix = 64usize.saturating_sub(suffix.len());
     let prefix = normalized.trim_matches('-');
-    format!("{}{}", prefix.chars().take(max_prefix).collect::<String>(), suffix)
+    format!(
+        "{}{}",
+        prefix.chars().take(max_prefix).collect::<String>(),
+        suffix
+    )
 }
 
 fn download_remote_rootfs(
@@ -386,7 +431,9 @@ fn download_remote_rootfs(
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let downloads = crate::core::config::cache_dir().join("downloads");
     fs::create_dir_all(&downloads)?;
-    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
     let archive = downloads.join(format!("{prefix}-{}-{nonce}.tar.gz", std::process::id()));
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         crate::core::images::download_archive(
@@ -399,7 +446,8 @@ fn download_remote_rootfs(
             return Err(format!(
                 "rootfs size mismatch: expected {} bytes, received {actual_size}",
                 manifest.image.rootfs.size_bytes
-            ).into());
+            )
+            .into());
         }
         Ok(())
     })();
@@ -418,7 +466,9 @@ pub fn pull_remote_image(
     local_name: Option<&str>,
 ) -> Result<(String, PathBuf), Box<dyn std::error::Error>> {
     let manifest = remote_image(hub_url, image_id, architecture)?;
-    let name = local_name.map(str::to_owned).unwrap_or_else(|| local_image_name(&manifest));
+    let name = local_name
+        .map(str::to_owned)
+        .unwrap_or_else(|| local_image_name(&manifest));
     let archive = download_remote_rootfs(&manifest, "hub-pull")?;
     let result = crate::core::images::import_archive(&name, &archive, architecture);
     let _ = fs::remove_file(&archive);
@@ -443,15 +493,14 @@ pub fn publish_image(
         || base.query().is_some()
         || base.fragment().is_some()
     {
-        return Err("Hub URL must be an HTTPS base URL without credentials, query or fragment".into());
+        return Err(
+            "Hub URL must be an HTTPS base URL without credentials, query or fragment".into(),
+        );
     }
 
     let manifest = load_manifest(manifest_path)?;
     let metadata = fs::metadata(archive_path)?;
-    if !metadata.is_file()
-        || metadata.len() == 0
-        || metadata.len() > MAX_ARTIFACT_BYTES
-    {
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_ARTIFACT_BYTES {
         return Err("rootfs archive must be a regular file between 1 byte and 512 MiB".into());
     }
     if metadata.len() != manifest.image.rootfs.size_bytes {
@@ -459,7 +508,8 @@ pub fn publish_image(
             "manifest rootfs size mismatch: expected {} bytes, local archive has {}",
             manifest.image.rootfs.size_bytes,
             metadata.len()
-        ).into());
+        )
+        .into());
     }
 
     let mut file = fs::File::open(archive_path)?;
@@ -477,7 +527,8 @@ pub fn publish_image(
         return Err(format!(
             "local rootfs SHA-256 mismatch: manifest expects {}, archive is {digest}",
             manifest.image.rootfs.sha256
-        ).into());
+        )
+        .into());
     }
 
     let client = reqwest::blocking::Client::builder()
@@ -495,7 +546,11 @@ pub fn publish_image(
         .body(upload)
         .send()?;
     if !upload_response.status().is_success() {
-        return Err(format!("Hub artifact upload failed with HTTP {}", upload_response.status()).into());
+        return Err(format!(
+            "Hub artifact upload failed with HTTP {}",
+            upload_response.status()
+        )
+        .into());
     }
 
     let manifest_url = base.join("/v1/manifests")?;
@@ -507,7 +562,11 @@ pub fn publish_image(
         .body(manifest_bytes)
         .send()?;
     if !publish_response.status().is_success() {
-        return Err(format!("Hub manifest publication failed with HTTP {}", publish_response.status()).into());
+        return Err(format!(
+            "Hub manifest publication failed with HTTP {}",
+            publish_response.status()
+        )
+        .into());
     }
     let response: serde_json::Value = publish_response.json()?;
     let published_url = response
@@ -547,8 +606,7 @@ pub fn search_catalog<'a>(
         .images
         .iter()
         .filter(|entry| {
-            let architecture_matches =
-                architecture.is_none_or(|arch| entry.architecture == arch);
+            let architecture_matches = architecture.is_none_or(|arch| entry.architecture == arch);
             let metadata_matches = [
                 entry.id.as_str(),
                 entry.name.as_str(),
@@ -600,7 +658,10 @@ mod tests {
         let name = local_image_name(&value);
         assert!(!name.is_empty());
         assert!(name.len() <= 64);
-        assert!(name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b'_'));
+        assert!(name.bytes().all(|byte| byte.is_ascii_lowercase()
+            || byte.is_ascii_digit()
+            || byte == b'-'
+            || byte == b'_'));
         assert!(name.ends_with("-x86_64"));
     }
 
@@ -659,7 +720,12 @@ mod tests {
             images: vec![entry],
         };
         assert!(validate_catalog(&catalog).is_ok());
-        assert_eq!(search_catalog(&catalog, "minimal", Some("x86_64")).unwrap().len(), 1);
+        assert_eq!(
+            search_catalog(&catalog, "minimal", Some("x86_64"))
+                .unwrap()
+                .len(),
+            1
+        );
 
         let mut duplicate = catalog.clone();
         duplicate.images.push(duplicate.images[0].clone());

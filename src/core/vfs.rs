@@ -30,10 +30,7 @@ impl GuestVfs {
     /// resolve within the root are allowed; absolute symlinks are interpreted
     /// relative to the guest root by RESOLVE_IN_ROOT.
     #[cfg(target_os = "linux")]
-    pub fn open_existing(
-        &self,
-        guest_path: &Path,
-    ) -> Result<std::fs::File, std::io::Error> {
+    pub fn open_existing(&self, guest_path: &Path) -> Result<std::fs::File, std::io::Error> {
         self.openat2(guest_path, libc::O_RDONLY | libc::O_CLOEXEC, 0)
     }
 
@@ -42,10 +39,7 @@ impl GuestVfs {
     /// The parent directory must already exist. Existing files and symlinks
     /// are never overwritten. New files are created with mode 0600.
     #[cfg(target_os = "linux")]
-    pub fn create_new_file(
-        &self,
-        guest_path: &Path,
-    ) -> Result<std::fs::File, std::io::Error> {
+    pub fn create_new_file(&self, guest_path: &Path) -> Result<std::fs::File, std::io::Error> {
         self.openat2(
             guest_path,
             libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC,
@@ -166,9 +160,7 @@ impl GuestVfs {
             .ok_or("guest file path has no parent directory")?;
         let canonical_parent = self.root.join(parent).canonicalize()?;
         if !canonical_parent.starts_with(&self.root) {
-            return Err(
-                "guest file parent resolves outside the configured root filesystem".into(),
-            );
+            return Err("guest file parent resolves outside the configured root filesystem".into());
         }
         let destination = canonical_parent.join(name);
         match std::fs::symlink_metadata(&destination) {
@@ -230,9 +222,7 @@ mod tests {
     fn resolves_existing_guest_files_under_root() {
         let root = test_root();
         let vfs = GuestVfs::new(&root).unwrap();
-        let resolved = vfs
-            .resolve_existing(Path::new("/etc/os-release"))
-            .unwrap();
+        let resolved = vfs.resolve_existing(Path::new("/etc/os-release")).unwrap();
         assert_eq!(resolved, root.join("etc/os-release"));
         fs::remove_dir_all(root).unwrap();
     }

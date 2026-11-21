@@ -1,11 +1,7 @@
 use std::{path::Path, process::ExitStatus};
 
 #[cfg(target_os = "linux")]
-use std::{
-    ffi::CString,
-    io,
-    process::Command,
-};
+use std::{ffi::CString, io, process::Command};
 
 #[cfg(target_os = "linux")]
 use crate::core::{images, process::SupervisedProcess};
@@ -59,10 +55,9 @@ pub fn rootless_namespace_info() -> RootlessNamespaceInfo {
             std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
                 .ok()
                 .and_then(|value| parse_sysctl_bool(&value));
-        let max_user_namespaces =
-            std::fs::read_to_string("/proc/sys/user/max_user_namespaces")
-                .ok()
-                .and_then(|value| parse_namespace_limit(&value));
+        let max_user_namespaces = std::fs::read_to_string("/proc/sys/user/max_user_namespaces")
+            .ok()
+            .and_then(|value| parse_namespace_limit(&value));
 
         RootlessNamespaceInfo {
             current_user_namespace_visible,
@@ -212,8 +207,7 @@ pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespac
             }
 
             let mut release = 0_u8;
-            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1
-                || release != 1
+            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1 || release != 1
             {
                 libc::_exit(247);
             }
@@ -305,8 +299,7 @@ pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespac
 
     let release = 1_u8;
     // SAFETY: release points to one readable byte for the waiting child.
-    let write_result =
-        unsafe { libc::write(release_pipe[1], (&release as *const u8).cast(), 1) };
+    let write_result = unsafe { libc::write(release_pipe[1], (&release as *const u8).cast(), 1) };
     unsafe { libc::close(release_pipe[1]) };
     if write_result != 1 {
         unsafe { libc::kill(pid, libc::SIGKILL) };
@@ -451,7 +444,10 @@ fn validate_rootfs_mount_target(rootfs: &Path, target: &Path) -> io::Result<(CSt
         CString::new(root.as_os_str().as_encoded_bytes())
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "rootfs path contains NUL"))?,
         CString::new(target.as_os_str().as_encoded_bytes()).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidInput, "mount target path contains NUL")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "mount target path contains NUL",
+            )
         })?,
     ))
 }
@@ -508,30 +504,45 @@ pub fn bind_mount_rootfs_read_only(rootfs: &Path, target: &Path) -> io::Result<(
 
 /// Validate a mounted rootfs and its real /run and /tmp directories.
 #[cfg(target_os = "linux")]
-fn validate_pivot_root_target(rootfs_mount_target: &Path) -> io::Result<(std::path::PathBuf, std::path::PathBuf)> {
+fn validate_pivot_root_target(
+    rootfs_mount_target: &Path,
+) -> io::Result<(std::path::PathBuf, std::path::PathBuf)> {
     let root_meta = std::fs::symlink_metadata(rootfs_mount_target)?;
     if root_meta.file_type().is_symlink() || !root_meta.is_dir() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "pivot_root target must be an existing real directory, not a symlink"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pivot_root target must be an existing real directory, not a symlink",
+        ));
     }
     let root = rootfs_mount_target.canonicalize()?;
     let run = root.join("run");
     let run_meta = std::fs::symlink_metadata(&run).map_err(|error| {
-        io::Error::new(io::ErrorKind::InvalidInput,
-            format!("rootfs must contain an empty real /run directory for pivot_root: {error}"))
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("rootfs must contain an empty real /run directory for pivot_root: {error}"),
+        )
     })?;
-    if run_meta.file_type().is_symlink() || !run_meta.is_dir() || std::fs::read_dir(&run)?.next().is_some() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "rootfs /run must be an existing empty real directory for pivot_root"));
+    if run_meta.file_type().is_symlink()
+        || !run_meta.is_dir()
+        || std::fs::read_dir(&run)?.next().is_some()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs /run must be an existing empty real directory for pivot_root",
+        ));
     }
     let tmp = root.join("tmp");
     let tmp_meta = std::fs::symlink_metadata(&tmp).map_err(|error| {
-        io::Error::new(io::ErrorKind::InvalidInput,
-            format!("rootfs must contain a real /tmp directory: {error}"))
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("rootfs must contain a real /tmp directory: {error}"),
+        )
     })?;
     if tmp_meta.file_type().is_symlink() || !tmp_meta.is_dir() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "rootfs /tmp must be an existing real directory, not a symlink"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs /tmp must be an existing real directory, not a symlink",
+        ));
     }
     Ok((root, tmp))
 }
@@ -560,10 +571,15 @@ pub fn enter_rootfs_with_pivot(rootfs_mount_target: &Path) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
     if unsafe {
-        libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
+        libc::mount(
+            c"tmpfs".as_ptr(),
+            c"/tmp".as_ptr(),
+            c"tmpfs".as_ptr(),
             (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-            c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>())
-    } != 0 {
+            c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
+        )
+    } != 0
+    {
         return Err(io::Error::last_os_error());
     }
     Ok(())
@@ -585,42 +601,58 @@ fn validate_rootless_launch(
     guest_cwd: &Path,
 ) -> io::Result<()> {
     if unsafe { libc::geteuid() } == 0 {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-            "rootless launch must be started by an unprivileged host user, not host UID 0"));
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "rootless launch must be started by an unprivileged host user, not host UID 0",
+        ));
     }
     if !program.starts_with('/') || program.as_bytes().contains(&0) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "guest executable must be an absolute path such as /bin/sh"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "guest executable must be an absolute path such as /bin/sh",
+        ));
     }
-    validate_guest_cwd(guest_cwd).map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    validate_guest_cwd(guest_cwd)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
     let tmp = rootfs.join("tmp");
     let metadata = std::fs::symlink_metadata(&tmp)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "rootfs must contain a real /tmp directory for the isolated writable tmpfs"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs must contain a real /tmp directory for the isolated writable tmpfs",
+        ));
     }
     let run = rootfs.join("run");
     let run_metadata = std::fs::symlink_metadata(&run)?;
-    if run_metadata.file_type().is_symlink() || !run_metadata.is_dir()
+    if run_metadata.file_type().is_symlink()
+        || !run_metadata.is_dir()
         || std::fs::read_dir(&run)?.next().is_some()
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "rootfs /run must be an existing empty real directory for pivot_root"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs /run must be an existing empty real directory for pivot_root",
+        ));
     }
     let root = rootfs.canonicalize()?;
     let target_meta = std::fs::symlink_metadata(target)?;
     if target_meta.file_type().is_symlink() || !target_meta.is_dir() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "runtime mount target must be an existing real directory"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "runtime mount target must be an existing real directory",
+        ));
     }
     let target = target.canonicalize()?;
     if root == target || root.starts_with(&target) || target.starts_with(&root) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "runtime mount target and rootfs must not contain one another"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "runtime mount target and rootfs must not contain one another",
+        ));
     }
     if std::fs::read_dir(&target)?.next().is_some() {
-        return Err(io::Error::new(io::ErrorKind::DirectoryNotEmpty,
-            "runtime mount target must be empty"));
+        return Err(io::Error::new(
+            io::ErrorKind::DirectoryNotEmpty,
+            "runtime mount target must be empty",
+        ));
     }
     Ok(())
 }
@@ -632,8 +664,11 @@ unsafe fn rootless_child_fail(error_fd: libc::c_int, stage: i32) -> ! {
         errno: unsafe { *libc::__errno_location() },
     };
     unsafe {
-        libc::write(error_fd, (&failure as *const RootlessChildFailure).cast(),
-            std::mem::size_of::<RootlessChildFailure>());
+        libc::write(
+            error_fd,
+            (&failure as *const RootlessChildFailure).cast(),
+            std::mem::size_of::<RootlessChildFailure>(),
+        );
         libc::_exit(127);
     }
 }
@@ -644,24 +679,33 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
     let mut received = 0_usize;
     while received < std::mem::size_of::<RootlessChildFailure>() {
         let result = unsafe {
-            libc::read(fd,
+            libc::read(
+                fd,
                 failure.as_mut_ptr().cast::<u8>().add(received).cast(),
-                std::mem::size_of::<RootlessChildFailure>() - received)
+                std::mem::size_of::<RootlessChildFailure>() - received,
+            )
         };
-        if result == 0 { break; }
+        if result == 0 {
+            break;
+        }
         if result < 0 {
             let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted { continue; }
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
             return Err(error);
         }
         received += result as usize;
     }
-    if received == 0 { Ok(None) }
-    else if received == std::mem::size_of::<RootlessChildFailure>() {
+    if received == 0 {
+        Ok(None)
+    } else if received == std::mem::size_of::<RootlessChildFailure>() {
         Ok(Some(unsafe { failure.assume_init() }))
     } else {
-        Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-            "rootless child returned a truncated setup error"))
+        Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "rootless child returned a truncated setup error",
+        ))
     }
 }
 
@@ -682,21 +726,31 @@ pub fn run_rootless_image(
     use std::os::unix::process::ExitStatusExt;
 
     let catalog = images::load_catalog()?;
-    let image = catalog.images.iter().find(|image| image.name == image_name)
+    let image = catalog
+        .images
+        .iter()
+        .find(|image| image.name == image_name)
         .ok_or_else(|| format!("image '{image_name}' is not registered"))?;
     if !host_architecture_matches(&image.architecture) {
         return Err(format!("image architecture '{}' does not match host architecture '{}'; cross-architecture execution is not implemented",
             image.architecture, std::env::consts::ARCH).into());
     }
     let rootfs = images::validate_rootfs(Path::new(
-        image.source.as_deref().ok_or("registered image has no root filesystem path")?
+        image
+            .source
+            .as_deref()
+            .ok_or("registered image has no root filesystem path")?,
     ))?;
 
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
-    let unique = format!("rootfs-{}-{}",
+    let unique = format!(
+        "rootfs-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos());
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos()
+    );
     let target = runtime_root.join(unique);
     std::fs::create_dir(&target)?;
     if let Err(error) = validate_rootless_launch(&rootfs, &target, program, guest_cwd) {
@@ -710,7 +764,9 @@ pub fn run_rootless_image(
     let program_c = CString::new(program)?;
     let mut argv = Vec::with_capacity(arguments.len() + 2);
     argv.push(program_c.clone());
-    for argument in arguments { argv.push(CString::new(argument.as_bytes())?); }
+    for argument in arguments {
+        argv.push(CString::new(argument.as_bytes())?);
+    }
     let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|value| value.as_ptr()).collect();
     argv_ptrs.push(std::ptr::null());
 
@@ -733,15 +789,20 @@ pub fn run_rootless_image(
     }
     if unsafe { libc::pipe2(release_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
         let error = io::Error::last_os_error();
-        unsafe { libc::close(ready_pipe[0]); libc::close(ready_pipe[1]); }
+        unsafe {
+            libc::close(ready_pipe[0]);
+            libc::close(ready_pipe[1]);
+        }
         let _ = std::fs::remove_dir(&target);
         return Err(error.into());
     }
     if unsafe { libc::pipe2(error_pipe.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
         let error = io::Error::last_os_error();
         unsafe {
-            libc::close(ready_pipe[0]); libc::close(ready_pipe[1]);
-            libc::close(release_pipe[0]); libc::close(release_pipe[1]);
+            libc::close(ready_pipe[0]);
+            libc::close(ready_pipe[1]);
+            libc::close(release_pipe[0]);
+            libc::close(release_pipe[1]);
         }
         let _ = std::fs::remove_dir(&target);
         return Err(error.into());
@@ -751,9 +812,12 @@ pub fn run_rootless_image(
     if pid < 0 {
         let error = io::Error::last_os_error();
         unsafe {
-            libc::close(ready_pipe[0]); libc::close(ready_pipe[1]);
-            libc::close(release_pipe[0]); libc::close(release_pipe[1]);
-            libc::close(error_pipe[0]); libc::close(error_pipe[1]);
+            libc::close(ready_pipe[0]);
+            libc::close(ready_pipe[1]);
+            libc::close(release_pipe[0]);
+            libc::close(release_pipe[1]);
+            libc::close(error_pipe[0]);
+            libc::close(error_pipe[1]);
         }
         let _ = std::fs::remove_dir(&target);
         return Err(error.into());
@@ -778,39 +842,74 @@ pub fn run_rootless_image(
             libc::close(ready_pipe[1]);
 
             let mut release = 0_u8;
-            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1 || release != 1 {
+            if libc::read(release_pipe[0], (&mut release as *mut u8).cast(), 1) != 1 || release != 1
+            {
                 libc::_exit(125);
             }
             libc::close(release_pipe[0]);
 
-            if libc::unshare(libc::CLONE_NEWNS) != 0 { rootless_child_fail(error_pipe[1], 1); }
-            if libc::mount(std::ptr::null(), c"/".as_ptr(), std::ptr::null(),
-                (libc::MS_REC | libc::MS_PRIVATE) as libc::c_ulong, std::ptr::null()) != 0 {
+            if libc::unshare(libc::CLONE_NEWNS) != 0 {
+                rootless_child_fail(error_pipe[1], 1);
+            }
+            if libc::mount(
+                std::ptr::null(),
+                c"/".as_ptr(),
+                std::ptr::null(),
+                (libc::MS_REC | libc::MS_PRIVATE) as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0
+            {
                 rootless_child_fail(error_pipe[1], 2);
             }
-            if libc::mount(root_c.as_ptr(), target_c.as_ptr(), std::ptr::null(),
-                libc::MS_BIND as libc::c_ulong, std::ptr::null()) != 0 {
+            if libc::mount(
+                root_c.as_ptr(),
+                target_c.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0
+            {
                 rootless_child_fail(error_pipe[1], 3);
             }
-            if libc::mount(std::ptr::null(), target_c.as_ptr(), std::ptr::null(),
-                (libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                std::ptr::null()) != 0 {
+            if libc::mount(
+                std::ptr::null(),
+                target_c.as_ptr(),
+                std::ptr::null(),
+                (libc::MS_BIND
+                    | libc::MS_REMOUNT
+                    | libc::MS_RDONLY
+                    | libc::MS_NOSUID
+                    | libc::MS_NODEV) as libc::c_ulong,
+                std::ptr::null(),
+            ) != 0
+            {
                 rootless_child_fail(error_pipe[1], 4);
             }
-            if libc::chdir(target_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 5); }
+            if libc::chdir(target_c.as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 5);
+            }
             if libc::syscall(libc::SYS_pivot_root, c".".as_ptr(), c"run".as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 6);
             }
-            if libc::chdir(c"/".as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 7); }
+            if libc::chdir(c"/".as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 7);
+            }
             if libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) != 0 {
                 rootless_child_fail(error_pipe[1], 8);
             }
-            if libc::mount(c"tmpfs".as_ptr(), c"/tmp".as_ptr(), c"tmpfs".as_ptr(),
+            if libc::mount(
+                c"tmpfs".as_ptr(),
+                c"/tmp".as_ptr(),
+                c"tmpfs".as_ptr(),
                 (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>()) != 0 {
+                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
+            ) != 0
+            {
                 rootless_child_fail(error_pipe[1], 9);
             }
-            if libc::chdir(cwd_c.as_ptr()) != 0 { rootless_child_fail(error_pipe[1], 10); }
+            if libc::chdir(cwd_c.as_ptr()) != 0 {
+                rootless_child_fail(error_pipe[1], 10);
+            }
             if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                 rootless_child_fail(error_pipe[1], 11);
             }
@@ -827,40 +926,62 @@ pub fn run_rootless_image(
     let mut ready = 0_u8;
     let ready_result = loop {
         let result = unsafe { libc::read(ready_pipe[0], (&mut ready as *mut u8).cast(), 1) };
-        if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted { continue; }
+        if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
         break result;
     };
-    unsafe { libc::close(ready_pipe[0]); }
+    unsafe {
+        libc::close(ready_pipe[0]);
+    }
     if ready_result != 1 || ready != 0 {
-        unsafe { libc::close(release_pipe[1]); libc::kill(pid, libc::SIGKILL); }
+        unsafe {
+            libc::close(release_pipe[1]);
+            libc::kill(pid, libc::SIGKILL);
+        }
         let _ = wait_for_child(pid);
         let _ = std::fs::remove_dir(&target);
         return Err(if ready_result == 1 {
             io::Error::from_raw_os_error(ready as i32).into()
-        } else { io::Error::last_os_error().into() });
+        } else {
+            io::Error::last_os_error().into()
+        });
     }
 
     if let Err(error) = configure_user_namespace_mappings(pid) {
-        unsafe { libc::close(release_pipe[1]); libc::kill(pid, libc::SIGKILL); }
+        unsafe {
+            libc::close(release_pipe[1]);
+            libc::kill(pid, libc::SIGKILL);
+        }
         let _ = wait_for_child(pid);
-        unsafe { libc::close(error_pipe[0]); }
+        unsafe {
+            libc::close(error_pipe[0]);
+        }
         let _ = std::fs::remove_dir(&target);
         return Err(error.into());
     }
     let release = 1_u8;
     let released = unsafe { libc::write(release_pipe[1], (&release as *const u8).cast(), 1) };
-    unsafe { libc::close(release_pipe[1]); }
+    unsafe {
+        libc::close(release_pipe[1]);
+    }
     if released != 1 {
         let error = io::Error::last_os_error();
-        unsafe { libc::kill(pid, libc::SIGKILL); }
+        unsafe {
+            libc::kill(pid, libc::SIGKILL);
+        }
         let _ = wait_for_child(pid);
-        unsafe { libc::close(error_pipe[0]); }
+        unsafe {
+            libc::close(error_pipe[0]);
+        }
         let _ = std::fs::remove_dir(&target);
         return Err(error.into());
     }
 
     let child_failure = read_child_failure(error_pipe[0]);
-    unsafe { libc::close(error_pipe[0]); }
+    unsafe {
+        libc::close(error_pipe[0]);
+    }
     let status = match wait_for_child(pid) {
         Ok(status) => status,
         Err(error) => {
@@ -886,7 +1007,11 @@ pub fn run_rootless_image(
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
-        return Err(io::Error::new(source.kind(), format!("rootless runtime failed to {stage}: {source}")).into());
+        return Err(io::Error::new(
+            source.kind(),
+            format!("rootless runtime failed to {stage}: {source}"),
+        )
+        .into());
     }
     Ok(ExitStatus::from_raw(status))
 }
@@ -1008,7 +1133,10 @@ pub fn run_image(
             .args(arguments)
             .env_clear()
             .env("HOME", if keep_root { "/root" } else { "/nonexistent" })
-            .env("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            .env(
+                "PATH",
+                "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            )
             .env("USER", if keep_root { "root" } else { "nobody" })
             .env("LOGNAME", if keep_root { "root" } else { "nobody" });
 

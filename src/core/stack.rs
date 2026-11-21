@@ -87,11 +87,15 @@ pub fn build_initial_stack(config: &GuestStackConfig) -> Result<GuestStack, Box<
         return Err("ELF initial stack requires at least argv[0]".into());
     }
     if config.argv.len() > MAX_ARGUMENTS || config.envp.len() > MAX_ENVIRONMENT {
-        return Err("guest stack argument or environment count exceeds the 4096-entry limit".into());
+        return Err(
+            "guest stack argument or environment count exceeds the 4096-entry limit".into(),
+        );
     }
-    if config.auxv.iter().any(|entry| {
-        entry.kind == AT_NULL || entry.kind == AT_RANDOM || entry.kind == AT_EXECFN
-    }) {
+    if config
+        .auxv
+        .iter()
+        .any(|entry| entry.kind == AT_NULL || entry.kind == AT_RANDOM || entry.kind == AT_EXECFN)
+    {
         return Err("AT_NULL, AT_RANDOM and AT_EXECFN are reserved by the stack builder".into());
     }
     if config.execfn.is_empty() || config.execfn.contains(&0) {
@@ -293,7 +297,10 @@ mod tests {
         let stack = build_initial_stack(&config()).unwrap();
         let argv_offset = (stack.argv_addresses()[0] - stack.stack_pointer()) as usize;
 
-        assert_eq!(&stack.bytes()[argv_offset..argv_offset + 10], b"/bin/demo\0");
+        assert_eq!(
+            &stack.bytes()[argv_offset..argv_offset + 10],
+            b"/bin/demo\0"
+        );
 
         let execfn_offset = (stack.execfn_address() - stack.stack_pointer()) as usize;
         assert_eq!(

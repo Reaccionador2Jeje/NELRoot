@@ -4,9 +4,7 @@
 //! native CPU backend. It fetches only from executable GuestMemory regions and
 //! never jumps into host memory or invokes host syscalls directly.
 
-use super::abi::{
-    GuestProcessState, SyscallContext, SyscallDispatcher, X86_64SyscallFrame,
-};
+use super::abi::{GuestProcessState, SyscallContext, SyscallDispatcher, X86_64SyscallFrame};
 
 const MAX_INSTRUCTION_BYTES: usize = 10;
 
@@ -97,7 +95,9 @@ impl X86_64Interpreter {
         if context.process != GuestProcessState::Running {
             return Err(CpuError::ProcessNotRunning);
         }
-        let bytes = context.memory.fetch_execute(self.registers.rip, MAX_INSTRUCTION_BYTES)
+        let bytes = context
+            .memory
+            .fetch_execute(self.registers.rip, MAX_INSTRUCTION_BYTES)
             .map_err(|_| CpuError::FetchFault)?;
         let first = *bytes.first().ok_or(CpuError::TruncatedInstruction)?;
 
@@ -110,14 +110,21 @@ impl X86_64Interpreter {
                 self.set_zero_flag(true);
                 2 // XOR EAX, EAX
             }
-            0x48 if bytes.get(1).is_some_and(|opcode| (0xb8..=0xbf).contains(opcode)) => {
-                if bytes.len() < 10 { return Err(CpuError::TruncatedInstruction); }
+            0x48 if bytes
+                .get(1)
+                .is_some_and(|opcode| (0xb8..=0xbf).contains(opcode)) =>
+            {
+                if bytes.len() < 10 {
+                    return Err(CpuError::TruncatedInstruction);
+                }
                 let value = u64::from_le_bytes(bytes[2..10].try_into().unwrap());
                 self.set_register((bytes[1] - 0xb8) as usize, value);
                 10
             }
             0x48 if bytes.get(1) == Some(&0x83) => {
-                if bytes.len() < 4 { return Err(CpuError::TruncatedInstruction); }
+                if bytes.len() < 4 {
+                    return Err(CpuError::TruncatedInstruction);
+                }
                 let operation = bytes[2];
                 let immediate = bytes[3] as i8 as i64 as u64;
                 let lhs = self.registers.rax;
@@ -150,17 +157,25 @@ impl X86_64Interpreter {
                 1
             }
             0xeb => {
-                if bytes.len() < 2 { return Err(CpuError::TruncatedInstruction); }
+                if bytes.len() < 2 {
+                    return Err(CpuError::TruncatedInstruction);
+                }
                 let displacement = bytes[1] as i8 as i64;
                 next_rip = Some(self.relative_target(self.registers.rip, 2, displacement)?);
                 2
             }
             0xe8 | 0xe9 => {
-                if bytes.len() < 5 { return Err(CpuError::TruncatedInstruction); }
+                if bytes.len() < 5 {
+                    return Err(CpuError::TruncatedInstruction);
+                }
                 let displacement = i32::from_le_bytes(bytes[1..5].try_into().unwrap()) as i64;
                 let target = self.relative_target(self.registers.rip, 5, displacement)?;
                 if first == 0xe8 {
-                    let return_address = self.registers.rip.checked_add(5).ok_or(CpuError::FetchFault)?;
+                    let return_address = self
+                        .registers
+                        .rip
+                        .checked_add(5)
+                        .ok_or(CpuError::FetchFault)?;
                     self.push_u64(context, return_address)?;
                 }
                 next_rip = Some(target);
@@ -171,15 +186,21 @@ impl X86_64Interpreter {
                 1
             }
             0x74 | 0x75 => {
-                if bytes.len() < 2 { return Err(CpuError::TruncatedInstruction); }
+                if bytes.len() < 2 {
+                    return Err(CpuError::TruncatedInstruction);
+                }
                 let zero = self.registers.rflags & (1 << 6) != 0;
                 let take = if first == 0x74 { zero } else { !zero };
                 if take {
-                    next_rip = Some(self.relative_target(
-                        self.registers.rip, 2, bytes[1] as i8 as i64
-                    )?);
+                    next_rip =
+                        Some(self.relative_target(self.registers.rip, 2, bytes[1] as i8 as i64)?);
                 } else {
-                    next_rip = Some(self.registers.rip.checked_add(2).ok_or(CpuError::FetchFault)?);
+                    next_rip = Some(
+                        self.registers
+                            .rip
+                            .checked_add(2)
+                            .ok_or(CpuError::FetchFault)?,
+                    );
                 }
                 2
             }
@@ -204,7 +225,11 @@ impl X86_64Interpreter {
 
         self.registers.rip = match next_rip {
             Some(target) => target,
-            None => self.registers.rip.checked_add(length as u64).ok_or(CpuError::FetchFault)?,
+            None => self
+                .registers
+                .rip
+                .checked_add(length as u64)
+                .ok_or(CpuError::FetchFault)?,
         };
         self.instructions_executed = self.instructions_executed.saturating_add(1);
 
@@ -217,50 +242,85 @@ impl X86_64Interpreter {
 
     fn get_register(&self, index: usize) -> u64 {
         match index {
-            0 => self.registers.rax, 1 => self.registers.rcx,
-            2 => self.registers.rdx, 3 => self.registers.rbx,
-            4 => self.registers.rsp, 5 => self.registers.rbp,
-            6 => self.registers.rsi, 7 => self.registers.rdi,
+            0 => self.registers.rax,
+            1 => self.registers.rcx,
+            2 => self.registers.rdx,
+            3 => self.registers.rbx,
+            4 => self.registers.rsp,
+            5 => self.registers.rbp,
+            6 => self.registers.rsi,
+            7 => self.registers.rdi,
             _ => unreachable!("register index is limited to 0..8"),
         }
     }
 
     fn set_zero_flag(&mut self, enabled: bool) {
-        if enabled { self.registers.rflags |= FLAG_ZF; }
-        else { self.registers.rflags &= !FLAG_ZF; }
+        if enabled {
+            self.registers.rflags |= FLAG_ZF;
+        } else {
+            self.registers.rflags &= !FLAG_ZF;
+        }
     }
 
     fn set_arithmetic_flags(&mut self, result: u64, carry: bool, overflow: bool, auxiliary: bool) {
         let mut flags = self.registers.rflags & !ARITHMETIC_FLAGS;
-        if carry { flags |= FLAG_CF; }
-        if result.to_le_bytes()[0].count_ones() % 2 == 0 { flags |= FLAG_PF; }
-        if auxiliary { flags |= FLAG_AF; }
-        if result == 0 { flags |= FLAG_ZF; }
-        if result & (1 << 63) != 0 { flags |= FLAG_SF; }
-        if overflow { flags |= FLAG_OF; }
+        if carry {
+            flags |= FLAG_CF;
+        }
+        if result.to_le_bytes()[0].count_ones() % 2 == 0 {
+            flags |= FLAG_PF;
+        }
+        if auxiliary {
+            flags |= FLAG_AF;
+        }
+        if result == 0 {
+            flags |= FLAG_ZF;
+        }
+        if result & (1 << 63) != 0 {
+            flags |= FLAG_SF;
+        }
+        if overflow {
+            flags |= FLAG_OF;
+        }
         self.registers.rflags = flags;
     }
 
     fn relative_target(&self, ip: u64, length: u64, displacement: i64) -> Result<u64, CpuError> {
         let base = ip.checked_add(length).ok_or(CpuError::FetchFault)?;
         if displacement >= 0 {
-            base.checked_add(displacement as u64).ok_or(CpuError::FetchFault)
+            base.checked_add(displacement as u64)
+                .ok_or(CpuError::FetchFault)
         } else {
-            base.checked_sub(displacement.unsigned_abs()).ok_or(CpuError::FetchFault)
+            base.checked_sub(displacement.unsigned_abs())
+                .ok_or(CpuError::FetchFault)
         }
     }
 
     fn push_u64(&mut self, context: &mut SyscallContext, value: u64) -> Result<(), CpuError> {
-        let new_rsp = self.registers.rsp.checked_sub(8).ok_or(CpuError::FetchFault)?;
-        context.memory.write(new_rsp, &value.to_le_bytes()).map_err(|_| CpuError::FetchFault)?;
+        let new_rsp = self
+            .registers
+            .rsp
+            .checked_sub(8)
+            .ok_or(CpuError::FetchFault)?;
+        context
+            .memory
+            .write(new_rsp, &value.to_le_bytes())
+            .map_err(|_| CpuError::FetchFault)?;
         self.registers.rsp = new_rsp;
         Ok(())
     }
 
     fn pop_u64(&mut self, context: &SyscallContext) -> Result<u64, CpuError> {
-        let bytes = context.memory.read(self.registers.rsp, 8).map_err(|_| CpuError::FetchFault)?;
+        let bytes = context
+            .memory
+            .read(self.registers.rsp, 8)
+            .map_err(|_| CpuError::FetchFault)?;
         let value = u64::from_le_bytes(bytes.try_into().map_err(|_| CpuError::FetchFault)?);
-        self.registers.rsp = self.registers.rsp.checked_add(8).ok_or(CpuError::FetchFault)?;
+        self.registers.rsp = self
+            .registers
+            .rsp
+            .checked_add(8)
+            .ok_or(CpuError::FetchFault)?;
         Ok(value)
     }
 
@@ -289,7 +349,10 @@ impl X86_64Interpreter {
             if let GuestProcessState::Exited { code } = context.process {
                 return Ok(CpuStopReason::ProcessExited { code });
             }
-            if matches!(self.step(context, dispatcher)?, StepOutcome::ProcessExited { .. }) {
+            if matches!(
+                self.step(context, dispatcher)?,
+                StepOutcome::ProcessExited { .. }
+            ) {
                 if let GuestProcessState::Exited { code } = context.process {
                     return Ok(CpuStopReason::ProcessExited { code });
                 }
@@ -332,7 +395,11 @@ impl X86_64GuestRuntime {
         }
         let context = SyscallContext::from_execution_context(prepared)?;
         let cpu = X86_64Interpreter::new(prepared.entry_point, prepared.stack_pointer);
-        Ok(Self { cpu, context, dispatcher: SyscallDispatcher })
+        Ok(Self {
+            cpu,
+            context,
+            dispatcher: SyscallDispatcher,
+        })
     }
 
     pub fn step(&mut self) -> Result<StepOutcome, CpuError> {
@@ -352,11 +419,26 @@ mod tests {
 
     fn context_with_code(code: &[u8]) -> SyscallContext {
         let mut layout = GuestAddressSpace::new();
-        layout.reserve_region(0x1000, 0x2000,
-            GuestPermissions { read: true, write: false, execute: true },
-            GuestRegionKind::ElfImage).unwrap();
-        layout.reserve_region(0x8000, 0x9000, GuestPermissions::READ_WRITE,
-            GuestRegionKind::Stack).unwrap();
+        layout
+            .reserve_region(
+                0x1000,
+                0x2000,
+                GuestPermissions {
+                    read: true,
+                    write: false,
+                    execute: true,
+                },
+                GuestRegionKind::ElfImage,
+            )
+            .unwrap();
+        layout
+            .reserve_region(
+                0x8000,
+                0x9000,
+                GuestPermissions::READ_WRITE,
+                GuestRegionKind::Stack,
+            )
+            .unwrap();
         let mut memory = GuestMemory::from_address_space(&layout).unwrap();
         memory.initialize_for_test(0x1000, code).unwrap();
         SyscallContext::new(memory)
@@ -367,7 +449,10 @@ mod tests {
         let mut context = context_with_code(&[0x90, 0x48, 0xb8, 42, 0, 0, 0, 0, 0, 0]);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         let dispatcher = SyscallDispatcher;
-        assert_eq!(cpu.step(&mut context, &dispatcher).unwrap(), StepOutcome::Continued);
+        assert_eq!(
+            cpu.step(&mut context, &dispatcher).unwrap(),
+            StepOutcome::Continued
+        );
         cpu.step(&mut context, &dispatcher).unwrap();
         assert_eq!(cpu.registers.rax, 42);
         assert_eq!(cpu.registers.rip, 0x100b);
@@ -376,7 +461,9 @@ mod tests {
     #[test]
     fn executes_syscall_instruction_through_guest_abi() {
         // mov rax, 60; mov rdi, 7; syscall
-        let code = [0x48,0xb8,60,0,0,0,0,0,0,0, 0x48,0xbf,7,0,0,0,0,0,0,0, 0x0f,0x05];
+        let code = [
+            0x48, 0xb8, 60, 0, 0, 0, 0, 0, 0, 0, 0x48, 0xbf, 7, 0, 0, 0, 0, 0, 0, 0, 0x0f, 0x05,
+        ];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         let stop = cpu.run(&mut context, &SyscallDispatcher, 8).unwrap();
@@ -389,30 +476,38 @@ mod tests {
     fn refuses_to_fetch_from_non_executable_memory() {
         let mut context = context_with_code(&[0x90]);
         let mut cpu = X86_64Interpreter::new(0x8000, 0x9000);
-        assert_eq!(cpu.step(&mut context, &SyscallDispatcher), Err(CpuError::FetchFault));
+        assert_eq!(
+            cpu.step(&mut context, &SyscallDispatcher),
+            Err(CpuError::FetchFault)
+        );
     }
 
     #[test]
     fn unsupported_instructions_stop_without_advancing() {
         let mut context = context_with_code(&[0xcc]);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
-        assert_eq!(cpu.step(&mut context, &SyscallDispatcher),
-            Err(CpuError::UnsupportedInstruction { opcode: 0xcc }));
+        assert_eq!(
+            cpu.step(&mut context, &SyscallDispatcher),
+            Err(CpuError::UnsupportedInstruction { opcode: 0xcc })
+        );
         assert_eq!(cpu.registers.rip, 0x1000);
     }
 
     #[test]
     fn executes_arithmetic_and_conditional_branch() {
         // mov rax, 1; add rax, -1; jz +2; nop; nop
-        let code = [0x48,0xb8,1,0,0,0,0,0,0,0, 0x48,0x83,0xc0,0xff, 0x74,0x01, 0x90, 0x90];
+        let code = [
+            0x48, 0xb8, 1, 0, 0, 0, 0, 0, 0, 0, 0x48, 0x83, 0xc0, 0xff, 0x74, 0x01, 0x90, 0x90,
+        ];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
-        assert_eq!(cpu.run(&mut context, &SyscallDispatcher, 4).unwrap(),
-            CpuStopReason::StepLimitReached);
+        assert_eq!(
+            cpu.run(&mut context, &SyscallDispatcher, 4).unwrap(),
+            CpuStopReason::StepLimitReached
+        );
         assert_eq!(cpu.registers.rax, 0);
         assert_eq!(cpu.registers.rip, 0x1012);
     }
-
 
     #[test]
     fn add_sets_carry_zero_and_parity_flags() {
@@ -457,7 +552,9 @@ mod tests {
 
     #[test]
     fn push_and_pop_round_trip_register_value() {
-        let code = [0x48,0xb8,0x2a,0,0,0,0,0,0,0, 0x50, 0x48,0xb8,0,0,0,0,0,0,0,0, 0x58];
+        let code = [
+            0x48, 0xb8, 0x2a, 0, 0, 0, 0, 0, 0, 0, 0x50, 0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0x58,
+        ];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         cpu.run(&mut context, &SyscallDispatcher, 4).unwrap();
@@ -469,7 +566,7 @@ mod tests {
     fn call_and_ret_use_guest_stack() {
         // call +1; nop; ret
         // CALL displacement is relative to the next instruction, so +1 targets RET at 0x1006.
-        let code = [0xe8,0x01,0,0,0, 0x90, 0xc3];
+        let code = [0xe8, 0x01, 0, 0, 0, 0x90, 0xc3];
         let mut context = context_with_code(&code);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
         cpu.step(&mut context, &SyscallDispatcher).unwrap();
@@ -492,8 +589,10 @@ mod tests {
     fn run_enforces_instruction_budget() {
         let mut context = context_with_code(&[0x90; 32]);
         let mut cpu = X86_64Interpreter::new(0x1000, 0x9000);
-        assert_eq!(cpu.run(&mut context, &SyscallDispatcher, 3).unwrap(),
-            CpuStopReason::StepLimitReached);
+        assert_eq!(
+            cpu.run(&mut context, &SyscallDispatcher, 3).unwrap(),
+            CpuStopReason::StepLimitReached
+        );
         assert_eq!(cpu.instructions_executed, 3);
     }
 }

@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
 
+use crate::ui;
 use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, registry, runtime};
-#[cfg(target_os = "linux")]
-use nelroot::core::{memory, relocation};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use nelroot::core::{cpu, stack};
-use crate::ui;
-
+#[cfg(target_os = "linux")]
+use nelroot::core::{memory, relocation};
+#[cfg(target_os = "linux")]
 #[derive(Debug, Parser)]
 #[command(
     name = "nelroot",
@@ -373,7 +373,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::banner("Independent Linux execution & virtualization engine");
             ui::key("Version", env!("CARGO_PKG_VERSION"));
             ui::key("Project", "AtDev");
-            ui::key("Host", format!("{} ({})", host::os_name(), host::architecture()));
+            ui::key(
+                "Host",
+                format!("{} ({})", host::os_name(), host::architecture()),
+            );
             if let Some(kernel) = host::kernel_release() {
                 ui::key("Kernel", kernel);
             }
@@ -422,13 +425,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
             ui::key(
                 "User namespace sysctl",
-                namespaces.unprivileged_userns_clone
+                namespaces
+                    .unprivileged_userns_clone
                     .map(|enabled| if enabled { "enabled" } else { "disabled" })
                     .unwrap_or("not exposed"),
             );
             ui::key(
                 "Maximum user namespaces",
-                namespaces.max_user_namespaces
+                namespaces
+                    .max_user_namespaces
                     .map(|limit| limit.to_string())
                     .unwrap_or_else(|| "unknown".to_owned()),
             );
@@ -479,10 +484,26 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "Required chroot/setuid/setgid capabilities are unavailable to this process.",
                 );
             }
-            ui::state("Independent ELF executor", false, "experimental subset; not general Linux compatibility");
-            ui::state("Static PIE preparation", cfg!(all(target_os = "linux", target_arch = "x86_64")), "loader → guest memory pipeline; x86_64 interpreter");
-            ui::state("Syscall integration", true, "bounded write/exit ABI connected to guest interpreter");
-            ui::state("Guest CPU interpreter", cfg!(all(target_os = "linux", target_arch = "x86_64")), "bounded x86_64 subset; instruction budget required");
+            ui::state(
+                "Independent ELF executor",
+                false,
+                "experimental subset; not general Linux compatibility",
+            );
+            ui::state(
+                "Static PIE preparation",
+                cfg!(all(target_os = "linux", target_arch = "x86_64")),
+                "loader → guest memory pipeline; x86_64 interpreter",
+            );
+            ui::state(
+                "Syscall integration",
+                true,
+                "bounded write/exit ABI connected to guest interpreter",
+            );
+            ui::state(
+                "Guest CPU interpreter",
+                cfg!(all(target_os = "linux", target_arch = "x86_64")),
+                "bounded x86_64 subset; instruction budget required",
+            );
             ui::warn("Host interfaces do not imply guest Linux compatibility.");
         }
         Commands::Setup | Commands::Init => {
@@ -530,23 +551,35 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Image ID", &manifest.image.id);
                 ui::key("Name", &manifest.image.name);
                 ui::key("Version", &manifest.image.version);
-                ui::key("Distribution", format!("{} {}", manifest.image.distribution, manifest.image.release));
+                ui::key(
+                    "Distribution",
+                    format!("{} {}", manifest.image.distribution, manifest.image.release),
+                );
                 ui::key("Architecture", &manifest.image.architecture);
                 ui::key("Rootfs format", &manifest.image.rootfs.format);
                 ui::key("Rootfs size", manifest.image.rootfs.size_bytes);
                 ui::key("SHA-256", &manifest.image.rootfs.sha256);
                 ui::key("Download URL", &manifest.image.rootfs.download_url);
             }
-            ImageCommands::HubKeygen { private_key, public_key } => {
+            ImageCommands::HubKeygen {
+                private_key,
+                public_key,
+            } => {
                 let key_id = hub_signing::generate_keypair(&private_key, &public_key)?;
                 ui::banner("NELRoot Hub Ed25519 identity");
                 ui::good("Signing key pair generated.");
                 ui::key("Key ID", key_id);
                 ui::key("Private key", private_key.display());
                 ui::key("Public key", public_key.display());
-                ui::warn("Keep the private key secret and backed up. Share the public key through an independently trusted channel.");
+                ui::warn(
+                    "Keep the private key secret and backed up. Share the public key through an independently trusted channel.",
+                );
             }
-            ImageCommands::HubSign { manifest, key, output } => {
+            ImageCommands::HubSign {
+                manifest,
+                key,
+                output,
+            } => {
                 let signed = hub_signing::sign_manifest(&manifest, &key, &output)?;
                 ui::banner("NELRoot Hub manifest signature");
                 ui::good("Manifest signature created.");
@@ -554,22 +587,35 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Manifest SHA-256", signed.manifest_sha256);
                 ui::key("Signature", output.display());
             }
-            ImageCommands::HubVerify { manifest, signature, key } => {
+            ImageCommands::HubVerify {
+                manifest,
+                signature,
+                key,
+            } => {
                 let verified = hub_signing::verify_manifest(&manifest, &signature, &key)?;
                 ui::banner("NELRoot Hub signature verification");
                 ui::good("Ed25519 signature is valid for the exact manifest bytes.");
                 ui::key("Key ID", verified.key_id);
                 ui::key("Manifest SHA-256", verified.manifest_sha256);
-                ui::muted("Trust comes from the public key you explicitly supplied; the signature file is not itself a trust source.");
+                ui::muted(
+                    "Trust comes from the public key you explicitly supplied; the signature file is not itself a trust source.",
+                );
             }
             ImageCommands::HubCatalogValidate { path } => {
                 let catalog = hub::load_catalog(&path)?;
                 ui::banner("NELRoot Hub catalog");
-                ui::good(&format!("Catalog is valid: {} image entries.", catalog.images.len()));
+                ui::good(&format!(
+                    "Catalog is valid: {} image entries.",
+                    catalog.images.len()
+                ));
                 ui::key("Schema version", catalog.schema_version);
                 ui::key("Generated at", &catalog.generated_at);
             }
-            ImageCommands::HubRemoteSearch { query, hub: hub_url, architecture } => {
+            ImageCommands::HubRemoteSearch {
+                query,
+                hub: hub_url,
+                architecture,
+            } => {
                 let catalog = hub::fetch_remote_catalog(&hub_url)?;
                 let matches = hub::search_catalog(&catalog, &query, architecture.as_deref())?;
                 ui::banner(&format!("NELRoot Image Hub: {query}"));
@@ -579,38 +625,75 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     for image in matches {
                         ui::key(
                             &image.id,
-                            format!("{} {} · {} · {} · {}", image.name, image.version, image.distribution, image.architecture, image.description),
+                            format!(
+                                "{} {} · {} · {} · {}",
+                                image.name,
+                                image.version,
+                                image.distribution,
+                                image.architecture,
+                                image.description
+                            ),
                         );
                     }
                 }
                 ui::muted(&format!("Catalog generated at {}", catalog.generated_at));
             }
-            ImageCommands::HubPull { image_id, hub: hub_url, architecture, name } => {
-                let (local_name, rootfs) = hub::pull_remote_image(
-                    &hub_url, &image_id, &architecture, name.as_deref(),
-                )?;
-                let _ = logging::record("info", &format!("first-party Hub image pulled: {image_id} as {local_name}"));
-                ui::good(&format!("Hub image '{image_id}' downloaded, verified and imported."));
+            ImageCommands::HubPull {
+                image_id,
+                hub: hub_url,
+                architecture,
+                name,
+            } => {
+                let (local_name, rootfs) =
+                    hub::pull_remote_image(&hub_url, &image_id, &architecture, name.as_deref())?;
+                let _ = logging::record(
+                    "info",
+                    &format!("first-party Hub image pulled: {image_id} as {local_name}"),
+                );
+                ui::good(&format!(
+                    "Hub image '{image_id}' downloaded, verified and imported."
+                ));
                 ui::key("Local image", local_name);
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
             }
-            ImageCommands::HubPublish { manifest, archive, hub: hub_url } => {
+            ImageCommands::HubPublish {
+                manifest,
+                archive,
+                hub: hub_url,
+            } => {
                 let token = std::env::var("NELROOT_HUB_PUBLISH_TOKEN")
                     .map_err(|_| "NELROOT_HUB_PUBLISH_TOKEN is not set")?;
                 let manifest_url = hub::publish_image(&hub_url, &manifest, &archive, &token)?;
-                let _ = logging::record("info", &format!("first-party Hub manifest published: {}", manifest.display()));
+                let _ = logging::record(
+                    "info",
+                    &format!("first-party Hub manifest published: {}", manifest.display()),
+                );
                 ui::good("Image archive uploaded and manifest published to NELRoot Hub.");
                 ui::key("Manifest", manifest_url);
             }
-            ImageCommands::HubUpdate { image_id, name, hub: hub_url, architecture } => {
+            ImageCommands::HubUpdate {
+                image_id,
+                name,
+                hub: hub_url,
+                architecture,
+            } => {
                 let rootfs = hub::update_remote_image(&hub_url, &image_id, &architecture, &name)?;
-                let _ = logging::record("info", &format!("first-party Hub image updated: {image_id} as {name}"));
-                ui::good(&format!("Local image '{name}' updated from Hub image '{image_id}'."));
+                let _ = logging::record(
+                    "info",
+                    &format!("first-party Hub image updated: {image_id} as {name}"),
+                );
+                ui::good(&format!(
+                    "Local image '{name}' updated from Hub image '{image_id}'."
+                ));
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
             }
-            ImageCommands::HubCatalogSearch { path, query, architecture } => {
+            ImageCommands::HubCatalogSearch {
+                path,
+                query,
+                architecture,
+            } => {
                 let catalog = hub::load_catalog(&path)?;
                 let matches = hub::search_catalog(&catalog, &query, architecture.as_deref())?;
                 ui::banner(&format!("NELRoot Hub catalog: {query}"));
@@ -620,7 +703,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     for image in matches {
                         ui::key(
                             &image.id,
-                            format!("{} {} · {} · {} · {}", image.name, image.version, image.distribution, image.architecture, image.description),
+                            format!(
+                                "{} {} · {} · {} · {}",
+                                image.name,
+                                image.version,
+                                image.distribution,
+                                image.architecture,
+                                image.description
+                            ),
                         );
                     }
                 }
@@ -633,10 +723,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::warn("No Docker Hub repositories matched the query.");
                 } else {
                     for repository in matches {
-                        let official = if repository.is_official { "official" } else { "community" };
+                        let official = if repository.is_official {
+                            "official"
+                        } else {
+                            "community"
+                        };
                         ui::key(
                             &repository.repo_name,
-                            format!("{official} · {} stars · {} pulls · {}", repository.star_count, repository.pull_count, repository.short_description),
+                            format!(
+                                "{official} · {} stars · {} pulls · {}",
+                                repository.star_count,
+                                repository.pull_count,
+                                repository.short_description
+                            ),
                         );
                     }
                 }
@@ -648,17 +747,35 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::warn("No tags were returned.");
                 } else {
                     for tag in tags {
-                        ui::key(&tag.name, format!("{} bytes · updated {}", tag.full_size, tag.last_updated));
+                        ui::key(
+                            &tag.name,
+                            format!("{} bytes · updated {}", tag.full_size, tag.last_updated),
+                        );
                     }
                 }
             }
-            ImageCommands::HubInspect { repository, reference, architecture } => {
-                let manifest = registry::docker_hub_inspect(&repository, &reference, &architecture)?;
+            ImageCommands::HubInspect {
+                repository,
+                reference,
+                architecture,
+            } => {
+                let manifest =
+                    registry::docker_hub_inspect(&repository, &reference, &architecture)?;
                 ui::banner("Docker Hub image manifest");
                 ui::key("Repository", &manifest.repository);
                 ui::key("Reference", &manifest.reference);
-                ui::key("Digest", if manifest.digest.is_empty() { "not supplied" } else { &manifest.digest });
-                ui::key("Platform", format!("{}/{}", manifest.os, manifest.architecture));
+                ui::key(
+                    "Digest",
+                    if manifest.digest.is_empty() {
+                        "not supplied"
+                    } else {
+                        &manifest.digest
+                    },
+                );
+                ui::key(
+                    "Platform",
+                    format!("{}/{}", manifest.os, manifest.architecture),
+                );
                 ui::key("Media type", &manifest.media_type);
                 ui::key("Layers", manifest.layer_count);
                 ui::key("Compressed layer bytes", manifest.total_layer_bytes);
@@ -687,11 +804,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 architecture,
             } => {
                 let rootfs = registry::pull(&registry_url, &name, &architecture)?;
-                let _ = logging::record(
-                    "info",
-                    &format!("image pulled: {name} ({architecture})"),
-                );
-                ui::good(&format!("Image '{name}' downloaded, verified and imported."));
+                let _ = logging::record("info", &format!("image pulled: {name} ({architecture})"));
+                ui::good(&format!(
+                    "Image '{name}' downloaded, verified and imported."
+                ));
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
             }
@@ -701,10 +817,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 architecture,
             } => {
                 let rootfs = registry::update(&registry_url, &name, &architecture)?;
-                let _ = logging::record(
-                    "info",
-                    &format!("image updated: {name} ({architecture})"),
-                );
+                let _ = logging::record("info", &format!("image updated: {name} ({architecture})"));
                 ui::good(&format!("Image '{name}' updated and verified."));
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
@@ -729,10 +842,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 architecture,
             } => {
                 let rootfs = images::import_archive(&name, &archive, &architecture)?;
-                let _ = logging::record(
-                    "info",
-                    &format!("image imported: {name} ({architecture})"),
-                );
+                let _ =
+                    logging::record("info", &format!("image imported: {name} ({architecture})"));
                 ui::good(&format!("Imported image '{name}'."));
                 ui::key("Root filesystem", rootfs.display());
                 ui::key("Architecture", architecture);
@@ -758,10 +869,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             ImageCommands::Remove { name } => {
                 if images::unregister_image(&name)? {
-                    let _ = logging::record(
-                        "info",
-                        &format!("image unregistered: {name}"),
-                    );
+                    let _ = logging::record("info", &format!("image unregistered: {name}"));
                     ui::good(&format!("Unregistered image '{name}'."));
                     ui::muted("Its files were left untouched.");
                 } else {
@@ -896,16 +1004,26 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::key("Relocations applied", count);
                 ui::key("Load bias", format!("{:#018x}", mapped.load_bias()));
                 ui::key("Entry address", format!("{:#018x}", mapped.entry_address()));
-                ui::warn("Relocations applied in memory only; the ELF entry point was not executed.");
+                ui::warn(
+                    "Relocations applied in memory only; the ELF entry point was not executed.",
+                );
             }
             #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-            ElfCommands::Emulate { path, max_steps, arguments } => {
+            ElfCommands::Emulate {
+                path,
+                max_steps,
+                arguments,
+            } => {
                 use std::io::{Read, Write};
                 let executable = path.to_string_lossy().into_owned();
                 let mut random = [0_u8; 16];
                 std::fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
                 let mut argv = vec![executable.as_bytes().to_vec()];
-                argv.extend(arguments.iter().map(|argument| argument.as_bytes().to_vec()));
+                argv.extend(
+                    arguments
+                        .iter()
+                        .map(|argument| argument.as_bytes().to_vec()),
+                );
                 let stack_config = stack::GuestStackConfig {
                     stack_top: 0x0000_7fff_ffff_f000,
                     argv,
@@ -918,9 +1036,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::banner("Experimental NELRoot guest interpreter");
                 ui::key("ELF", path.display());
                 ui::key("Entry point", format!("{:#018x}", guest.cpu.registers.rip));
-                ui::key("Guest memory", format!("{} bytes", guest.context.memory.allocated_bytes()));
+                ui::key(
+                    "Guest memory",
+                    format!("{} bytes", guest.context.memory.allocated_bytes()),
+                );
                 ui::key("Instruction budget", max_steps);
-                ui::warn("Experimental static x86_64 subset only; not a complete Linux runtime or security sandbox.");
+                ui::warn(
+                    "Experimental static x86_64 subset only; not a complete Linux runtime or security sandbox.",
+                );
                 let reason = guest.run(max_steps)?;
                 let stdout = guest.context.output.stdout();
                 let stderr = guest.context.output.stderr();
@@ -1060,17 +1183,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             .as_ref()
                             .err()
                             .map(|error| error.to_string())
-                            .unwrap_or_else(|| "mapping, private mounts and PID 1 probe succeeded".to_owned()),
+                            .unwrap_or_else(|| {
+                                "mapping, private mounts and PID 1 probe succeeded".to_owned()
+                            }),
                     );
                     ui::state("Core", true, "initialized");
                     ui::state("Host detection", true, "platform information");
                     ui::state("Configuration", true, "user settings");
                     ui::state("Image catalog", true, "local metadata");
-                    ui::state("Registry client", true, "HTTPS + SHA-256 archive index; Docker Hub search/tags and OCI manifest inspection");
+                    ui::state(
+                        "Registry client",
+                        true,
+                        "HTTPS + SHA-256 archive index; Docker Hub search/tags and OCI manifest inspection",
+                    );
                     ui::state("Event logging", true, "local event log");
-                    ui::state("Process supervisor", true, "owned child wait/terminate lifecycle");
+                    ui::state(
+                        "Process supervisor",
+                        true,
+                        "owned child wait/terminate lifecycle",
+                    );
                     ui::state("Guest memory", true, "bounded byte-backed model");
-                    ui::state("Guest syscall ABI", true, "x86_64 write/exit model; connected to guest interpreter");
+                    ui::state(
+                        "Guest syscall ABI",
+                        true,
+                        "x86_64 write/exit model; connected to guest interpreter",
+                    );
                     ui::state("ELF64 inspector", true, "metadata only");
                     ui::state("ELF load planner", true, "planning only");
                     ui::state(
@@ -1084,9 +1221,21 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "Linux host kernel",
                     );
                     ui::heading("Under development");
-                    ui::state("Independent ELF executor", false, "experimental subset; not general Linux compatibility");
-                    ui::state("Static PIE preparation", cfg!(all(target_os = "linux", target_arch = "x86_64")), "loader → guest memory pipeline");
-                    ui::state("Guest CPU interpreter", cfg!(all(target_os = "linux", target_arch = "x86_64")), "bounded x86_64 instruction subset; instruction budget required");
+                    ui::state(
+                        "Independent ELF executor",
+                        false,
+                        "experimental subset; not general Linux compatibility",
+                    );
+                    ui::state(
+                        "Static PIE preparation",
+                        cfg!(all(target_os = "linux", target_arch = "x86_64")),
+                        "loader → guest memory pipeline",
+                    );
+                    ui::state(
+                        "Guest CPU interpreter",
+                        cfg!(all(target_os = "linux", target_arch = "x86_64")),
+                        "bounded x86_64 instruction subset; instruction budget required",
+                    );
                     ui::state("Full Linux CPU compatibility", false, "not implemented");
                     if runtime::supported() && runtime::has_required_privileges() {
                         ui::good("Native same-architecture chroot execution is available.");
@@ -1124,7 +1273,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         #[cfg(target_os = "linux")]
-        Commands::RunRootless { image, cwd, command } => {
+        Commands::RunRootless {
+            image,
+            cwd,
+            command,
+        } => {
             let program = command.first().ok_or("missing guest executable")?;
             let arguments = &command[1..];
             ui::banner("Rootless Linux runtime");

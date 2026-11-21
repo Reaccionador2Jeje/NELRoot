@@ -82,7 +82,10 @@ impl std::fmt::Debug for MappedElf {
             .field("base", &self.base)
             .field("length", &self.length)
             .field("load_bias", &format_args!("{:#x}", self.load_bias))
-            .field("entry_address", &format_args!("{:#x}", self.entry_address()))
+            .field(
+                "entry_address",
+                &format_args!("{:#x}", self.entry_address()),
+            )
             .finish()
     }
 }
@@ -96,9 +99,7 @@ impl MappedElf {
 
     /// Read, inspect and map one immutable byte snapshot, returning its ELF metadata.
     /// This avoids re-reading a path between mapping and later loader stages.
-    pub fn map_file_with_info(
-        path: &Path,
-    ) -> Result<(Self, ElfInfo), Box<dyn std::error::Error>> {
+    pub fn map_file_with_info(path: &Path) -> Result<(Self, ElfInfo), Box<dyn std::error::Error>> {
         let metadata = fs::metadata(path)?;
         if metadata.len() > MAX_IMAGE_SIZE as u64 {
             return Err("ELF image exceeds the 256 MiB mapping input limit".into());
@@ -115,7 +116,10 @@ impl MappedElf {
         Ok((mapped, info))
     }
 
-    pub(crate) fn map_bytes(bytes: &[u8], info: &ElfInfo) -> Result<Self, Box<dyn std::error::Error>> {
+    pub(crate) fn map_bytes(
+        bytes: &[u8],
+        info: &ElfInfo,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         if info.file_type != ET_DYN {
             return Err("the first memory mapper supports static ET_DYN images only".into());
         }
@@ -161,12 +165,8 @@ impl MappedElf {
                 if !header.alignment.is_power_of_two() {
                     return Err("PT_LOAD alignment is not a power of two".into());
                 }
-                if header.virtual_address % header.alignment
-                    != header.offset % header.alignment
-                {
-                    return Err(
-                        "PT_LOAD file offset and virtual address are not congruent".into(),
-                    );
+                if header.virtual_address % header.alignment != header.offset % header.alignment {
+                    return Err("PT_LOAD file offset and virtual address are not congruent".into());
                 }
             }
             if header.file_size > header.memory_size {
@@ -225,9 +225,7 @@ impl MappedElf {
             let file_end = start
                 .checked_add(header.file_size)
                 .ok_or("executable PT_LOAD file range overflows")?;
-            if header.flags & PF_X != 0
-                && (*start..file_end).contains(&info.entry_point)
-            {
+            if header.flags & PF_X != 0 && (*start..file_end).contains(&info.entry_point) {
                 entry_is_executable = true;
             }
         }
@@ -257,8 +255,7 @@ impl MappedElf {
             }
             return Err("mmap returned a null address".into());
         }
-        let base =
-            NonNull::new(raw.cast::<u8>()).expect("non-null mmap address checked above");
+        let base = NonNull::new(raw.cast::<u8>()).expect("non-null mmap address checked above");
 
         let entry_offset = usize::try_from(
             info.entry_point
@@ -314,9 +311,7 @@ impl MappedElf {
         while index < self.page_permissions.len() {
             let permissions = self.page_permissions[index];
             let mut end = index + 1;
-            while end < self.page_permissions.len()
-                && self.page_permissions[end] == permissions
-            {
+            while end < self.page_permissions.len() && self.page_permissions[end] == permissions {
                 end += 1;
             }
             let address = unsafe { self.base.as_ptr().add(index * self.page_size) };
@@ -456,7 +451,9 @@ impl MappedElf {
         if length == 0 {
             return Ok(Vec::new());
         }
-        let end = offset.checked_add(length).ok_or("ELF copy range overflows")?;
+        let end = offset
+            .checked_add(length)
+            .ok_or("ELF copy range overflows")?;
         let first_page = offset / self.page_size;
         let last_page = (end - 1) / self.page_size;
         if self.page_permissions[first_page..=last_page]
@@ -643,7 +640,11 @@ mod tests {
     #[test]
     fn rejects_non_host_machine() {
         let (bytes, mut info) = static_pie();
-        info.machine = if std::env::consts::ARCH == "aarch64" { 62 } else { 183 };
+        info.machine = if std::env::consts::ARCH == "aarch64" {
+            62
+        } else {
+            183
+        };
         assert!(MappedElf::map_bytes(&bytes, &info).is_err());
     }
 

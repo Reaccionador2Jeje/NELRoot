@@ -50,7 +50,8 @@ impl GuestMemory {
                 return Err("guest memory exceeds the 512 MiB allocation limit".into());
             }
             let mut bytes = Vec::new();
-            bytes.try_reserve_exact(length)
+            bytes
+                .try_reserve_exact(length)
                 .map_err(|_| "could not reserve host memory for guest region")?;
             bytes.resize(length, 0);
             regions.push(BackedRegion {
@@ -59,7 +60,10 @@ impl GuestMemory {
             });
         }
 
-        Ok(Self { regions, total_bytes })
+        Ok(Self {
+            regions,
+            total_bytes,
+        })
     }
 
     /// Build byte-backed guest memory from a prepared ELF execution context.
@@ -73,7 +77,9 @@ impl GuestMemory {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut memory = Self::from_address_space(&context.address_space)?;
 
-        for region in context.address_space.regions()
+        for region in context
+            .address_space
+            .regions()
             .iter()
             .filter(|region| region.kind == GuestRegionKind::ElfImage)
         {
@@ -124,9 +130,11 @@ impl GuestMemory {
             .checked_add(length_u64)
             .ok_or("guest memory access range overflows")?;
 
-        let region = self.regions.iter().find(|region| {
-            address >= region.metadata.start && end <= region.metadata.end
-        }).ok_or("guest memory access is outside a single backed region")?;
+        let region = self
+            .regions
+            .iter()
+            .find(|region| address >= region.metadata.start && end <= region.metadata.end)
+            .ok_or("guest memory access is outside a single backed region")?;
 
         let permissions = region.metadata.permissions;
         if required.read && !permissions.read {
@@ -143,11 +151,15 @@ impl GuestMemory {
 
     /// Read guest bytes after checking the region's read permission.
     pub fn read(&self, address: u64, length: usize) -> Result<Vec<u8>, &'static str> {
-        self.validate_access(address, length, GuestPermissions {
-            read: true,
-            write: false,
-            execute: false,
-        })?;
+        self.validate_access(
+            address,
+            length,
+            GuestPermissions {
+                read: true,
+                write: false,
+                execute: false,
+            },
+        )?;
         let region = self.region_for(address, length)?;
         let offset = usize::try_from(address - region.metadata.start)
             .map_err(|_| "guest memory offset does not fit host address space")?;
@@ -156,11 +168,15 @@ impl GuestMemory {
 
     /// Write guest bytes after checking the region's write permission.
     pub fn write(&mut self, address: u64, bytes: &[u8]) -> Result<(), &'static str> {
-        self.validate_access(address, bytes.len(), GuestPermissions {
-            read: false,
-            write: true,
-            execute: false,
-        })?;
+        self.validate_access(
+            address,
+            bytes.len(),
+            GuestPermissions {
+                read: false,
+                write: true,
+                execute: false,
+            },
+        )?;
         let region = self.region_for_mut(address, bytes.len())?;
         let offset = usize::try_from(address - region.metadata.start)
             .map_err(|_| "guest memory offset does not fit host address space")?;
@@ -171,23 +187,35 @@ impl GuestMemory {
     /// Fetch instruction bytes only from a region marked executable.
     /// Execute-only mappings can be fetched without granting guest read access.
     pub fn fetch_execute(&self, address: u64, max_length: usize) -> Result<Vec<u8>, &'static str> {
-        if max_length == 0 { return Err("instruction fetch must not be empty"); }
-        let region = self.regions.iter().find(|region| {
-            address >= region.metadata.start
-                && address < region.metadata.end
-                && region.metadata.permissions.execute
-        }).ok_or("instruction address is not executable")?;
+        if max_length == 0 {
+            return Err("instruction fetch must not be empty");
+        }
+        let region = self
+            .regions
+            .iter()
+            .find(|region| {
+                address >= region.metadata.start
+                    && address < region.metadata.end
+                    && region.metadata.permissions.execute
+            })
+            .ok_or("instruction address is not executable")?;
         let offset = usize::try_from(address - region.metadata.start)
             .map_err(|_| "instruction offset does not fit host address space")?;
         let available = region.bytes.len().saturating_sub(offset);
         let length = available.min(max_length);
-        if length == 0 { return Err("instruction fetch is outside backed bytes"); }
+        if length == 0 {
+            return Err("instruction fetch is outside backed bytes");
+        }
         Ok(region.bytes[offset..offset + length].to_vec())
     }
 
     /// Populate bytes in an executable region for deterministic interpreter tests.
     #[cfg(test)]
-    pub(crate) fn initialize_for_test(&mut self, address: u64, bytes: &[u8]) -> Result<(), &'static str> {
+    pub(crate) fn initialize_for_test(
+        &mut self,
+        address: u64,
+        bytes: &[u8],
+    ) -> Result<(), &'static str> {
         self.initialize(address, bytes)
     }
 
@@ -195,11 +223,15 @@ impl GuestMemory {
     ///
     /// This only validates metadata; it does not fetch or execute instructions.
     pub fn validate_execute(&self, address: u64, length: usize) -> Result<(), &'static str> {
-        self.validate_access(address, length, GuestPermissions {
-            read: false,
-            write: false,
-            execute: true,
-        })
+        self.validate_access(
+            address,
+            length,
+            GuestPermissions {
+                read: false,
+                write: false,
+                execute: true,
+            },
+        )
     }
 
     /// Return the kind of the region containing the complete range.
@@ -217,8 +249,11 @@ impl GuestMemory {
             return Err("guest memory range must not be empty");
         }
         let length = u64::try_from(length).map_err(|_| "guest memory length overflow")?;
-        let end = address.checked_add(length).ok_or("guest memory range overflow")?;
-        self.regions.iter()
+        let end = address
+            .checked_add(length)
+            .ok_or("guest memory range overflow")?;
+        self.regions
+            .iter()
             .find(|region| address >= region.metadata.start && end <= region.metadata.end)
             .ok_or("guest memory range is outside a single backed region")
     }
@@ -232,8 +267,11 @@ impl GuestMemory {
             return Err("guest memory range must not be empty");
         }
         let length = u64::try_from(length).map_err(|_| "guest memory length overflow")?;
-        let end = address.checked_add(length).ok_or("guest memory range overflow")?;
-        self.regions.iter_mut()
+        let end = address
+            .checked_add(length)
+            .ok_or("guest memory range overflow")?;
+        self.regions
+            .iter_mut()
             .find(|region| address >= region.metadata.start && end <= region.metadata.end)
             .ok_or("guest memory range is outside a single backed region")
     }
@@ -245,18 +283,26 @@ mod tests {
 
     fn sample_space() -> GuestAddressSpace {
         let mut space = GuestAddressSpace::new();
-        space.reserve_region(
-            0x4000,
-            0x5000,
-            GuestPermissions { read: true, write: false, execute: true },
-            GuestRegionKind::ElfImage,
-        ).unwrap();
-        space.reserve_region(
-            0x8000,
-            0x9000,
-            GuestPermissions::READ_WRITE,
-            GuestRegionKind::Stack,
-        ).unwrap();
+        space
+            .reserve_region(
+                0x4000,
+                0x5000,
+                GuestPermissions {
+                    read: true,
+                    write: false,
+                    execute: true,
+                },
+                GuestRegionKind::ElfImage,
+            )
+            .unwrap();
+        space
+            .reserve_region(
+                0x8000,
+                0x9000,
+                GuestPermissions::READ_WRITE,
+                GuestRegionKind::Stack,
+            )
+            .unwrap();
         space
     }
 
@@ -296,8 +342,14 @@ mod tests {
     #[test]
     fn reports_region_kind() {
         let memory = GuestMemory::from_address_space(&sample_space()).unwrap();
-        assert_eq!(memory.region_kind(0x4000, 1).unwrap(), GuestRegionKind::ElfImage);
-        assert_eq!(memory.region_kind(0x8000, 1).unwrap(), GuestRegionKind::Stack);
+        assert_eq!(
+            memory.region_kind(0x4000, 1).unwrap(),
+            GuestRegionKind::ElfImage
+        );
+        assert_eq!(
+            memory.region_kind(0x8000, 1).unwrap(),
+            GuestRegionKind::Stack
+        );
     }
 
     #[test]

@@ -141,9 +141,7 @@ pub fn inspect_elf_bytes(bytes: &[u8]) -> Result<ElfInfo, Box<dyn std::error::Er
                 if !header.alignment.is_power_of_two() {
                     return Err("ELF load segment alignment is not a power of two".into());
                 }
-                if header.virtual_address % header.alignment
-                    != header.offset % header.alignment
-                {
+                if header.virtual_address % header.alignment != header.offset % header.alignment {
                     return Err(
                         "ELF load segment file offset and virtual address are not congruent".into(),
                     );

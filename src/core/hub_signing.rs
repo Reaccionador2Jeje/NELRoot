@@ -22,10 +22,16 @@ pub struct HubSignature {
 fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let metadata = fs::metadata(path)?;
     if !metadata.is_file() || metadata.len() > limit {
-        return Err(format!("{} must be a regular file no larger than {limit} bytes", path.display()).into());
+        return Err(format!(
+            "{} must be a regular file no larger than {limit} bytes",
+            path.display()
+        )
+        .into());
     }
     let mut bytes = Vec::new();
-    fs::File::open(path)?.take(limit + 1).read_to_end(&mut bytes)?;
+    fs::File::open(path)?
+        .take(limit + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > limit {
         return Err(format!("{} exceeds its size limit", path.display()).into());
     }
@@ -67,7 +73,10 @@ fn read_manifest(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 }
 
 /// Generate an Ed25519 key pair without overwriting existing files.
-pub fn generate_keypair(private_path: &Path, public_path: &Path) -> Result<String, Box<dyn std::error::Error>> {
+pub fn generate_keypair(
+    private_path: &Path,
+    public_path: &Path,
+) -> Result<String, Box<dyn std::error::Error>> {
     if private_path == public_path {
         return Err("private and public key paths must be different".into());
     }
@@ -89,7 +98,10 @@ pub fn generate_keypair(private_path: &Path, public_path: &Path) -> Result<Strin
     private_file.sync_all()?;
 
     let public_result = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let mut public_file = fs::OpenOptions::new().write(true).create_new(true).open(public_path)?;
+        let mut public_file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(public_path)?;
         writeln!(public_file, "{}", hex_encode(&public))?;
         public_file.sync_all()?;
         Ok(())
@@ -102,10 +114,16 @@ pub fn generate_keypair(private_path: &Path, public_path: &Path) -> Result<Strin
 }
 
 /// Sign the exact bytes of a validated manifest and write a detached JSON signature.
-pub fn sign_manifest(manifest_path: &Path, private_path: &Path, output_path: &Path) -> Result<HubSignature, Box<dyn std::error::Error>> {
+pub fn sign_manifest(
+    manifest_path: &Path,
+    private_path: &Path,
+    output_path: &Path,
+) -> Result<HubSignature, Box<dyn std::error::Error>> {
     let bytes = read_manifest(manifest_path)?;
     let secret = read_bounded(private_path, 32)?;
-    let seed: [u8; 32] = secret.try_into().map_err(|_| "private key must contain exactly 32 raw bytes")?;
+    let seed: [u8; 32] = secret
+        .try_into()
+        .map_err(|_| "private key must contain exactly 32 raw bytes")?;
     let signing = SigningKey::from_bytes(&seed);
     let public = signing.verifying_key().to_bytes();
     let signature = signing.sign(&bytes);
@@ -117,7 +135,10 @@ pub fn sign_manifest(manifest_path: &Path, private_path: &Path, output_path: &Pa
         signature_hex: hex_encode(&signature.to_bytes()),
     };
     let encoded = serde_json::to_vec_pretty(&document)?;
-    let mut output = fs::OpenOptions::new().write(true).create_new(true).open(output_path)?;
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_path)?;
     use std::io::Write;
     output.write_all(&encoded)?;
     output.write_all(b"\n")?;
@@ -126,7 +147,11 @@ pub fn sign_manifest(manifest_path: &Path, private_path: &Path, output_path: &Pa
 }
 
 /// Verify a detached signature using an explicitly supplied trusted public key.
-pub fn verify_manifest(manifest_path: &Path, signature_path: &Path, public_path: &Path) -> Result<HubSignature, Box<dyn std::error::Error>> {
+pub fn verify_manifest(
+    manifest_path: &Path,
+    signature_path: &Path,
+    public_path: &Path,
+) -> Result<HubSignature, Box<dyn std::error::Error>> {
     let bytes = read_manifest(manifest_path)?;
     let signature_bytes = read_bounded(signature_path, 16 * 1024)?;
     let document: HubSignature = serde_json::from_slice(&signature_bytes)?;
@@ -139,14 +164,18 @@ pub fn verify_manifest(manifest_path: &Path, signature_path: &Path, public_path:
     }
     let public_text = fs::read_to_string(public_path)?;
     let public_bytes = hex_decode(public_text.trim())?;
-    let public_array: [u8; 32] = public_bytes.try_into().map_err(|_| "public key must decode to exactly 32 bytes")?;
+    let public_array: [u8; 32] = public_bytes
+        .try_into()
+        .map_err(|_| "public key must decode to exactly 32 bytes")?;
     let public = VerifyingKey::from_bytes(&public_array)?;
     if document.key_id != key_id(&public_array) {
         return Err("signature key ID does not match the supplied trusted public key".into());
     }
     let signature_bytes = hex_decode(&document.signature_hex)?;
     let signature = Signature::from_slice(&signature_bytes)?;
-    public.verify_strict(&bytes, &signature).map_err(|_| "Ed25519 signature verification failed")?;
+    public
+        .verify_strict(&bytes, &signature)
+        .map_err(|_| "Ed25519 signature verification failed")?;
     Ok(document)
 }
 
@@ -172,8 +201,12 @@ mod tests {
     fn detached_signature_round_trip_and_detects_manifest_tampering() {
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("nelroot-signing-{}-{nonce}", std::process::id()));
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("nelroot-signing-{}-{nonce}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
 
         let manifest = super::super::hub::HubManifest {

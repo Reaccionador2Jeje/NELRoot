@@ -179,7 +179,10 @@ pub fn download_archive(
         return Err("image download redirected to a non-HTTPS URL".into());
     }
     const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
-    if response.content_length().is_some_and(|length| length > MAX_ARCHIVE_BYTES) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_ARCHIVE_BYTES)
+    {
         return Err("image archive exceeds the 512 MiB download limit".into());
     }
     let mut output = File::create(destination)?;
@@ -271,10 +274,7 @@ pub fn import_archive(
         };
 
         if root != staging {
-            let normalized = store.join(format!(
-                ".{name}.rootfs-{}-{nonce}",
-                std::process::id()
-            ));
+            let normalized = store.join(format!(".{name}.rootfs-{}-{nonce}", std::process::id()));
             fs::rename(&root, &normalized)?;
             fs::remove_dir_all(&staging)?;
             fs::rename(normalized, &destination)?;
@@ -297,10 +297,7 @@ pub fn import_archive(
         if staging.exists() {
             let _ = fs::remove_dir_all(&staging);
         }
-        let normalized = store.join(format!(
-            ".{name}.rootfs-{}-{nonce}",
-            std::process::id()
-        ));
+        let normalized = store.join(format!(".{name}.rootfs-{}-{nonce}", std::process::id()));
         if normalized.exists() {
             let _ = fs::remove_dir_all(&normalized);
         }
@@ -360,8 +357,14 @@ pub fn update_image_from_archive(
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
-    let staging = store.join(format!(".{name}.update-staging-{}-{nonce}", std::process::id()));
-    let new_rootfs = store.join(format!(".{name}.update-rootfs-{}-{nonce}", std::process::id()));
+    let staging = store.join(format!(
+        ".{name}.update-staging-{}-{nonce}",
+        std::process::id()
+    ));
+    let new_rootfs = store.join(format!(
+        ".{name}.update-rootfs-{}-{nonce}",
+        std::process::id()
+    ));
     let backup = store.join(format!(".{name}.backup-{}-{nonce}", std::process::id()));
     fs::create_dir(&staging)?;
 

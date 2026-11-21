@@ -42,7 +42,10 @@ fn valid_image(image: &RegistryImage) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '_')
         && image.url.starts_with("https://")
         && image.sha256.len() == 64
-        && image.sha256.chars().all(|character| character.is_ascii_hexdigit())
+        && image
+            .sha256
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
 }
 
 fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
@@ -83,9 +86,11 @@ fn fetch_index(url: &str) -> Result<RegistryIndex, Box<dyn std::error::Error>> {
 
     let index: RegistryIndex = serde_json::from_slice(&bytes)?;
     if index.schema_version != 1 {
-        return Err(
-            format!("unsupported registry schema version: {}", index.schema_version).into(),
-        );
+        return Err(format!(
+            "unsupported registry schema version: {}",
+            index.schema_version
+        )
+        .into());
     }
     for image in &index.images {
         if !valid_image(image) {
@@ -226,7 +231,6 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
     Ok(removed)
 }
 
-
 /// Download and verify the latest registry entry, then transactionally update a managed image.
 pub fn update(
     registry_url: &str,
@@ -263,8 +267,14 @@ mod tests {
 
     #[test]
     fn docker_hub_repository_names_are_normalized_and_validated() {
-        assert_eq!(normalize_docker_repository("alpine").unwrap(), "library/alpine");
-        assert_eq!(normalize_docker_repository("ubuntu/nginx").unwrap(), "ubuntu/nginx");
+        assert_eq!(
+            normalize_docker_repository("alpine").unwrap(),
+            "library/alpine"
+        );
+        assert_eq!(
+            normalize_docker_repository("ubuntu/nginx").unwrap(),
+            "ubuntu/nginx"
+        );
         assert!(normalize_docker_repository("../alpine").is_err());
         assert!(normalize_docker_repository("one/two/three").is_err());
         assert!(normalize_docker_repository("UPPER/alpine").is_err());
@@ -302,8 +312,6 @@ mod tests {
         assert!(!valid_image(&invalid));
     }
 }
-
-
 
 // Docker Hub / OCI Distribution API support. This stage provides remote discovery
 // and platform-aware manifest inspection; layer reconstruction is implemented separately.
@@ -379,9 +387,9 @@ fn normalize_docker_repository(repository: &str) -> Result<String, Box<dyn std::
                 || *part == "."
                 || *part == ".."
                 || part.len() > 255
-                || !part
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte))
+                || !part.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+                })
         })
     {
         return Err("Repository must be [namespace/]name using lowercase ASCII letters, digits, '.', '_' or '-', without traversal segments".into());
@@ -493,9 +501,9 @@ pub fn docker_hub_inspect(
     let repository = normalize_docker_repository(repository)?;
     if reference.is_empty()
         || reference.len() > 256
-        || !reference.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || b"._:-".contains(&byte)
-        })
+        || !reference
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
     {
         return Err("image reference contains invalid characters".into());
     }
@@ -521,16 +529,19 @@ pub fn docker_hub_inspect(
     let mut payload: serde_json::Value = response.json()?;
     let mut selected_reference = reference.to_owned();
 
-    if let Some(manifests) = payload.get("manifests").and_then(serde_json::Value::as_array) {
+    if let Some(manifests) = payload
+        .get("manifests")
+        .and_then(serde_json::Value::as_array)
+    {
         let selected = manifests
             .iter()
             .find(|descriptor| {
                 let platform = &descriptor["platform"];
                 platform["os"].as_str() == Some("linux")
                     && platform["architecture"].as_str() == Some(architecture)
-                    && platform["variant"].as_str().is_none_or(|variant| {
-                        architecture != "arm" || variant == "v7"
-                    })
+                    && platform["variant"]
+                        .as_str()
+                        .is_none_or(|variant| architecture != "arm" || variant == "v7")
             })
             .ok_or_else(|| format!("image has no linux/{architecture} manifest"))?;
         let digest = selected["digest"]
@@ -538,7 +549,9 @@ pub fn docker_hub_inspect(
             .ok_or("selected platform descriptor has no digest")?;
         selected_reference = digest.to_owned();
         let child = client
-            .get(format!("{DOCKER_REGISTRY}/v2/{repository}/manifests/{digest}"))
+            .get(format!(
+                "{DOCKER_REGISTRY}/v2/{repository}/manifests/{digest}"
+            ))
             .bearer_auth(&token)
             .header(reqwest::header::ACCEPT, OCI_ACCEPT)
             .send()?
@@ -554,7 +567,13 @@ pub fn docker_hub_inspect(
         .and_then(serde_json::Value::as_array)
         .ok_or("Docker manifest does not contain a layers array")?;
     let total_layer_bytes = layers.iter().try_fold(0_u64, |total, layer| {
-        total.checked_add(layer.get("size").and_then(serde_json::Value::as_u64).unwrap_or(0))
+        total
+            .checked_add(
+                layer
+                    .get("size")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0),
+            )
             .ok_or("Docker image layer size overflow")
     })?;
     let media_type = payload

@@ -5,23 +5,23 @@
 //! artifact uploads and manifest publication require the bearer token.
 
 use axum::{
+    Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
 };
 use nelroot::core::hub::{self, HubCatalog, HubCatalogEntry, HubManifest};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 use std::{
     env,
     path::{Path as FsPath, PathBuf},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
+use subtle::ConstantTimeEq;
 use tokio::{fs, net::TcpListener, sync::Mutex};
 
 const MAX_ARTIFACT_BYTES: usize = 512 * 1024 * 1024;
@@ -82,7 +82,10 @@ fn valid_digest(value: &str) -> bool {
 }
 
 fn artifact_path(state: &AppState, digest: &str) -> PathBuf {
-    state.root.join("artifacts").join(format!("{digest}.tar.gz"))
+    state
+        .root
+        .join("artifacts")
+        .join(format!("{digest}.tar.gz"))
 }
 
 fn manifest_path(state: &AppState, digest: &str) -> PathBuf {
@@ -129,7 +132,12 @@ async fn write_atomic(path: &FsPath, bytes: &[u8]) -> ApiResult<()> {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| api_error(StatusCode::INTERNAL_SERVER_ERROR, "invalid storage filename"))?;
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid storage filename",
+            )
+        })?;
     let temporary = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
     fs::write(&temporary, bytes)
         .await
@@ -167,7 +175,10 @@ async fn load_catalog_file(state: &AppState) -> ApiResult<HubCatalog> {
 
 async fn verify_artifact(state: &AppState, digest: &str) -> ApiResult<Vec<u8>> {
     if !valid_digest(digest) {
-        return Err(api_error(StatusCode::BAD_REQUEST, "invalid SHA-256 identifier"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "invalid SHA-256 identifier",
+        ));
     }
     let path = artifact_path(state, digest);
     let metadata = fs::metadata(&path)
@@ -208,7 +219,10 @@ async fn get_manifest(
     Path(digest): Path<String>,
 ) -> ApiResult<Json<HubManifest>> {
     if !valid_digest(&digest) {
-        return Err(api_error(StatusCode::BAD_REQUEST, "invalid manifest SHA-256"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "invalid manifest SHA-256",
+        ));
     }
     let path = manifest_path(&state, &digest);
     let metadata = fs::metadata(&path)
@@ -262,7 +276,10 @@ async fn upload_artifact(
 ) -> ApiResult<(StatusCode, Json<UploadResponse>)> {
     require_auth(&headers, &state)?;
     if !valid_digest(&digest) {
-        return Err(api_error(StatusCode::BAD_REQUEST, "invalid SHA-256 identifier"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "invalid SHA-256 identifier",
+        ));
     }
     if body.is_empty() || body.len() > MAX_ARTIFACT_BYTES {
         return Err(api_error(
@@ -293,7 +310,11 @@ async fn upload_artifact(
     };
 
     Ok((
-        if stored { StatusCode::CREATED } else { StatusCode::OK },
+        if stored {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
         Json(UploadResponse {
             sha256: digest,
             size_bytes: body.len(),
@@ -337,7 +358,11 @@ async fn publish_manifest(
         .map_err(|error| api_error(StatusCode::UNPROCESSABLE_ENTITY, error))?;
 
     let mut catalog = load_catalog_file(&state).await?;
-    if catalog.images.iter().any(|entry| entry.id == manifest.image.id) {
+    if catalog
+        .images
+        .iter()
+        .any(|entry| entry.id == manifest.image.id)
+    {
         return Err(api_error(
             StatusCode::CONFLICT,
             "image ID already exists; published image IDs are immutable",

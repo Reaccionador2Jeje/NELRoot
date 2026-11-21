@@ -75,15 +75,13 @@ pub fn apply_relative_relocations(
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
 
-    let dynamic_offset =
-        mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
+    let dynamic_offset = mapped.virtual_address_offset(dynamic.virtual_address, dynamic_length)?;
     let dynamic_bytes = mapped.read_bytes(dynamic_offset, dynamic_length)?;
 
-    let (rela_address, rela_size, _rela_entry_size) =
-        match parse_dynamic_table(&dynamic_bytes)? {
-            Some(table) => table,
-            None => return Ok(0),
-        };
+    let (rela_address, rela_size, _rela_entry_size) = match parse_dynamic_table(&dynamic_bytes)? {
+        Some(table) => table,
+        None => return Ok(0),
+    };
 
     let relocation_count = usize::try_from(rela_size / ELF64_RELA_ENTRY_SIZE as u64)?;
     if relocation_count > MAX_RELOCATIONS {
@@ -110,12 +108,8 @@ pub fn apply_relative_relocations(
             return Err("ELF relative relocation target is not 8-byte aligned".into());
         }
 
-        let value = relative_relocation_value(
-            info.machine,
-            relocation_info,
-            addend,
-            mapped.load_bias(),
-        )?;
+        let value =
+            relative_relocation_value(info.machine, relocation_info, addend, mapped.load_bias())?;
         let target_offset = mapped.virtual_address_offset(target_address, 8)?;
         mapped.validate_write_range(target_offset, 8)?;
         pending.push((target_offset, value.to_le_bytes()));
@@ -130,9 +124,7 @@ pub fn apply_relative_relocations(
     Ok(pending.len())
 }
 
-fn parse_dynamic_table(
-    dynamic_bytes: &[u8],
- ) -> Result<Option<DynamicRelaInfo>, Box<dyn Error>> {
+fn parse_dynamic_table(dynamic_bytes: &[u8]) -> Result<Option<DynamicRelaInfo>, Box<dyn Error>> {
     if dynamic_bytes.len() % ELF64_DYNAMIC_ENTRY_SIZE != 0 {
         return Err("PT_DYNAMIC has an invalid entry table size".into());
     }
@@ -157,17 +149,17 @@ fn parse_dynamic_table(
             DT_RELA => set_once(&mut rela_address, value, "DT_RELA")?,
             DT_RELASZ => set_once(&mut rela_size, value, "DT_RELASZ")?,
             DT_RELAENT => set_once(&mut rela_entry_size, value, "DT_RELAENT")?,
-            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
-            | DT_RELR | DT_RELRSZ | DT_RELRENT
+            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ | DT_RELR | DT_RELRSZ | DT_RELRENT
             | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
-            | DT_TEXTREL if value != 0 || tag == DT_TEXTREL => {
+            | DT_TEXTREL
+                if value != 0 || tag == DT_TEXTREL =>
+            {
                 return Err(
                     "ELF image requires unsupported REL, RELR, Android-packed, PLT, or text relocations"
                         .into(),
                 );
             }
-            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ
-            | DT_RELR | DT_RELRSZ | DT_RELRENT
+            DT_REL | DT_RELSZ | DT_JMPREL | DT_PLTRELSZ | DT_RELR | DT_RELRSZ | DT_RELRENT
             | DT_ANDROID_REL | DT_ANDROID_RELSZ | DT_ANDROID_RELA | DT_ANDROID_RELASZ
             | DT_TEXTREL => {}
             _ => {}
@@ -186,20 +178,14 @@ fn parse_dynamic_table(
     let address = rela_address.ok_or("DT_RELA is missing")?;
     let size = rela_size.ok_or("DT_RELASZ is missing")?;
     let entry_size = rela_entry_size.ok_or("DT_RELAENT is missing")?;
-    if entry_size != ELF64_RELA_ENTRY_SIZE as u64
-        || size % ELF64_RELA_ENTRY_SIZE as u64 != 0
-    {
+    if entry_size != ELF64_RELA_ENTRY_SIZE as u64 || size % ELF64_RELA_ENTRY_SIZE as u64 != 0 {
         return Err("ELF image has an unsupported RELA entry size".into());
     }
 
     Ok(Some((address, size, entry_size)))
 }
 
-fn set_once(
-    slot: &mut Option<u64>,
-    value: u64,
-    name: &'static str,
-) -> Result<(), Box<dyn Error>> {
+fn set_once(slot: &mut Option<u64>, value: u64, name: &'static str) -> Result<(), Box<dyn Error>> {
     if slot.replace(value).is_some() {
         return Err(format!("ELF dynamic table contains duplicate {name} entries").into());
     }
@@ -313,7 +299,11 @@ mod tests {
 
         let target_offset = mapped.virtual_address_offset(0x2000, 8).unwrap();
         let relocated = u64::from_le_bytes(
-            mapped.read_bytes(target_offset, 8).unwrap().try_into().unwrap(),
+            mapped
+                .read_bytes(target_offset, 8)
+                .unwrap()
+                .try_into()
+                .unwrap(),
         );
         assert_eq!(relocated, mapped.load_bias() + 0x1234);
     }
@@ -328,17 +318,19 @@ mod tests {
 
         let second_entry = 0x218;
         bytes[second_entry..second_entry + 8].copy_from_slice(&0x2008_u64.to_le_bytes());
-        bytes[second_entry + 8..second_entry + 16]
-            .copy_from_slice(&0_u64.to_le_bytes());
-        bytes[second_entry + 16..second_entry + 24]
-            .copy_from_slice(&0x5678_i64.to_le_bytes());
+        bytes[second_entry + 8..second_entry + 16].copy_from_slice(&0_u64.to_le_bytes());
+        bytes[second_entry + 16..second_entry + 24].copy_from_slice(&0x5678_i64.to_le_bytes());
 
         let mut mapped = MappedElf::map_bytes(&bytes, &info).unwrap();
         assert!(apply_relative_relocations(&mut mapped, &info).is_err());
 
         let target_offset = mapped.virtual_address_offset(0x2000, 8).unwrap();
         let original = u64::from_le_bytes(
-            mapped.read_bytes(target_offset, 8).unwrap().try_into().unwrap(),
+            mapped
+                .read_bytes(target_offset, 8)
+                .unwrap()
+                .try_into()
+                .unwrap(),
         );
         assert_eq!(original, 0);
     }

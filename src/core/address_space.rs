@@ -18,8 +18,16 @@ pub struct GuestPermissions {
 }
 
 impl GuestPermissions {
-    pub const READ_ONLY: Self = Self { read: true, write: false, execute: false };
-    pub const READ_WRITE: Self = Self { read: true, write: true, execute: false };
+    pub const READ_ONLY: Self = Self {
+        read: true,
+        write: false,
+        execute: false,
+    };
+    pub const READ_WRITE: Self = Self {
+        read: true,
+        write: true,
+        execute: false,
+    };
 
     fn merge(self, other: Self) -> Result<Self, &'static str> {
         let merged = Self {
@@ -49,8 +57,12 @@ pub struct GuestRegion {
 }
 
 impl GuestRegion {
-    pub fn len(&self) -> u64 { self.end - self.start }
-    pub fn is_empty(&self) -> bool { self.start == self.end }
+    pub fn len(&self) -> u64 {
+        self.end - self.start
+    }
+    pub fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
 }
 
 /// A validated interval map of guest virtual addresses, not a real MMU map.
@@ -60,9 +72,13 @@ pub struct GuestAddressSpace {
 }
 
 impl GuestAddressSpace {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn regions(&self) -> &[GuestRegion] { &self.regions }
+    pub fn regions(&self) -> &[GuestRegion] {
+        &self.regions
+    }
 
     /// Insert a page-aligned, non-empty range. Any overlap is rejected.
     pub fn reserve_region(
@@ -72,7 +88,9 @@ impl GuestAddressSpace {
         permissions: GuestPermissions,
         kind: GuestRegionKind,
     ) -> Result<(), &'static str> {
-        if start >= end { return Err("guest region must have a non-empty range"); }
+        if start >= end {
+            return Err("guest region must have a non-empty range");
+        }
         if start % GUEST_PAGE_SIZE != 0 || end % GUEST_PAGE_SIZE != 0 {
             return Err("guest region boundaries must be 4096-byte aligned");
         }
@@ -82,7 +100,12 @@ impl GuestAddressSpace {
         if self.regions.iter().any(|r| start < r.end && r.start < end) {
             return Err("guest virtual region overlaps an existing region");
         }
-        self.regions.push(GuestRegion { start, end, permissions, kind });
+        self.regions.push(GuestRegion {
+            start,
+            end,
+            permissions,
+            kind,
+        });
         self.regions.sort_by_key(|region| region.start);
         Ok(())
     }
@@ -116,40 +139,59 @@ impl GuestAddressSpace {
                     None => permissions,
                 };
                 pages.insert(page, merged);
-                page = page.checked_add(GUEST_PAGE_SIZE)
+                page = page
+                    .checked_add(GUEST_PAGE_SIZE)
                     .ok_or("ELF guest page address overflow")?;
             }
         }
-        if pages.is_empty() { return Err("ELF load plan contains no mapped pages".into()); }
+        if pages.is_empty() {
+            return Err("ELF load plan contains no mapped pages".into());
+        }
 
         let mut space = Self::new();
         let mut iter = pages.into_iter();
         let (mut start, mut permissions) = iter.next().ok_or("empty ELF page map")?;
-        let mut end = start.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
+        let mut end = start
+            .checked_add(GUEST_PAGE_SIZE)
+            .ok_or("ELF page range overflow")?;
         for (address, next_permissions) in iter {
             if address == end && next_permissions == permissions {
-                end = address.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
+                end = address
+                    .checked_add(GUEST_PAGE_SIZE)
+                    .ok_or("ELF page range overflow")?;
             } else {
                 space.reserve_region(start, end, permissions, GuestRegionKind::ElfImage)?;
                 start = address;
                 permissions = next_permissions;
-                end = address.checked_add(GUEST_PAGE_SIZE).ok_or("ELF page range overflow")?;
+                end = address
+                    .checked_add(GUEST_PAGE_SIZE)
+                    .ok_or("ELF page range overflow")?;
             }
         }
         space.reserve_region(start, end, permissions, GuestRegionKind::ElfImage)?;
 
         let stack_start = stack.stack_pointer() / GUEST_PAGE_SIZE * GUEST_PAGE_SIZE;
-        let stack_end = stack.stack_end()
+        let stack_end = stack
+            .stack_end()
             .checked_add(GUEST_PAGE_SIZE - 1)
             .ok_or("guest stack page range overflow")?
-            / GUEST_PAGE_SIZE * GUEST_PAGE_SIZE;
+            / GUEST_PAGE_SIZE
+            * GUEST_PAGE_SIZE;
         space.reserve_region(
             stack_start,
             stack_end,
             GuestPermissions::READ_WRITE,
             GuestRegionKind::Stack,
         )?;
-        if !space.contains(plan.entry_point, 1, GuestPermissions { read: false, write: false, execute: true }) {
+        if !space.contains(
+            plan.entry_point,
+            1,
+            GuestPermissions {
+                read: false,
+                write: false,
+                execute: true,
+            },
+        ) {
             return Err("ELF entry point is not covered by an executable guest region".into());
         }
         Ok(space)
@@ -158,10 +200,15 @@ impl GuestAddressSpace {
     /// Check that an entire non-empty range is covered by one region with the
     /// requested permissions. This checks metadata, not actual memory access.
     pub fn contains(&self, address: u64, length: u64, required: GuestPermissions) -> bool {
-        if length == 0 { return false; }
-        let Some(end) = address.checked_add(length) else { return false; };
+        if length == 0 {
+            return false;
+        }
+        let Some(end) = address.checked_add(length) else {
+            return false;
+        };
         self.regions.iter().any(|region| {
-            address >= region.start && end <= region.end
+            address >= region.start
+                && end <= region.end
                 && (!required.read || region.permissions.read)
                 && (!required.write || region.permissions.write)
                 && (!required.execute || region.permissions.execute)
@@ -176,27 +223,82 @@ mod tests {
     #[test]
     fn reserves_and_sorts_regions() {
         let mut space = GuestAddressSpace::new();
-        space.reserve_region(0x4000, 0x5000, GuestPermissions::READ_ONLY, GuestRegionKind::ElfImage).unwrap();
-        space.reserve_region(0x1000, 0x2000, GuestPermissions::READ_WRITE, GuestRegionKind::Stack).unwrap();
+        space
+            .reserve_region(
+                0x4000,
+                0x5000,
+                GuestPermissions::READ_ONLY,
+                GuestRegionKind::ElfImage,
+            )
+            .unwrap();
+        space
+            .reserve_region(
+                0x1000,
+                0x2000,
+                GuestPermissions::READ_WRITE,
+                GuestRegionKind::Stack,
+            )
+            .unwrap();
         assert_eq!(space.regions()[0].start, 0x1000);
     }
 
     #[test]
     fn rejects_empty_unaligned_and_overlapping_ranges() {
         let mut space = GuestAddressSpace::new();
-        assert!(space.reserve_region(0x1000, 0x1000, GuestPermissions::READ_ONLY, GuestRegionKind::ElfImage).is_err());
-        assert!(space.reserve_region(0x1001, 0x2000, GuestPermissions::READ_ONLY, GuestRegionKind::ElfImage).is_err());
-        space.reserve_region(0x1000, 0x3000, GuestPermissions::READ_ONLY, GuestRegionKind::ElfImage).unwrap();
-        assert!(space.reserve_region(0x2000, 0x4000, GuestPermissions::READ_ONLY, GuestRegionKind::Stack).is_err());
+        assert!(
+            space
+                .reserve_region(
+                    0x1000,
+                    0x1000,
+                    GuestPermissions::READ_ONLY,
+                    GuestRegionKind::ElfImage
+                )
+                .is_err()
+        );
+        assert!(
+            space
+                .reserve_region(
+                    0x1001,
+                    0x2000,
+                    GuestPermissions::READ_ONLY,
+                    GuestRegionKind::ElfImage
+                )
+                .is_err()
+        );
+        space
+            .reserve_region(
+                0x1000,
+                0x3000,
+                GuestPermissions::READ_ONLY,
+                GuestRegionKind::ElfImage,
+            )
+            .unwrap();
+        assert!(
+            space
+                .reserve_region(
+                    0x2000,
+                    0x4000,
+                    GuestPermissions::READ_ONLY,
+                    GuestRegionKind::Stack
+                )
+                .is_err()
+        );
     }
 
     #[test]
     fn rejects_write_execute_regions() {
         let mut space = GuestAddressSpace::new();
-        let wx = GuestPermissions { read: true, write: true, execute: true };
-        assert!(space.reserve_region(0x1000, 0x2000, wx, GuestRegionKind::ElfImage).is_err());
+        let wx = GuestPermissions {
+            read: true,
+            write: true,
+            execute: true,
+        };
+        assert!(
+            space
+                .reserve_region(0x1000, 0x2000, wx, GuestRegionKind::ElfImage)
+                .is_err()
+        );
     }
-
 
     fn sample_stack() -> GuestStack {
         super::super::stack::build_initial_stack(&super::super::stack::GuestStackConfig {
@@ -206,7 +308,8 @@ mod tests {
             execfn: b"/bin/demo".to_vec(),
             random: [7; 16],
             auxv: vec![],
-        }).unwrap()
+        })
+        .unwrap()
     }
 
     #[test]
@@ -239,9 +342,21 @@ mod tests {
             ],
         };
         let space = GuestAddressSpace::from_load_plan(&plan, &sample_stack()).unwrap();
-        assert!(space.contains(0x400080, 1, GuestPermissions { read: false, write: false, execute: true }));
+        assert!(space.contains(
+            0x400080,
+            1,
+            GuestPermissions {
+                read: false,
+                write: false,
+                execute: true
+            }
+        ));
         assert!(space.contains(0x402000, 16, GuestPermissions::READ_WRITE));
-        let stack = space.regions().iter().find(|region| region.kind == GuestRegionKind::Stack).unwrap();
+        let stack = space
+            .regions()
+            .iter()
+            .find(|region| region.kind == GuestRegionKind::Stack)
+            .unwrap();
         assert!(stack.permissions.read && stack.permissions.write && !stack.permissions.execute);
     }
 
@@ -280,10 +395,25 @@ mod tests {
     #[test]
     fn checks_full_range_and_permissions() {
         let mut space = GuestAddressSpace::new();
-        space.reserve_region(0x1000, 0x3000, GuestPermissions::READ_WRITE, GuestRegionKind::Stack).unwrap();
+        space
+            .reserve_region(
+                0x1000,
+                0x3000,
+                GuestPermissions::READ_WRITE,
+                GuestRegionKind::Stack,
+            )
+            .unwrap();
         assert!(space.contains(0x1ff0, 16, GuestPermissions::READ_ONLY));
         assert!(!space.contains(0x2ff0, 32, GuestPermissions::READ_ONLY));
-        assert!(!space.contains(0x1000, 8, GuestPermissions { read: false, write: false, execute: true }));
+        assert!(!space.contains(
+            0x1000,
+            8,
+            GuestPermissions {
+                read: false,
+                write: false,
+                execute: true
+            }
+        ));
         assert!(!space.contains(u64::MAX - 2, 8, GuestPermissions::READ_ONLY));
         assert!(!space.contains(0x1000, 0, GuestPermissions::READ_ONLY));
     }

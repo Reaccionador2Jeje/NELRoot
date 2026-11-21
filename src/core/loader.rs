@@ -44,7 +44,11 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
 
     let mut segments = Vec::new();
     let mut executable_entry_contains = false;
-    for header in info.program_headers.iter().filter(|header| header.kind == 1) {
+    for header in info
+        .program_headers
+        .iter()
+        .filter(|header| header.kind == 1)
+    {
         if header.file_size > header.memory_size {
             return Err("PT_LOAD file size exceeds memory size".into());
         }
@@ -81,9 +85,7 @@ pub fn plan_load(info: &ElfInfo, load_bias: u64) -> Result<LoadPlan, Box<dyn std
             .virtual_address
             .checked_add(header.file_size)
             .ok_or("PT_LOAD executable file range overflows")?;
-        if executable
-            && (header.virtual_address..executable_file_end).contains(&info.entry_point)
-        {
+        if executable && (header.virtual_address..executable_file_end).contains(&info.entry_point) {
             executable_entry_contains = true;
         }
         segments.push(SegmentMapping {
@@ -207,7 +209,6 @@ mod tests {
     }
 }
 
-
 /// Result of preparing a host-native static PIE for a future guest executor.
 ///
 /// The ELF image is mapped and relocated in this process. The initial stack is
@@ -236,12 +237,13 @@ pub fn prepare_static_pie(
 ) -> Result<PreparedStaticPie, Box<dyn std::error::Error>> {
     let (mut mapped, info) = super::memory::MappedElf::map_file_with_info(path)?;
     if info.file_type != ET_DYN || info.interpreter.is_some() {
-        return Err("preparation pipeline currently accepts static ET_DYN images without PT_INTERP".into());
+        return Err(
+            "preparation pipeline currently accepts static ET_DYN images without PT_INTERP".into(),
+        );
     }
 
     let plan = plan_load(&info, mapped.load_bias())?;
-    let relocations_applied =
-        super::relocation::apply_relative_relocations(&mut mapped, &info)?;
+    let relocations_applied = super::relocation::apply_relative_relocations(&mut mapped, &info)?;
     let stack = super::stack::build_initial_stack(stack_config)?;
 
     Ok(PreparedStaticPie {
@@ -253,13 +255,18 @@ pub fn prepare_static_pie(
     })
 }
 
-
 /// Architecture-specific entry registers currently modeled by the preparation
 /// layer. These are descriptive values only; no CPU state is installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitialCpuState {
-    X86_64 { instruction_pointer: u64, stack_pointer: u64 },
-    AArch64 { program_counter: u64, stack_pointer: u64 },
+    X86_64 {
+        instruction_pointer: u64,
+        stack_pointer: u64,
+    },
+    AArch64 {
+        program_counter: u64,
+        stack_pointer: u64,
+    },
 }
 
 /// Owns all prepared artifacts required by a future execution backend.
@@ -296,12 +303,12 @@ impl PreparedStaticPie {
         if self.plan.entry_point == 0
             || u64::try_from(self.mapped.entry_address())? != self.plan.entry_point
         {
-            return Err("planned ELF entry point does not match the mapped executable address".into());
+            return Err(
+                "planned ELF entry point does not match the mapped executable address".into(),
+            );
         }
-        let address_space = super::address_space::GuestAddressSpace::from_load_plan(
-            &self.plan,
-            &self.stack,
-        )?;
+        let address_space =
+            super::address_space::GuestAddressSpace::from_load_plan(&self.plan, &self.stack)?;
         let cpu_state = match self.info.machine {
             EM_X86_64 => InitialCpuState::X86_64 {
                 instruction_pointer: self.plan.entry_point,
