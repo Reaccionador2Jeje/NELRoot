@@ -123,7 +123,7 @@ nelroot run-rootless <image> -- /bin/sh -c 'printf "NELRoot rootless OK\\n"'
 nelroot run-rootless <image> -- /bin/uname -m
 ```
 
-This backend is implemented directly with Linux user and private mount namespaces, UID/GID mapping, a read-only rootfs bind mount, `pivot_root`, a bounded temporary `/tmp`, and `no_new_privs`. It does not invoke PRoot, QEMU or Docker. The invoking host UID/GID remain unprivileged. The current milestone is same-architecture and still lacks PID-namespace supervision, signal forwarding, isolated networking, and guest `/proc` and `/dev` mounts. Kernel, container, seccomp or LSM policy can deny namespace or mount operations; NELRoot fails closed instead of falling back to chroot. See [docs/ROOTLESS_RUNTIME.md](docs/ROOTLESS_RUNTIME.md) for exact limits and prerequisites.
+This backend is implemented directly with Linux user, mount and PID namespaces, UID/GID mapping, a persistent writable OverlayFS root, `pivot_root`, guest `/proc`, and `no_new_privs`. The imported image remains the immutable lower layer; writes persist in a per-image upper layer. The guest runs as PID 1 in its PID namespace and its exit status is supervised by NELRoot. It does not invoke PRoot, QEMU or Docker. The invoking host UID/GID remain unprivileged. The current milestone is same-architecture and still lacks guest `/dev` and devpts, isolated networking, resource limits, full signal/descendant lifecycle handling, and complete distribution validation. Kernel, container, seccomp or LSM policy can deny namespace or mount operations; NELRoot fails closed instead of falling back to chroot. See [docs/ROOTLESS_RUNTIME.md](docs/ROOTLESS_RUNTIME.md) for exact limits and prerequisites.
 
 ### Native Linux runtime
 
