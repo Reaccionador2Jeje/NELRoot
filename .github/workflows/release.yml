@@ -119,7 +119,8 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            VERSION="$(sed -n 's/^version = "\\(.*\\)"/\\1/p' Cargo.toml | head -n 1)"
+            VERSION="$(grep -m1 '^version[[:space:]]*=' Cargo.toml | cut -d '"' -f2)"
+            [[ -n "$VERSION" ]] || { echo "::error::Could not read package version from Cargo.toml"; exit 1; }
           elif [[ -n "${{ inputs.release_tag }}" ]]; then
             VERSION="${{ inputs.release_tag }}"
             VERSION="${VERSION#v}"
@@ -140,7 +141,8 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            VERSION="$(sed -n 's/^version = "\\(.*\\)"/\\1/p' Cargo.toml | head -n 1)"
+            VERSION="$(grep -m1 '^version[[:space:]]*=' Cargo.toml | cut -d '"' -f2)"
+            [[ -n "$VERSION" ]] || { echo "::error::Could not read package version from Cargo.toml"; exit 1; }
           elif [[ -n "${{ inputs.release_tag }}" ]]; then
             VERSION="${{ inputs.release_tag }}"
             VERSION="${VERSION#v}"
@@ -207,7 +209,8 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+            VERSION="$(grep -m1 '^version[[:space:]]*=' Cargo.toml | cut -d '"' -f2)"
+            [[ -n "$VERSION" ]] || { echo "::error::Could not read package version from Cargo.toml"; exit 1; }
             echo "tag=v${VERSION}-auto.${{ github.event.workflow_run.run_number }}" >> "$GITHUB_OUTPUT"
           elif [[ -n "${{ inputs.release_tag }}" ]]; then
             echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
