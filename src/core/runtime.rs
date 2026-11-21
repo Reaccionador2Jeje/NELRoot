@@ -176,6 +176,7 @@ pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespac
 
     // SAFETY: the child performs only close/unshare/read/write/mount/_exit
     // syscalls after fork and never resumes normal Rust execution.
+    let expected_parent = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let error = io::Error::last_os_error();
@@ -675,6 +676,17 @@ fn validate_rootless_launch(
 }
 
 #[cfg(target_os = "linux")]
+unsafe fn configure_parent_death_signal(expected_parent: libc::pid_t) -> Result<(), libc::c_int> {
+    if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0) } != 0 {
+        return Err(unsafe { *libc::__errno_location() });
+    }
+    if unsafe { libc::getppid() } != expected_parent {
+        return Err(libc::ECHILD);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 unsafe fn rootless_child_fail(error_fd: libc::c_int, stage: i32) -> ! {
     let failure = RootlessChildFailure {
         stage,
@@ -1084,6 +1096,11 @@ pub fn run_rootless_image(
             libc::close(release_pipe[1]);
             libc::close(error_pipe[0]);
 
+            if let Err(errno) = configure_parent_death_signal(expected_parent) {
+                let value = errno.clamp(1, 255) as u8;
+                libc::write(ready_pipe[1], (&value as *const u8).cast(), 1);
+                libc::_exit(125);
+            }
             if libc::unshare(libc::CLONE_NEWUSER) != 0 {
                 let errno = *libc::__errno_location();
                 let value = errno.clamp(1, 255) as u8;
@@ -1213,9 +1230,16 @@ pub fn run_rootless_image(
             if libc::unshare(libc::CLONE_NEWPID) != 0 {
                 rootless_child_fail(error_pipe[1], 4);
             }
+            let supervisor_pid = libc::getpid();
             let init_pid = libc::fork();
             if init_pid < 0 {
                 rootless_child_fail(error_pipe[1], 4);
+            }
+            if init_pid == 0 {
+                if let Err(errno) = configure_parent_death_signal(supervisor_pid) {
+                    *libc::__errno_location() = errno;
+                    rootless_child_fail(error_pipe[1], 22);
+                }
             }
             if init_pid > 0 {
                 let mut init_status = 0;
@@ -1393,6 +1417,7 @@ pub fn run_rootless_image(
             19 => "secure guest device mount flags",
             20 => "mount guest devpts",
             21 => "mount guest /dev/shm",
+            22 => "arm guest init parent-death cleanup",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
