@@ -163,6 +163,9 @@ enum ProjectCommands {
         /// Guest working directory when --image is selected.
         #[arg(long, default_value = "/workspace")]
         cwd: std::path::PathBuf,
+        /// Environment override KEY=VALUE (repeatable; applied in host and guest mode).
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
         /// Executable and arguments after --.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
@@ -443,6 +446,30 @@ enum HostCommands {
     },
 }
 
+fn parse_env_overrides(
+    entries: &[String],
+) -> Result<std::collections::BTreeMap<String, String>, Box<dyn std::error::Error>> {
+    let mut values = std::collections::BTreeMap::new();
+    for entry in entries {
+        let (key, value) = entry
+            .split_once('=')
+            .ok_or("--env expects KEY=VALUE")?;
+        if key.is_empty()
+            || key.as_bytes().contains(&0)
+            || key.contains('=')
+            || value.as_bytes().contains(&0)
+            || !key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            || key.as_bytes()[0].is_ascii_digit()
+        {
+            return Err(format!("invalid environment assignment: {key}").into());
+        }
+        values.insert(key.to_owned(), value.to_owned());
+    }
+    Ok(values)
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -695,8 +722,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 image,
                 host,
                 cwd,
+                env,
                 command,
             } => {
+                let env_overrides = parse_env_overrides(&env)?;
                 if name.is_empty()
                     || name.len() > 64
                     || !name.chars().all(|character| {
@@ -721,6 +750,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::warn("Host mode has no distro or namespace isolation.");
                     let status = std::process::Command::new(program)
                         .args(&command[1..])
+                        .envs(env_overrides.iter().map(|(key, value)| (key, value)))
                         .current_dir(&workspace)
                         .status()?;
                     if !status.success() {
@@ -741,6 +771,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         &command[1..],
                         &cwd,
                         Some(&workspace),
+                        &env_overrides,
                     )?;
                     if !status.success() {
                         use std::os::unix::process::ExitStatusExt;
