@@ -134,7 +134,7 @@ nelroot image pull ubuntu --registry https://example.org/nelroot/index.json --ar
 
 The registry client verifies the archive SHA-256 before importing it.
 
-For application integrations such as NEXORA, use `nelroot engine status --json`. It returns schema version `1`, host identity, component availability and an explicit `guest_execution.available` boolean. NEXORA can parse this JSON without relying on human-readable terminal output; the response reports whether the native Linux chroot backend can start on this host, and identifies its backend and same-architecture limitation. NELRoot does not currently host an official public image registry; supply an index URL maintained by your organization. See [docs/IMAGE_REGISTRY.md](docs/IMAGE_REGISTRY.md) for the schema.
+For application integrations such as NEXORA, use `nelroot engine status --json`. It returns schema version `1`, host identity, component availability and an explicit `guest_execution.available` boolean. NEXORA can parse this JSON without relying on human-readable terminal output; the response reports whether the native Linux chroot backend can start on this host, and identifies its backend and same-architecture limitation. For first-party image discovery and downloads, use NELRoot Image Hub (`nelroot image hub-remote-search` and `nelroot image hub-pull`). The optional Docker Hub commands only inspect external registry metadata; they do not download Docker layers. See [docs/IMAGE_REGISTRIES.md](docs/IMAGE_REGISTRIES.md) for the first-party API and publishing workflow.
 
 ### Local image catalog
 
