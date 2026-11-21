@@ -358,14 +358,12 @@ async fn publish_manifest(
         .map_err(|error| api_error(StatusCode::UNPROCESSABLE_ENTITY, error))?;
 
     let mut catalog = load_catalog_file(&state).await?;
-    if catalog
-        .images
-        .iter()
-        .any(|entry| entry.id == manifest.image.id)
-    {
+    if catalog.images.iter().any(|entry| {
+        entry.id == manifest.image.id && entry.architecture == manifest.image.architecture
+    }) {
         return Err(api_error(
             StatusCode::CONFLICT,
-            "image ID already exists; published image IDs are immutable",
+            "image ID already exists for this architecture; published image variants are immutable",
         ));
     }
 
