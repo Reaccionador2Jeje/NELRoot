@@ -658,11 +658,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ProjectCommands::Path { name } => {
                 if name.is_empty()
                     || name.len() > 64
-                    || !name
-                        .chars()
-                        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+                    || !name.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                    })
                 {
-                    return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                    return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
                 }
                 let path = config::projects_dir().join(name);
                 let metadata = std::fs::symlink_metadata(&path)?;
@@ -687,7 +689,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
                         })
                     {
-                        return Err("project names must be 1-64 ASCII letters, numbers, '-' or '_'".into());
+                        return Err(
+                        "project names must be 1-64 ASCII letters, numbers, '-' or '_'".into(),
+                    );
                     }
                     config::projects_dir().join(name)
                 } else {
@@ -1506,7 +1510,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Shell", &shell);
             ui::good("Guest runs in a PID namespace with persistent writable storage.");
             if let Some(path) = workspace.as_ref() {
-                ui::key("Project workspace", format!("{} -> /workspace", path.display()));
+                ui::key(
+                    "Project workspace",
+                    format!("{} -> /workspace", path.display()),
+                );
             }
             let status = runtime::run_rootless_image(
                 &image,
