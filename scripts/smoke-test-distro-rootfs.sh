@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker pull "$IMAGE"
-CONTAINER_ID="$(docker create "$IMAGE" /bin/sh -c 'exit 0')"
+CONTAINER_ID="$(docker create --entrypoint /bin/sh "$IMAGE" -c 'exit 0')"
 ROOTFS="$WORK/rootfs"
 mkdir -p "$ROOTFS"
 docker export "$CONTAINER_ID" | tar -xf - -C "$ROOTFS"
