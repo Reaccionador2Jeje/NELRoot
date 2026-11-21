@@ -95,6 +95,10 @@ nelroot image clean
 nelroot logs --lines 50
 nelroot project create demo
 nelroot project list
+# Run on the Linux host
+nelroot project run demo --host -- make test
+# Or run inside an imported distro
+nelroot project run demo --image ubuntu -- make test
 nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 # Linux only: map a static host-native PIE into memory, without executing it
@@ -116,6 +120,9 @@ nelroot shell-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /worksp
 nelroot run-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /workspace -- /bin/sh -lc 'make test'
 # Run the same project directly on the Linux host (no guest isolation)
 nelroot host run --project demo -- make test
+# Unified developer command: choose --host or --image
+nelroot project run demo --host -- make test
+nelroot project run demo --image ubuntu -- make test
 # Rootless native launcher (no host root; user, mount and PID namespaces)
 nelroot run-rootless ubuntu -- /bin/uname -a
 # Optional, unsafe: retain host root credentials inside chroot
