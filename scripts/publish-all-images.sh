@@ -16,6 +16,9 @@ readonly HUB_URL="${NELROOT_HUB_URL:-https://nelroot-image-hub-production.up.rai
 readonly ALPINE_VERSION="${ALPINE_VERSION:-3.24.4}"
 readonly UBUNTU_ID="atdev/ubuntu-24.04.5"
 readonly ALPINE_ID="atdev/alpine-${ALPINE_VERSION}"
+readonly VOID_RELEASE_DATE="${VOID_RELEASE_DATE:-20250202}"
+readonly FEDORA_VERSION="${FEDORA_VERSION:-45}"
+readonly FEDORA_COMPOSE="${FEDORA_COMPOSE:-1.4}"
 readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nelroot-publish-all.XXXXXX")"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -23,7 +26,10 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 if [[ "${1:-}" == "--list" ]]; then
     printf '%s\n' \
         "Ubuntu Base 24.04.5: amd64 (x86_64), arm64 (aarch64), armhf (arm), ppc64el (ppc64le), riscv64, s390x" \
-        "Alpine Mini Rootfs ${ALPINE_VERSION}: x86_64, aarch64, armv7, riscv64"
+        "Alpine Mini Rootfs ${ALPINE_VERSION}: x86_64, aarch64, armv7, riscv64" \
+        "Arch Linux Bootstrap (rolling): x86_64" \
+        "Void Linux ROOTFS ${VOID_RELEASE_DATE} (glibc): x86_64, aarch64, armv7" \
+        "Fedora Container Base ${FEDORA_VERSION}.${FEDORA_COMPOSE}: x86_64, aarch64, ppc64le, s390x"
     exit 0
 fi
 
@@ -122,7 +128,26 @@ publish_one() {
             ((failed += 1))
         fi
     else
-        if ALPINE_VERSION="$ALPINE_VERSION" bash "$publisher" "$publisher_arch"; then
+        local publish_status=0
+        case "$family" in
+            alpine)
+                ALPINE_VERSION="$ALPINE_VERSION" bash "$publisher" "$publisher_arch" || publish_status=$?
+                ;;
+            arch)
+                bash "$publisher" || publish_status=$?
+                ;;
+            void)
+                VOID_RELEASE_DATE="$VOID_RELEASE_DATE" VOID_LIBC=glibc bash "$publisher" "$publisher_arch" || publish_status=$?
+                ;;
+            fedora)
+                FEDORA_VERSION="$FEDORA_VERSION" FEDORA_COMPOSE="$FEDORA_COMPOSE" bash "$publisher" "$publisher_arch" || publish_status=$?
+                ;;
+            *)
+                echo "ERROR: unknown publisher family: $family" >&2
+                publish_status=2
+                ;;
+        esac
+        if (( publish_status == 0 )); then
             ((published += 1))
         else
             echo "ERROR: failed to publish $image_id ($nelroot_arch)." >&2
@@ -146,6 +171,17 @@ publish_one alpine "$ALPINE_ID" x86_64 scripts/publish-alpine-minirootfs.sh x86_
 publish_one alpine "$ALPINE_ID" aarch64 scripts/publish-alpine-minirootfs.sh aarch64
 publish_one alpine "$ALPINE_ID" armv7 scripts/publish-alpine-minirootfs.sh armv7
 publish_one alpine "$ALPINE_ID" riscv64 scripts/publish-alpine-minirootfs.sh riscv64
+
+publish_one arch atdev/archlinux-bootstrap x86_64 scripts/publish-archlinux-bootstrap.sh ""
+
+publish_one void "atdev/void-${VOID_RELEASE_DATE}-glibc" x86_64 scripts/publish-void-rootfs.sh x86_64
+publish_one void "atdev/void-${VOID_RELEASE_DATE}-glibc" aarch64 scripts/publish-void-rootfs.sh aarch64
+publish_one void "atdev/void-${VOID_RELEASE_DATE}-glibc" armv7 scripts/publish-void-rootfs.sh armv7l
+
+publish_one fedora "atdev/fedora-${FEDORA_VERSION}" x86_64 scripts/publish-fedora-container.sh x86_64
+publish_one fedora "atdev/fedora-${FEDORA_VERSION}" aarch64 scripts/publish-fedora-container.sh aarch64
+publish_one fedora "atdev/fedora-${FEDORA_VERSION}" ppc64le scripts/publish-fedora-container.sh ppc64le
+publish_one fedora "atdev/fedora-${FEDORA_VERSION}" s390x scripts/publish-fedora-container.sh s390x
 
 echo
 echo "================ NELRoot Image Hub summary ================"
