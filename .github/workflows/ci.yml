@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nelroot-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: Format, lint and test
@@ -55,6 +59,12 @@ jobs:
         run: cargo build --release --bin nelroot-hub
       - name: Smoke-test first-party Image Hub API
         run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
+      - name: Upload NELRoot CLI for distro matrix
+        uses: actions/upload-artifact@v4
+        with:
+          name: nelroot-ci-x86_64
+          path: target/release/nelroot
+          retention-days: 1
 
   runtime-distro-smoke:
     name: Hub image availability / smoke (${{ matrix.distro }})
@@ -86,9 +96,12 @@ jobs:
             expected_id: fedora
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Build NELRoot
-        run: cargo build --release --bin nelroot
+      - name: Download NELRoot CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nelroot-ci-x86_64
+          path: target/release
+      - name: Make NELRoot CLI executable
+        run: chmod +x target/release/nelroot
       - name: Pull and smoke-test Hub image (if published)
         run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image_id }}" "${{ matrix.local_name }}" "${{ matrix.expected_id }}"
