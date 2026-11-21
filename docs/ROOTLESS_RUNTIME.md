@@ -167,3 +167,11 @@ Examples:
 
     nelroot run-rootless alpine -- /bin/sh -c 'printf "rootless OK\\n"'
     nelroot shell-rootless alpine
+    nelroot project create demo
+    nelroot shell-rootless alpine --workspace ~/.nelroot/projects/demo --cwd /workspace
+
+A supplied `--workspace` must be an existing real host directory. NELRoot bind-mounts
+it read/write at guest `/workspace`, with `nosuid` and `nodev` mount flags.
+The project files remain on the host and are shared with the guest; this is an
+explicit host-filesystem grant, not a general host-root mount. Do not point it at
+directories containing data you do not want accessible to guest processes.
