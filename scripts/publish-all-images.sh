@@ -7,7 +7,7 @@ set -Eeuo pipefail
 #
 # Usage:
 #   export NELROOT_HUB_PUBLISH_TOKEN='...'
-#   ./scripts/publish-all-images.sh
+#   bash scripts/publish-all-images.sh
 #
 # Optional:
 #   NELROOT_HUB_URL, ALPINE_VERSION
