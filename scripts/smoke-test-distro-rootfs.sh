@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_ID="${1:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME}"
+IMAGE_ID="${1:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME EXPECTED_DISTRO_ID}"
 LOCAL_NAME="${2:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME EXPECTED_DISTRO_ID}"
 EXPECTED_DISTRO_ID="${3:?usage: smoke-test-distro-rootfs.sh IMAGE_ID LOCAL_NAME EXPECTED_DISTRO_ID}"
 NELROOT_BIN="${NELROOT_BIN:-target/release/nelroot}"
