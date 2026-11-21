@@ -79,6 +79,9 @@ enum Commands {
         /// Guest working directory.
         #[arg(long, default_value = "/")]
         cwd: std::path::PathBuf,
+        /// Optional host project directory mounted at /workspace in the guest.
+        #[arg(long)]
+        workspace: Option<std::path::PathBuf>,
         /// Absolute guest executable and its arguments after --.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
@@ -94,6 +97,9 @@ enum Commands {
         /// Guest working directory.
         #[arg(long, default_value = "/")]
         cwd: std::path::PathBuf,
+        /// Optional host project directory mounted at /workspace in the guest.
+        #[arg(long)]
+        workspace: Option<std::path::PathBuf>,
     },
     /// Open an interactive shell inside a registered image.
     Shell {
@@ -1307,6 +1313,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::RunRootless {
             image,
             cwd,
+            workspace,
             command,
         } => {
             let program = command.first().ok_or("missing guest executable")?;
@@ -1316,18 +1323,35 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::key("Executable", program);
             ui::good("Host UID/GID remain unprivileged; guest writes persist in OverlayFS.");
             ui::good("Guest PID namespace and /proc are enabled; host networking remains shared.");
-            let status = runtime::run_rootless_image(&image, program, arguments, &cwd)?;
+            if let Some(path) = workspace.as_ref() {
+                ui::key("Project workspace", format!("{} -> /workspace", path.display()));
+            }
+            let status = runtime::run_rootless_image(&image, program, arguments, &cwd, workspace.as_deref())?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
         }
         #[cfg(target_os = "linux")]
-        Commands::ShellRootless { image, shell, cwd } => {
+        Commands::ShellRootless {
+            image,
+            shell,
+            cwd,
+            workspace,
+        } => {
             ui::banner("Rootless interactive Linux shell");
             ui::key("Image", &image);
             ui::key("Shell", &shell);
             ui::good("Guest runs in a PID namespace with persistent writable storage.");
-            let status = runtime::run_rootless_image(&image, &shell, &["-i".to_owned()], &cwd)?;
+            if let Some(path) = workspace.as_ref() {
+                ui::key("Project workspace", format!("{} -> /workspace", path.display()));
+            }
+            let status = runtime::run_rootless_image(
+                &image,
+                &shell,
+                &["-i".to_owned()],
+                &cwd,
+                workspace.as_deref(),
+            )?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
