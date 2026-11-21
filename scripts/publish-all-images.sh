@@ -22,7 +22,7 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 if [[ "${1:-}" == "--list" ]]; then
     printf '%s\n' \
-        "Ubuntu Base 24.04.5: amd64 (x86_64), arm64 (aarch64)" \
+        "Ubuntu Base 24.04.5: amd64 (x86_64), arm64 (aarch64), armhf (arm), ppc64el (ppc64le), riscv64, s390x" \
         "Alpine Mini Rootfs ${ALPINE_VERSION}: x86_64, aarch64, armv7, riscv64"
     exit 0
 fi
@@ -137,6 +137,10 @@ echo "Existing catalog entries will be skipped; uploads run sequentially."
 
 publish_one ubuntu "$UBUNTU_ID" x86_64 scripts/publish-ubuntu-base.sh amd64
 publish_one ubuntu "$UBUNTU_ID" aarch64 scripts/publish-ubuntu-base.sh arm64
+publish_one ubuntu "$UBUNTU_ID" arm scripts/publish-ubuntu-base.sh armhf
+publish_one ubuntu "$UBUNTU_ID" ppc64le scripts/publish-ubuntu-base.sh ppc64el
+publish_one ubuntu "$UBUNTU_ID" riscv64 scripts/publish-ubuntu-base.sh riscv64
+publish_one ubuntu "$UBUNTU_ID" s390x scripts/publish-ubuntu-base.sh s390x
 
 publish_one alpine "$ALPINE_ID" x86_64 scripts/publish-alpine-minirootfs.sh x86_64
 publish_one alpine "$ALPINE_ID" aarch64 scripts/publish-alpine-minirootfs.sh aarch64
