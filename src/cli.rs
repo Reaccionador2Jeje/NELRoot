@@ -1509,7 +1509,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::banner("Rootless interactive Linux shell");
             ui::key("Image", &image);
             ui::key("Shell", &shell);
-            ui::good("Guest runs with persistent storage, PID isolation, /proc and standard /dev devices.");
+            ui::good(
+                "Guest runs with persistent storage, PID isolation, /proc and standard /dev devices.",
+            );
             if let Some(path) = workspace.as_ref() {
                 ui::key(
                     "Project workspace",
