@@ -1,6 +1,6 @@
 # Rootless Linux runtime: implementation contract
 
-This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, complete signal/process lifecycle and distribution compatibility remain incomplete. The guest receives a bounded standard-device set, devpts and a bounded /dev/shm tmpfs.
+This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, graceful signal forwarding and complete descendant lifecycle handling remain incomplete. Both namespace supervisor and guest PID 1 now use parent-death cleanup to avoid orphaning a namespace if its parent exits unexpectedly. Distribution compatibility remains incomplete. The guest receives a bounded standard-device set, devpts and a bounded /dev/shm tmpfs.
 
 ## Goal
 
@@ -12,7 +12,7 @@ Run same-architecture Linux programs from an imported root filesystem as the inv
 
 1. **User namespace:** create a new user namespace and map one namespace identity to the caller's host UID/GID. Write and verify `uid_map` and `gid_map`; apply the kernel's setgroups restriction before writing `gid_map` when required.
 2. **Mount namespace:** create a private mount namespace so mount propagation cannot affect the host. Never modify host mount propagation.
-3. **PID namespace:** create a PID namespace and launch the guest init process as its PID 1. Supervise it from the parent namespace, propagate its exit status and signals, and ensure descendants are cleaned up.
+3. **PID namespace:** create a PID namespace and launch the guest init process as its PID 1. Supervise it from the parent namespace, propagate its exit status and signals, and ensure descendants are cleaned up. The namespace supervisor and guest PID 1 arm parent-death signals and verify their expected parent PID so abrupt termination of NELRoot cannot leave the namespace running unattended.
 4. **Filesystem root:** validate the rootfs path before entering the namespace, establish the guest root, and ensure all mount operations are scoped to the private mount namespace.
 5. **Process credentials:** use namespace credentials only. Do not request host capabilities or retain host-root credentials.
 6. **Lifecycle:** own child PID, exit status, signals, cleanup, and failure rollback in a typed runtime session.
