@@ -93,6 +93,8 @@ nelroot image update ubuntu-noble --registry https://example.org/nelroot/index.j
 nelroot image clean
 
 nelroot logs --lines 50
+nelroot project create demo
+nelroot project list
 nelroot elf inspect /path/to/elf-binary
 nelroot elf plan /path/to/elf-binary
 # Linux only: map a static host-native PIE into memory, without executing it
@@ -108,6 +110,12 @@ nelroot run ubuntu -- /bin/uname -a
 nelroot shell ubuntu
 # Rootless interactive shell (no host root)
 nelroot shell-rootless ubuntu
+# Share a persistent NELRoot project with the distro at /workspace
+nelroot shell-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /workspace
+# Run a project with tools installed inside the distro
+nelroot run-rootless ubuntu --workspace ~/.nelroot/projects/demo --cwd /workspace -- /bin/sh -lc 'make test'
+# Run the same project directly on the Linux host (no guest isolation)
+nelroot host run --project demo -- make test
 # Rootless native launcher (no host root; user, mount and PID namespaces)
 nelroot run-rootless ubuntu -- /bin/uname -a
 # Optional, unsafe: retain host root credentials inside chroot
