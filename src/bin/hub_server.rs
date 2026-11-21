@@ -18,7 +18,10 @@ use sha2::{Digest, Sha256};
 use std::{
     env,
     path::{Path as FsPath, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use subtle::ConstantTimeEq;
@@ -26,6 +29,7 @@ use tokio::{fs, net::TcpListener, sync::Mutex};
 
 const MAX_ARTIFACT_BYTES: usize = 512 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: usize = 8 * 1024 * 1024;
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 struct AppState {
@@ -138,7 +142,13 @@ async fn write_atomic(path: &FsPath, bytes: &[u8]) -> ApiResult<()> {
                 "invalid storage filename",
             )
         })?;
-    let temporary = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
+    // Each concurrent request gets its own temporary path, even when it writes
+    // the same content-addressed destination at the same time.
+    let sequence = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temporary = parent.join(format!(
+        ".{file_name}.{}.{sequence}.tmp",
+        std::process::id()
+    ));
     fs::write(&temporary, bytes)
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
