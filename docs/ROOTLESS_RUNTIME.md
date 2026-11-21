@@ -1,6 +1,6 @@
 # Rootless Linux runtime: implementation contract
 
-This document defines the rootless execution backend and its test contract. An initial user/mount-namespace launcher now exists, but PID supervision, networking isolation, guest device mounts and distribution compatibility remain incomplete.
+This document defines the rootless execution backend and its test contract. A rootless user/mount/PID-namespace launcher now exists with a persistent writable OverlayFS, a supervised guest PID 1 and guest procfs. Networking isolation, guest device mounts, full signal/process lifecycle and distribution compatibility remain incomplete.
 
 ## Goal
 
@@ -12,7 +12,7 @@ Run same-architecture Linux programs from an imported root filesystem as the inv
 
 1. **User namespace:** create a new user namespace and map one namespace identity to the caller's host UID/GID. Write and verify `uid_map` and `gid_map`; apply the kernel's setgroups restriction before writing `gid_map` when required.
 2. **Mount namespace:** create a private mount namespace so mount propagation cannot affect the host. Never modify host mount propagation.
-3. **PID namespace:** create a PID namespace and launch the guest init process as its PID 1. Supervise it from the parent namespace and reap children.
+3. **PID namespace:** create a PID namespace and launch the guest init process as its PID 1. Supervise it from the parent namespace, propagate its exit status and signals, and ensure descendants are cleaned up.
 4. **Filesystem root:** validate the rootfs path before entering the namespace, establish the guest root, and ensure all mount operations are scoped to the private mount namespace.
 5. **Process credentials:** use namespace credentials only. Do not request host capabilities or retain host-root credentials.
 6. **Lifecycle:** own child PID, exit status, signals, cleanup, and failure rollback in a typed runtime session.
@@ -25,12 +25,14 @@ Network namespace creation is a separate opt-in milestone. A private network nam
 - [x] Disposable user-namespace creation probe with errno reporting.
 - [x] Fail-closed single-ID UID/GID mapping writer and paused-child synchronization protocol.
 - [x] Private mount namespace creation and recursive-private propagation.
-- [x] Validated read-only rootfs bind mount with `nosuid` and `nodev`.
-- [x] Root transition with `pivot_root`, old-root detachment and bounded temporary `/tmp`.
+- [x] Persistent writable OverlayFS per image, preserving the imported rootfs as its immutable lower layer.
+- [x] Root transition with `pivot_root` and old-root detachment.
+- [x] PID namespace creation with a dedicated guest PID 1 supervised by the parent namespace.
+- [x] Guest `/proc` mounted from inside the new PID namespace.
 - [x] Linux CLI launcher: `nelroot run-rootless <image> -- <absolute-program> [args...]`.
-- [x] Child setup failure reporting, rollback, exit-status propagation and rootfs cleanup.
-- [ ] PID-namespace supervision, guest PID 1 lifecycle and signal forwarding.
-- [ ] Optional guest `/proc`, minimal `/dev`, and other virtual filesystem mounts.
+- [x] Child setup failure reporting, exit-status propagation and runtime mount cleanup.
+- [ ] Guest `/dev`, devpts, shared memory and other virtual filesystem mounts.
+- [ ] Full signal forwarding and robust reaping of arbitrary guest descendants.
 - [ ] Resource limits and an explicit security profile.
 - [ ] Opt-in network namespace isolation and port forwarding.
 - [ ] End-to-end integration tests against minimal Debian, Ubuntu, Alpine and Fedora rootfs images.
@@ -157,9 +159,9 @@ pivot_root, and NELRoot returns those errors without falling back to chroot.
 
 The Linux CLI exposes `nelroot run-rootless <image> -- <absolute-program> [args...]`. The parent forks a paused child, the child enters a user namespace, and the parent installs a single-ID UID/GID map before releasing it. The child creates a private mount namespace, makes propagation private, bind-mounts the validated image read-only, pivots into the image using its existing empty `/run/lock` directory as `put_old`, detaches the previous root, mounts a bounded tmpfs over guest `/tmp`, enables `no_new_privs`, and executes the requested same-architecture program. Standard input, output and error remain connected to the invoking terminal, and the parent returns the guest exit status.
 
-This path rejects host UID 0, never falls back to chroot, and leaves the imported rootfs unchanged. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
+This path rejects host UID 0, never falls back to chroot, and keeps the imported rootfs unchanged by placing guest writes in a persistent OverlayFS upper layer. The guest process runs as PID 1 inside a new PID namespace, and NELRoot mounts procfs from inside that namespace. A successful launch proves this namespace/rootfs path works on the host; it does not establish general distribution compatibility.
 
-Explicit limitations: the guest is not PID 1; PID namespace supervision and signal forwarding are not implemented. The host network namespace remains visible. NELRoot does not mount `/proc` or `/dev`, configure resource limits, or provide protection against kernel vulnerabilities. Commands needing those facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
+Explicit limitations: guest `/dev`, devpts, shared memory, network isolation, resource limits and complete signal/descendant lifecycle handling are not implemented. The host network namespace remains visible. This is not a security boundary against kernel vulnerabilities. Commands needing missing device or service facilities may fail. Kernel, container, seccomp, AppArmor or SELinux policy may deny namespace or mount operations; NELRoot reports the failure without switching to the privileged chroot backend.
 
 Example:
 
