@@ -451,9 +451,7 @@ fn parse_env_overrides(
 ) -> Result<std::collections::BTreeMap<String, String>, Box<dyn std::error::Error>> {
     let mut values = std::collections::BTreeMap::new();
     for entry in entries {
-        let (key, value) = entry
-            .split_once('=')
-            .ok_or("--env expects KEY=VALUE")?;
+        let (key, value) = entry.split_once('=').ok_or("--env expects KEY=VALUE")?;
         if key.is_empty()
             || key.as_bytes().contains(&0)
             || key.contains('=')
