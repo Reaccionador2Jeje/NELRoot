@@ -56,3 +56,38 @@ jobs:
         run: cargo build --release --bin nelroot-hub
       - name: Smoke-test first-party Image Hub API
         run: bash scripts/smoke-test-hub.sh target/release/nelroot-hub
+
+  runtime-distro-smoke:
+    name: Rootless rootfs smoke (${{ matrix.distro }})
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: Debian stable
+            image: debian:stable-slim
+            local_name: ci-debian
+          - distro: Ubuntu 24.04
+            image: ubuntu:24.04
+            local_name: ci-ubuntu
+          - distro: Alpine 3.22
+            image: alpine:3.22
+            local_name: ci-alpine
+          - distro: Fedora
+            image: fedora:latest
+            local_name: ci-fedora
+          - distro: Arch Linux
+            image: archlinux:latest
+            local_name: ci-arch
+          - distro: Void Linux
+            image: ghcr.io/void-linux/void-glibc:latest
+            local_name: ci-void
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build NELRoot
+        run: cargo build --release --bin nelroot
+      - name: Test native distro rootfs
+        run: bash scripts/smoke-test-distro-rootfs.sh "${{ matrix.image }}" "${{ matrix.local_name }}"
