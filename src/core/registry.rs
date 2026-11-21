@@ -208,14 +208,13 @@ pub fn clean_temporary() -> Result<usize, Box<dyn std::error::Error>> {
                     .strip_prefix('.')
                     .and_then(|value| value.split_once(".backup-"))
             {
-                    let destination = store.join(image_name);
-                    if !destination.exists() {
-                        fs::rename(&path, destination)?;
-                    } else {
-                        fs::remove_dir_all(&path)?;
-                    }
-                    removed += 1;
+                let destination = store.join(image_name);
+                if !destination.exists() {
+                    fs::rename(&path, destination)?;
+                } else {
+                    fs::remove_dir_all(&path)?;
                 }
+                removed += 1;
             }
         }
     }
