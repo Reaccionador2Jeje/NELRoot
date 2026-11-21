@@ -74,7 +74,7 @@ curl --fail --location --show-error --retry 3 \
     --proto '=https' --proto-redir '=https' \
     "${ARCHIVE_URL}" -o "${ARCHIVE_PATH}"
 
-EXPECTED_SHA256="$(awk -v name="$ARCHIVE_NAME" '$2 == name { print $1; exit }' "${WORK_DIR}/SHA256SUMS")"
+EXPECTED_SHA256="$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*" name { print $1; exit }' "${WORK_DIR}/SHA256SUMS")"
 if [[ ! "$EXPECTED_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
     echo "ERROR: Ubuntu SHA256SUMS did not contain a valid checksum for $ARCHIVE_NAME." >&2
     exit 1
