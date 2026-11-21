@@ -334,6 +334,18 @@ Publish the entire batch with one command:
     ./scripts/publish-all-images.sh
     unset NELROOT_HUB_PUBLISH_TOKEN
 
+The batch runner can also target one distro family, or all families except
+Ubuntu (useful when Ubuntu variants have already been published):
+
+    ./scripts/publish-all-images.sh --only alpine
+    ./scripts/publish-all-images.sh --only arch
+    ./scripts/publish-all-images.sh --only void
+    ./scripts/publish-all-images.sh --only fedora
+    ./scripts/publish-all-images.sh --only others
+
+The --only others selection publishes Alpine, Arch, Void and Fedora while
+leaving Ubuntu out. Existing image/architecture pairs are still skipped.
+
 Optional overrides:
 
     NELROOT_HUB_URL=https://your-staging-hub.example bash scripts/publish-all-images.sh
