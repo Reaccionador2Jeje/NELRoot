@@ -788,6 +788,12 @@ pub fn run_rootless_image(
     }
 
     let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
+    for path in [&rootfs, &upper_dir, &work_dir] {
+        let value = path.to_string_lossy();
+        if value.contains(',') || value.contains(':') {
+            return Err("rootfs and container storage paths cannot contain commas or colons with OverlayFS mount options".into());
+        }
+    }
     let overlay_options = CString::new(format!("lowerdir={},upperdir={},workdir={},userxattr", rootfs.display(), upper_dir.display(), work_dir.display()))?;
     let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
     let program_c = CString::new(program)?;
@@ -913,16 +919,7 @@ pub fn run_rootless_image(
             if libc::umount2(c"/run".as_ptr(), libc::MNT_DETACH) != 0 {
                 rootless_child_fail(error_pipe[1], 8);
             }
-            if libc::mount(
-                c"tmpfs".as_ptr(),
-                c"/tmp".as_ptr(),
-                c"tmpfs".as_ptr(),
-                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
-                c"mode=1777,size=16m".as_ptr().cast::<libc::c_void>(),
-            ) != 0
-            {
-                rootless_child_fail(error_pipe[1], 9);
-            }
+
             if libc::chdir(cwd_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 10);
             }
