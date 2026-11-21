@@ -1234,6 +1234,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         runtime::supported(),
                         "Linux host kernel",
                     );
+                    ui::state(
+                        "Rootless native launcher",
+                        cfg!(target_os = "linux"),
+                        "user namespace + private mount namespace + pivot_root",
+                    );
                     ui::heading("Under development");
                     ui::state(
                         "Independent ELF executor",
