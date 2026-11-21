@@ -313,6 +313,9 @@ It currently includes:
 |---|---|---|
 | Ubuntu Base | 24.04.5 | `x86_64`, `aarch64`, `arm`, `ppc64le`, `riscv64`, `s390x` |
 | Alpine Mini Root Filesystem | 3.24.4 | `x86_64`, `aarch64`, `armv7`, `riscv64` |
+| Arch Linux Bootstrap | rolling | `x86_64` |
+| Void Linux ROOTFS (glibc) | 20250202 | `x86_64`, `aarch64`, `armv7` |
+| Fedora Container Base | 45.1.4 | `x86_64`, `aarch64`, `ppc64le`, `s390x` |
 
 The script runs sequentially, checks the live catalog before each publish, and
 skips an image/architecture pair that is already present. If it cannot read the
@@ -333,14 +336,39 @@ Publish the entire batch with one command:
 
 Optional overrides:
 
-    NELROOT_HUB_URL=https://your-staging-hub.example ./scripts/publish-all-images.sh
-    ALPINE_VERSION=3.24.4 ./scripts/publish-all-images.sh
+    NELROOT_HUB_URL=https://your-staging-hub.example bash scripts/publish-all-images.sh
+    ALPINE_VERSION=3.24.4 bash scripts/publish-all-images.sh
+    VOID_RELEASE_DATE=20250202 bash scripts/publish-all-images.sh
+    FEDORA_VERSION=45 FEDORA_COMPOSE=1.4 bash scripts/publish-all-images.sh
+
+The Arch publisher requires zstd; Void and Fedora publishers require xz.
+Arch uses the official bootstrap tarball and SHA256 list. Void uses official
+ROOTFS tarballs and the upstream SHA256 list. Fedora uses the official
+Container Base archive and its release CHECKSUM document. These compressed
+upstream formats are normalized to the Hub schema-v1 tar.gz format before
+publication. The upstream archive checksum is verified before extraction.
 
 The command requires `curl`, `python3`, and the `nelroot` CLI on the
-publishing machine. It uploads the ten variants listed above; it does not
+publishing machine. It uploads the 21 variants listed above; it does not
 claim to mirror every Linux distribution or every architecture in existence.
 The catalog can be searched after publishing:
 
     nelroot image hub-remote-search linux --hub https://nelroot-image-hub-production.up.railway.app
 
 The batch is sequential and reports published, skipped, and failed counts.
+
+## Additional official distribution publishers
+
+- `scripts/publish-archlinux-bootstrap.sh`: official rolling Arch Linux bootstrap for `x86_64`. It verifies the upstream SHA256 list, extracts the bootstrap root directory, and repacks it as a Hub-compatible `tar.gz`.
+- `scripts/publish-void-rootfs.sh`: official Void Linux ROOTFS for `x86_64`, `aarch64`, and `armv7l` (mapped to NELRoot `armv7`). The default build is the glibc variant dated `20250202`; `VOID_LIBC=musl` selects the musl variant when running the publisher directly. The release provides a SHA256 list; authenticity of that list can additionally be checked with Void's published minisign signature and release key.
+- `scripts/publish-fedora-container.sh`: official Fedora Container Base for `x86_64`, `aarch64`, `ppc64le`, and `s390x`. It resolves the archive filename from Fedora's release CHECKSUM document and verifies its SHA256 before repacking.
+
+Examples:
+
+    bash scripts/publish-archlinux-bootstrap.sh
+    bash scripts/publish-void-rootfs.sh aarch64
+    VOID_LIBC=musl bash scripts/publish-void-rootfs.sh x86_64
+    bash scripts/publish-fedora-container.sh x86_64
+    bash scripts/publish-fedora-container.sh aarch64
+
+These scripts publish to the first-party NELRoot Hub and do not use Docker Hub. They require the publishing token in `NELROOT_HUB_PUBLISH_TOKEN`.
