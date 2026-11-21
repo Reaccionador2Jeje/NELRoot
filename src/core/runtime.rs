@@ -718,6 +718,25 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
     }
 }
 
+/// Prepare persistent, per-image OverlayFS storage for rootless sessions.
+#[cfg(target_os = "linux")]
+fn prepare_rootless_overlay_storage(image_name: &str) -> io::Result<(std::path::PathBuf, std::path::PathBuf, std::fs::File)> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::PermissionsExt;
+    if image_name.is_empty() || image_name.len() > 64 || !image_name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) { return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid container image name")); }
+    let container_dir = crate::core::config::data_dir().join("containers").join(image_name);
+    std::fs::create_dir_all(&container_dir)?;
+    let metadata = std::fs::symlink_metadata(&container_dir)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() { return Err(io::Error::new(io::ErrorKind::InvalidInput, "container storage must be a real directory")); }
+    std::fs::set_permissions(&container_dir, std::fs::Permissions::from_mode(0o700))?;
+    let lock = std::fs::OpenOptions::new().create(true).read(true).write(true).open(container_dir.join("container.lock"))?;
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 { let error = io::Error::last_os_error(); if error.kind() == io::ErrorKind::WouldBlock { return Err(io::Error::new(io::ErrorKind::WouldBlock, "this image already has an active NELRoot session; close it before starting another")); } return Err(error); }
+    let upper = container_dir.join("upper"); let work = container_dir.join("work");
+    std::fs::create_dir_all(&upper)?; std::fs::create_dir_all(&work)?;
+    for path in [&upper, &work] { let metadata = std::fs::symlink_metadata(path)?; if metadata.file_type().is_symlink() || !metadata.is_dir() { return Err(io::Error::new(io::ErrorKind::InvalidInput, "OverlayFS upper and work paths must be real directories")); } std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?; let value = path.to_string_lossy(); if value.contains(',') || value.contains(':') { return Err(io::Error::new(io::ErrorKind::InvalidInput, "container storage path contains an unsupported OverlayFS option character")); } }
+    if std::fs::read_dir(&work)?.next().is_some() { return Err(io::Error::new(io::ErrorKind::InvalidData, "OverlayFS work directory is not empty; refusing unsafe reuse")); }
+    Ok((upper, work, lock))
+}
 /// Launch a same-architecture program in a rootless user and private mount namespace.
 ///
 /// The parent pauses a child while installing its single-ID UID/GID maps. The
@@ -751,6 +770,7 @@ pub fn run_rootless_image(
             .ok_or("registered image has no root filesystem path")?,
     ))?;
 
+    let (upper_dir, work_dir, _container_lock) = prepare_rootless_overlay_storage(image_name)?;
     std::fs::create_dir_all(crate::core::config::runtime_dir())?;
     let runtime_root = crate::core::config::runtime_dir().canonicalize()?;
     let unique = format!(
@@ -767,8 +787,8 @@ pub fn run_rootless_image(
         return Err(error.into());
     }
 
-    let root_c = CString::new(rootfs.as_os_str().as_encoded_bytes())?;
     let target_c = CString::new(target.as_os_str().as_encoded_bytes())?;
+    let overlay_options = CString::new(format!("lowerdir={},upperdir={},workdir={},userxattr", rootfs.display(), upper_dir.display(), work_dir.display()))?;
     let cwd_c = CString::new(guest_cwd.as_os_str().as_encoded_bytes())?;
     let program_c = CString::new(program)?;
     let mut argv = Vec::with_capacity(arguments.len() + 2);
@@ -781,9 +801,10 @@ pub fn run_rootless_image(
 
     let env = [
         CString::new("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")?,
-        CString::new("HOME=/tmp")?,
+        CString::new("HOME=/root")?,
         CString::new("USER=root")?,
         CString::new("LOGNAME=root")?,
+        CString::new(format!("TERM={}", std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".to_owned())))?,
     ];
     let mut env_ptrs: Vec<*const libc::c_char> = env.iter().map(|value| value.as_ptr()).collect();
     env_ptrs.push(std::ptr::null());
@@ -871,28 +892,14 @@ pub fn run_rootless_image(
                 rootless_child_fail(error_pipe[1], 2);
             }
             if libc::mount(
-                root_c.as_ptr(),
+                c"overlay".as_ptr(),
                 target_c.as_ptr(),
-                std::ptr::null(),
-                libc::MS_BIND as libc::c_ulong,
-                std::ptr::null(),
+                c"overlay".as_ptr(),
+                (libc::MS_NOSUID | libc::MS_NODEV) as libc::c_ulong,
+                overlay_options.as_ptr().cast::<libc::c_void>(),
             ) != 0
             {
                 rootless_child_fail(error_pipe[1], 3);
-            }
-            if libc::mount(
-                std::ptr::null(),
-                target_c.as_ptr(),
-                std::ptr::null(),
-                (libc::MS_BIND
-                    | libc::MS_REMOUNT
-                    | libc::MS_RDONLY
-                    | libc::MS_NOSUID
-                    | libc::MS_NODEV) as libc::c_ulong,
-                std::ptr::null(),
-            ) != 0
-            {
-                rootless_child_fail(error_pipe[1], 4);
             }
             if libc::chdir(target_c.as_ptr()) != 0 {
                 rootless_child_fail(error_pipe[1], 5);
@@ -1004,15 +1011,13 @@ pub fn run_rootless_image(
             1 => "create private mount namespace",
             2 => "make mount propagation private",
             3 => "bind-mount rootfs",
-            4 => "remount rootfs read-only",
-            5 => "enter rootfs mount",
-            6 => "pivot_root",
-            7 => "change to guest root",
-            8 => "detach old root",
-            9 => "mount writable /tmp",
-            10 => "change guest working directory",
-            11 => "enable no_new_privs",
-            12 => "execute guest program",
+            4 => "enter writable overlay rootfs",
+            5 => "pivot_root",
+            6 => "change to guest root",
+            7 => "detach old root",
+            8 => "change guest working directory",
+            9 => "enable no_new_privs",
+            10 => "execute guest program",
             _ => "configure guest process",
         };
         let source = io::Error::from_raw_os_error(failure.errno);
