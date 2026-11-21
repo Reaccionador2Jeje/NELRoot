@@ -6,7 +6,6 @@ use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, regist
 use nelroot::core::{cpu, stack};
 #[cfg(target_os = "linux")]
 use nelroot::core::{memory, relocation};
-#[cfg(target_os = "linux")]
 #[derive(Debug, Parser)]
 #[command(
     name = "nelroot",
