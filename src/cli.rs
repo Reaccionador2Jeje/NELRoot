@@ -83,6 +83,18 @@ enum Commands {
         #[arg(required = true, num_args = 1.., trailing_var_arg = true)]
         command: Vec<String>,
     },
+    /// Open an interactive shell using the rootless Linux runtime.
+    #[cfg(target_os = "linux")]
+    ShellRootless {
+        /// Registered image name.
+        image: String,
+        /// Guest shell executable.
+        #[arg(long, default_value = "/bin/sh")]
+        shell: String,
+        /// Guest working directory.
+        #[arg(long, default_value = "/")]
+        cwd: std::path::PathBuf,
+    },
     /// Open an interactive shell inside a registered image.
     Shell {
         /// Registered image name.
@@ -1302,9 +1314,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             ui::banner("Rootless Linux runtime");
             ui::key("Image", &image);
             ui::key("Executable", program);
-            ui::good("Host UID/GID remain unprivileged; rootfs is read-only except /tmp.");
-            ui::warn("PID/network namespaces and /proc and /dev mounts are not implemented yet.");
+            ui::good("Host UID/GID remain unprivileged; guest writes persist in OverlayFS.");
+            ui::good("Guest PID namespace and /proc are enabled; host networking remains shared.");
             let status = runtime::run_rootless_image(&image, program, arguments, &cwd)?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(128));
+            }
+        }
+        #[cfg(target_os = "linux")]
+        Commands::ShellRootless { image, shell, cwd } => {
+            ui::banner("Rootless interactive Linux shell");
+            ui::key("Image", &image);
+            ui::key("Shell", &shell);
+            ui::good("Guest runs in a PID namespace with persistent writable storage.");
+            let status = runtime::run_rootless_image(&image, &shell, &["-i".to_owned()], &cwd)?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(128));
             }
