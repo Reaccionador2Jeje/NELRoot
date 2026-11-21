@@ -1489,8 +1489,7 @@ pub fn run_rootless_image(
             if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                 rootless_child_fail(error_pipe[1], 11);
             }
-            libc::execve(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
-            rootless_child_fail(error_pipe[1], 12);
+            run_guest_pid1(program_c.as_ptr(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
         }
     }
 
