@@ -18,6 +18,10 @@ NELRoot is also planned for native package-manager distribution: APT (`.deb`), D
 
 See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. The first-party image distribution service is implemented as a separate `nelroot-hub` binary; see [docs/IMAGE_REGISTRIES.md](docs/IMAGE_REGISTRIES.md) for its API, storage layout and publishing workflow. These are future goals, not features available in the current early-development build. The experimental static PIE memory mapper and its limited RELATIVE relocation stage are documented in [docs/ELF_MEMORY_MAPPING.md](docs/ELF_MEMORY_MAPPING.md).
 
+## Managed server environments
+
+NELRoot is planned to manage named Linux environments that can host long-running guest services, including optional SSH and HTTP services. This is a design direction, not an implemented feature: guest service supervision, PID lifecycle management, network isolation, port forwarding, persistent service storage and per-guest SSH authentication are still required. See [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md) for the architecture, proposed CLI and security gates. Do not expose a guest service publicly or treat a PRoot environment as an isolated server.
+
 ## Install
 
 Download the latest installer from the [GitHub Releases](https://github.com/Reaccionador2Jeje/NELRoot/releases/latest) page.
