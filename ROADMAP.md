@@ -97,7 +97,7 @@ The server-environment design and current implementation boundary are documented
 - [x] Add a Linux in-process service runtime adapter that starts manifest commands through the rootless namespace launcher, owns guest process groups, polls exit status and stops/reaps owned processes (no persistent daemon, readiness probes, real log capture or automatic restart).
 - [ ] Add server capability reporting that distinguishes command execution from supervised server support.
 - [ ] Implement supervised environment start/stop/status with child reaping and signal forwarding.
-- [ ] Add a persistent service daemon and CLI lifecycle controls; implement readiness checks, real stdout/stderr capture, durable state/recovery and bounded automatic restart execution.
+- [x] Add a Linux foreground service daemon with a permission-restricted local Unix socket, exclusive crash-released lock, and CLI register/start/stop/restart/status/list/logs controls (in-memory state only; daemon exit stops owned services).\n- [ ] Add readiness checks, real stdout/stderr capture, durable state/recovery and bounded automatic restart execution.
 - [ ] Implement resource limits and explicit persistent-data mounts.
 - [ ] Add opt-in network namespace isolation and loopback-first port publishing.
 - [ ] Implement per-guest SSH configuration and authorized-key management.
