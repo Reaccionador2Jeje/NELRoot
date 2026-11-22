@@ -26,6 +26,13 @@ use std::{
 
 #[cfg(target_os = "linux")]
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
+#[cfg(target_os = "linux")]
+static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+extern "C" fn handle_shutdown_signal(_: libc::c_int) {
+    SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
+}
 
 #[cfg(target_os = "linux")]
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,6 +93,12 @@ fn lock_path() -> PathBuf {
 #[cfg(target_os = "linux")]
 pub fn run_foreground() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(config::runtime_dir())?;
+    fs::set_permissions(config::runtime_dir(), fs::Permissions::from_mode(0o700))?;
+    SHUTDOWN_REQUESTED.store(false, Ordering::SeqCst);
+    unsafe {
+        libc::signal(libc::SIGINT, handle_shutdown_signal as libc::sighandler_t);
+        libc::signal(libc::SIGTERM, handle_shutdown_signal as libc::sighandler_t);
+    }
     let lock = lock_path();
     let lock_file = fs::OpenOptions::new()
         .read(true)
@@ -115,14 +128,20 @@ pub fn run_foreground() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = UnixListener::bind(&socket)?;
     fs::set_permissions(&socket, fs::Permissions::from_mode(0o600))?;
+    listener.set_nonblocking(true)?;
     let mut runtime = ServiceRuntime::new();
 
-    for incoming in listener.incoming() {
-        match incoming {
-            Ok(stream) => {
+    while !SHUTDOWN_REQUESTED.load(Ordering::SeqCst) {
+        match listener.accept() {
+            Ok((stream, _)) => {
                 let _ = handle_connection(stream, &mut runtime);
                 let _ = runtime.poll();
             }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                let _ = runtime.poll();
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(error) => {
                 let _ = fs::remove_file(&socket);
                 return Err(error.into());
@@ -130,6 +149,9 @@ pub fn run_foreground() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Dropping runtime terminates/reaps owned guest process groups before the
+    // control socket and lock are released.
+    drop(runtime);
     let _ = fs::remove_file(socket);
     Ok(())
 }
