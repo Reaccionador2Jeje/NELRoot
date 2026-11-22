@@ -159,7 +159,7 @@ impl ServiceManager {
         service: &str,
         reason: &str,
     ) -> Result<(), String> {
-        if reason.len() > MAX_LOG_MESSAGE_BYTES || reason.contains('\\0') {
+        if reason.len() > MAX_LOG_MESSAGE_BYTES || reason.contains('\0') {
             return Err("start failure reason is invalid or exceeds 4096 bytes".to_owned());
         }
         let managed = self.get_mut(environment, service)?;
