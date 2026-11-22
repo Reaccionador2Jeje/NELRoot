@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     os::unix::{
         fs::{FileTypeExt, PermissionsExt},
         net::{UnixListener, UnixStream},
