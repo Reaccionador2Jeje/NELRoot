@@ -334,7 +334,12 @@ impl ServiceRuntime {
             &definition.args,
             std::path::Path::new(&definition.working_directory),
             &definition.environment,
-            crate::core::runtime::ResourceLimits::default(),
+            crate::core::runtime::ResourceLimits {
+                // Long-running services need a larger cumulative CPU budget
+                // than one-shot commands, while retaining a finite hard cap.
+                cpu_seconds: 86_400,
+                ..crate::core::runtime::ResourceLimits::default()
+            },
         );
 
         match process {
