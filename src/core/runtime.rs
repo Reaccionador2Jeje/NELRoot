@@ -852,7 +852,7 @@ pub fn spawn_rootless_image_with_env(
     guest_cwd: &Path,
     environment: &BTreeMap<String, String>,
     limits: ResourceLimits,
- ) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
+) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
     let catalog = images::load_catalog()?;
     let image = catalog
         .images
@@ -899,7 +899,10 @@ pub fn spawn_rootless_image_with_env(
     argv_ptrs.push(std::ptr::null());
 
     let mut guest_environment = BTreeMap::from([
-        ("PATH".to_owned(), "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned()),
+        (
+            "PATH".to_owned(),
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned(),
+        ),
         ("HOME".to_owned(), "/tmp".to_owned()),
         ("USER".to_owned(), "root".to_owned()),
         ("LOGNAME".to_owned(), "root".to_owned()),
