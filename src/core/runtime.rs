@@ -975,6 +975,11 @@ pub fn spawn_rootless_image_with_env(
 
     if pid == 0 {
         unsafe {
+            // Give the guest supervisor and its descendants a dedicated host
+            // process group so stop/drop can clean up the complete service tree.
+            if libc::setpgid(0, 0) != 0 {
+                libc::_exit(125);
+            }
             libc::close(ready_pipe[0]);
             libc::close(release_pipe[1]);
             libc::close(error_pipe[0]);
