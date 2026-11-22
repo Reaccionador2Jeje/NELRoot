@@ -1,8 +1,8 @@
 # NELRoot Server Environments
 
-**Status: design specification — not implemented.**
+**Status: initial metadata manager implemented; guest runtime and server services are not implemented.**
 
-This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. It is a roadmap contract, not a claim that NELRoot currently provides an SSH daemon, a service manager, port forwarding, or a production server sandbox.
+This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. It does not boot guests or provide an SSH daemon, service manager, port forwarding, or a production server sandbox.
 
 ## Goals
 
@@ -18,9 +18,22 @@ A named environment should eventually support:
 
 The guest SSH service is distinct from the host's SSH daemon. A guest SSH server must authenticate users belonging to that guest and must not grant access to the host or sibling environments.
 
-## Proposed CLI
+## Implemented CLI: environment definitions
 
-The following syntax is a design proposal and is not part of the current CLI:
+These commands are implemented. They manage metadata only; `create` does not start a guest process or install services:
+
+```text
+nelroot server create <image> --name <environment>
+nelroot server list
+nelroot server inspect <environment>
+nelroot server remove <environment>
+```
+
+Removing an environment definition never deletes its registered image or root filesystem.
+
+## Planned CLI: runtime and services
+
+The following syntax remains a design proposal and is not part of the current CLI:
 
 ```text
 nelroot server create <image> --name <environment>
@@ -46,7 +59,7 @@ The final syntax may change as the runtime and lifecycle contracts are implement
 
 The server manager is planned as a control plane over the NELRoot runtime, not as a second execution engine:
 
-1. **Environment registry** stores a stable environment ID, image reference, configuration and lifecycle state.
+1. **Environment registry** stores a named environment definition, image reference, rootfs path, architecture, creation time and metadata state. The initial registry is implemented in `src/core/server.rs`.
 2. **Runtime adapter** starts and stops the guest using a fully supervised NELRoot process/session.
 3. **Service supervisor** tracks guest service processes, readiness, exit codes, logs and restart policy.
 4. **Network manager** owns opt-in network isolation and explicit port mappings.
@@ -68,6 +81,10 @@ SSH is an optional guest service, not an automatic host-wide listener.
 - A guest must not be able to reach host-only control sockets or other guests by default.
 
 An SSH daemon package being present in a rootfs does not mean NELRoot has implemented or secured guest SSH lifecycle management.
+
+## Current implementation boundary
+
+The first milestone stores server-environment definitions in `~/.nelroot/servers.toml`. It validates the name, requires an already registered image, validates the referenced rootfs, and writes the catalog atomically. `server remove` deletes only the definition. The `created` state means registered metadata, not a running guest.
 
 ## Required runtime gates
 
@@ -97,7 +114,7 @@ Termux/PRoot can be useful for CLI development, image inspection and compatibili
 
 ## Milestones
 
-1. **Contract and capability model:** document environment, service and network states; report server capability separately from basic command execution.
+1. **Contract and initial environment registry:** implemented metadata definitions and CRUD CLI; a separate runtime capability report remains pending.
 2. **Supervised environment lifecycle:** implement start/stop/status and reliable process ownership.
 3. **Service management:** implement service definitions, readiness, logs and bounded restart behavior.
 4. **Network isolation:** add opt-in network namespaces and explicit local-only port forwarding.
