@@ -915,9 +915,9 @@ pub fn spawn_rootless_image_with_env(
                     character.is_ascii_alphanumeric() || character == '_'
                 }
             })
-            || value.contains('\\0')
-            || value.contains('\\n')
-            || value.contains('\\r')
+            || value.contains('\0')
+            || value.contains('\n')
+            || value.contains('\r')
         {
             let _ = std::fs::remove_dir(&target);
             return Err(format!("invalid guest environment variable '{key}'").into());
