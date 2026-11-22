@@ -20,7 +20,7 @@ See [ROADMAP.md](ROADMAP.md) for milestones and the package-distribution plan. T
 
 ## Managed server environments
 
-NELRoot is planned to manage named Linux environments that can host long-running guest services, including optional SSH and HTTP services. This is a design direction, not an implemented feature: guest service supervision, PID lifecycle management, network isolation, port forwarding, persistent service storage and per-guest SSH authentication are still required. See [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md) for the architecture, proposed CLI and security gates. Do not expose a guest service publicly or treat a PRoot environment as an isolated server.
+NELRoot now has an initial **server-environment metadata manager**. It can create, list, inspect and remove named definitions backed by registered rootfs images. These commands manage definitions only: they do not boot a guest, supervise daemons, configure networking or provide guest SSH. Long-running services remain gated on PID lifecycle supervision, resource controls, network isolation and per-guest authentication. See [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md). Do not expose a guest service publicly or treat a PRoot environment as an isolated server.
 
 ## Install
 
@@ -95,6 +95,12 @@ nelroot image search ubuntu --registry https://example.org/nelroot/index.json
 nelroot image pull ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
 nelroot image update ubuntu-noble --registry https://example.org/nelroot/index.json --architecture aarch64
 nelroot image clean
+
+# Initial server-environment definitions (metadata only; no guest is started)
+nelroot server create ubuntu --name web-lab
+nelroot server list
+nelroot server inspect web-lab
+nelroot server remove web-lab
 
 nelroot logs --lines 50
 nelroot elf inspect /path/to/elf-binary
