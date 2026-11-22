@@ -836,13 +836,14 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
     }
 }
 
-/// Launch a same-architecture program in a rootless user and private mount namespace.
+/// Spawn a same-architecture program in an isolated rootless guest.
 ///
-/// The parent pauses a child while installing its single-ID UID/GID maps. The
-/// child then creates a private mount namespace, bind-mounts the image read-only,
-/// mounts a bounded tmpfs over /tmp, pivots into the image, detaches the old
-/// root, enables no_new_privs, and execs the guest program. The image is not
-/// modified. PID namespace isolation is not implemented yet; network isolation uses a private network namespace.
+/// The parent installs single-ID UID/GID maps before releasing the child. The
+/// guest receives private user, mount, PID and network namespaces, a read-only
+/// image rootfs, bounded writable tmpfs mounts, resource limits and no_new_privs.
+/// The image is not modified. The returned handle owns the host-side supervisor
+/// and its dedicated process group; callers must retain it to keep the service
+/// alive, and dropping it terminates and reaps the guest.
 #[cfg(target_os = "linux")]
 pub fn spawn_rootless_image_with_env(
     image_name: &str,
