@@ -109,6 +109,12 @@ impl ServiceManager {
             .collect()
     }
 
+    pub fn definition(&self, environment: &str, service: &str) -> Option<ServiceDefinition> {
+        self.services
+            .get(&(environment.to_owned(), service.to_owned()))
+            .map(|managed| managed.definition.clone())
+    }
+
     pub fn inspect(&self, environment: &str, service: &str) -> Option<ServiceStatus> {
         self.services
             .get(&(environment.to_owned(), service.to_owned()))
@@ -260,6 +266,178 @@ impl ServiceManager {
         self.services
             .get_mut(&(environment.to_owned(), service.to_owned()))
             .ok_or_else(|| format!("unknown service '{environment}/{service}'"))
+    }
+}
+
+/// Owns service processes launched through NELRoot's isolated rootless runtime.
+///
+/// Dropping this object terminates and reaps every process it owns. It is an
+/// in-process runtime coordinator, not a persistent daemon; callers must keep
+/// it alive for the lifetime of their services.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Default)]
+pub struct ServiceRuntime {
+    manager: ServiceManager,
+    images: BTreeMap<String, String>,
+    processes: BTreeMap<(String, String), crate::core::runtime::RootlessProcess>,
+}
+
+#[cfg(target_os = "linux")]
+impl ServiceRuntime {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn register_manifest(
+        &mut self,
+        environment: &str,
+        image: &str,
+        manifest: &ServiceManifest,
+    ) -> Result<Vec<ServiceStatus>, String> {
+        if image.is_empty() || image.len() > 128 {
+            return Err("invalid image reference".to_owned());
+        }
+        let statuses = self.manager.register_manifest(environment, manifest)?;
+        self.images.insert(environment.to_owned(), image.to_owned());
+        Ok(statuses)
+    }
+
+    /// Start one manifest service inside the selected image's isolated guest.
+    /// The service command is never executed directly by the host shell.
+    pub fn start(&mut self, environment: &str, service: &str) -> Result<ServiceStatus, String> {
+        let definition = self
+            .manager
+            .definition(environment, service)
+            .ok_or_else(|| format!("unknown service '{environment}/{service}'"))?;
+        let image = self
+            .images
+            .get(environment)
+            .cloned()
+            .ok_or_else(|| format!("no image registered for environment '{environment}'"))?;
+
+        self.manager.request_start(environment, service)?;
+        let process = crate::core::runtime::spawn_rootless_image_with_env(
+            &image,
+            &definition.command,
+            &definition.args,
+            std::path::Path::new(&definition.working_directory),
+            &definition.environment,
+            crate::core::runtime::ResourceLimits::default(),
+        );
+
+        match process {
+            Ok(process) => {
+                let process_id = process.id();
+                if let Err(error) = self
+                    .manager
+                    .confirm_started(environment, service, process_id)
+                {
+                    drop(process);
+                    return Err(error);
+                }
+                self.processes
+                    .insert((environment.to_owned(), service.to_owned()), process);
+                self.manager
+                    .inspect(environment, service)
+                    .ok_or_else(|| "service status disappeared after start".to_owned())
+            }
+            Err(error) => {
+                let reason = error.to_string();
+                let _ = self
+                    .manager
+                    .record_start_failure(environment, service, &reason);
+                Err(reason)
+            }
+        }
+    }
+
+    /// Poll all owned processes and record newly observed exit codes.
+    pub fn poll(&mut self) -> Result<Vec<ServiceStatus>, String> {
+        use std::os::unix::process::ExitStatusExt;
+
+        let keys: Vec<(String, String)> = self.processes.keys().cloned().collect();
+        for key in keys {
+            let result = self
+                .processes
+                .get_mut(&key)
+                .expect("process key was collected from this map")
+                .try_wait()
+                .map_err(|error| format!("failed to poll service '{}': {error}", key.1))?;
+            if let Some(status) = result {
+                let exit_code = status
+                    .code()
+                    .unwrap_or_else(|| 128 + status.signal().unwrap_or(0));
+                self.manager.record_exit(&key.0, &key.1, exit_code)?;
+                self.processes.remove(&key);
+            }
+        }
+
+        Ok(self
+            .manager
+            .services
+            .keys()
+            .map(|(environment, service)| {
+                self.manager
+                    .inspect(environment, service)
+                    .expect("registered service must have a status")
+            })
+            .collect())
+    }
+
+    /// Stop and reap a service process. This currently uses immediate
+    /// process-group termination; graceful guest signal forwarding is pending.
+    pub fn stop(&mut self, environment: &str, service: &str) -> Result<ServiceStatus, String> {
+        self.manager.request_stop(environment, service)?;
+        let key = (environment.to_owned(), service.to_owned());
+        let process = self
+            .processes
+            .get_mut(&key)
+            .ok_or_else(|| "service has no owned runtime process".to_owned())?;
+        process
+            .terminate()
+            .map_err(|error| format!("failed to terminate service '{service}': {error}"))?;
+        self.processes.remove(&key);
+        self.manager.confirm_stopped(environment, service)?;
+        self.manager
+            .inspect(environment, service)
+            .ok_or_else(|| "service status disappeared after stop".to_owned())
+    }
+
+    /// Explicitly restart a failed service when its manifest policy allows it.
+    pub fn restart(&mut self, environment: &str, service: &str) -> Result<ServiceStatus, String> {
+        if !self.manager.restart_allowed(environment, service)? {
+            return Err("service restart policy does not allow a restart".to_owned());
+        }
+        self.start(environment, service)
+    }
+
+    pub fn status(
+        &mut self,
+        environment: &str,
+        service: &str,
+    ) -> Result<ServiceStatus, String> {
+        self.poll()?;
+        self.manager
+            .inspect(environment, service)
+            .ok_or_else(|| format!("unknown service '{environment}/{service}'"))
+    }
+
+    pub fn list(&mut self, environment: &str) -> Result<Vec<ServiceStatus>, String> {
+        self.poll()?;
+        Ok(self.manager.list(environment))
+    }
+
+    pub fn logs(&self, environment: &str, service: &str) -> Result<Vec<ServiceLogEntry>, String> {
+        self.manager.logs(environment, service)
+    }
+
+    pub fn append_log(
+        &mut self,
+        environment: &str,
+        service: &str,
+        message: &str,
+    ) -> Result<(), String> {
+        self.manager.append_log(environment, service, message)
     }
 }
 
