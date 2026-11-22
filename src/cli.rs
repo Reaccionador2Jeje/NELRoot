@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::ui;
+#[cfg(target_os = "linux")]
+use nelroot::core::{service_daemon, service_manifest::ServiceManifest};
 use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, registry, runtime, server};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use nelroot::core::{cpu, stack};
@@ -155,6 +157,12 @@ enum Commands {
         #[command(subcommand)]
         command: ServerCommands,
     },
+    /// Manage isolated guest services through the local NELRoot daemon.
+    #[cfg(target_os = "linux")]
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommands,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -179,6 +187,27 @@ enum ServerCommands {
         /// Server environment name.
         name: String,
     },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Subcommand)]
+enum ServiceCommands {
+    /// Run the local service daemon in the foreground.
+    Daemon,
+    /// Register a TOML service manifest for an existing server environment.
+    Register { environment: String, manifest: std::path::PathBuf },
+    /// Start a registered guest service.
+    Start { environment: String, service: String },
+    /// Stop and reap a registered guest service.
+    Stop { environment: String, service: String },
+    /// Restart a failed service when its manifest policy allows it.
+    Restart { environment: String, service: String },
+    /// Show one service's current state.
+    Status { environment: String, service: String },
+    /// List services registered for an environment.
+    List { environment: String },
+    /// Show buffered service log entries.
+    Logs { environment: String, service: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1052,6 +1081,50 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     return Err(format!("server environment '{name}' does not exist").into());
                 }
+            }
+        },
+        #[cfg(target_os = "linux")]
+        Commands::Service { command } => match command {
+            ServiceCommands::Daemon => {
+                ui::banner("NELRoot Service Daemon");
+                ui::key("Control socket", service_daemon::socket_path().display());
+                ui::good("Local Unix socket only; socket permissions are restricted to the current user.");
+                ui::warn("Keep this process running. Guest services are stopped if the daemon exits.");
+                service_daemon::run_foreground()?;
+            }
+            ServiceCommands::Register { environment, manifest } => {
+                let contents = std::fs::read_to_string(&manifest)?;
+                let manifest = ServiceManifest::parse_toml(&contents)?;
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Register {
+                    environment: environment.clone(),
+                    manifest,
+                })?;
+                ui::good(&format!("Manifest registered for '{environment}'."));
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::Start { environment, service } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Start { environment, service })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::Stop { environment, service } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Stop { environment, service })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::Restart { environment, service } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Restart { environment, service })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::Status { environment, service } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Status { environment, service })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::List { environment } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::List { environment })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            }
+            ServiceCommands::Logs { environment, service } => {
+                let response = service_daemon::request(&service_daemon::DaemonRequest::Logs { environment, service })?;
+                println!("{}", serde_json::to_string_pretty(&response)?);
             }
         },
         Commands::Elf { command } => match command {
