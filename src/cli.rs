@@ -1201,6 +1201,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             {"name": "host_detection", "status": "available"},
                             {"name": "configuration", "status": "available"},
                             {"name": "image_catalog", "status": "available"},
+                            {"name": "server_environment_registry", "status": "available"},
                             {"name": "registry_client", "status": "available"},
                             {"name": "event_logging", "status": "available"},
                             {"name": "process_supervisor", "status": "available"},
@@ -1336,6 +1337,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::state("Host detection", true, "platform information");
                     ui::state("Configuration", true, "user settings");
                     ui::state("Image catalog", true, "local metadata");
+                    ui::state("Server environment registry", true, "persistent definitions; guest launch not implemented");
                     ui::state(
                         "Registry client",
                         true,
