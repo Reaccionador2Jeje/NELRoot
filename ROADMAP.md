@@ -87,7 +87,21 @@ nelroot package my-project
 
 The actual command syntax will be finalized as the runtime and security model are implemented.
 
-## 3. NEXORA integration: replace the PRoot backend
+## 3. Managed Linux server environments
+
+The server-environment design is documented in [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md). These items are planned and are not currently available in the CLI.
+
+- [ ] Define a versioned environment and service manifest with strict validation.
+- [ ] Add server capability reporting that distinguishes command execution from supervised server support.
+- [ ] Implement supervised environment start/stop/status with child reaping and signal forwarding.
+- [ ] Add per-environment service lifecycle, readiness checks and bounded logs.
+- [ ] Implement resource limits and explicit persistent-data mounts.
+- [ ] Add opt-in network namespace isolation and loopback-first port publishing.
+- [ ] Implement per-guest SSH configuration and authorized-key management.
+- [ ] Add Debian, Ubuntu and Alpine service integration tests.
+- [ ] Keep server mode unavailable on hosts such as ordinary Termux/PRoot where required isolation is not supported.
+
+## 4. NEXORA integration: replace the PRoot backend
 
 A key product objective is to replace NEXORA's current PRoot-based Ubuntu execution backend with NELRoot.
 
