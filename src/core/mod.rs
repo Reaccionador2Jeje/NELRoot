@@ -11,6 +11,7 @@ pub mod memory;
 pub mod process;
 pub mod registry;
 pub mod runtime;
+pub mod server;
 
 pub mod abi;
 pub mod address_space;
