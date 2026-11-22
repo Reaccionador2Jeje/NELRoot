@@ -851,9 +851,7 @@ pub fn spawn_rootless_image_with_env(
     guest_cwd: &Path,
     environment: &BTreeMap<String, String>,
     limits: ResourceLimits,
-) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
-    use std::os::unix::process::ExitStatusExt;
-
+ ) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
     let catalog = images::load_catalog()?;
     let image = catalog
         .images
