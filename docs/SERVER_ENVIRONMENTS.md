@@ -1,8 +1,8 @@
 # NELRoot Server Environments
 
-**Status: environment metadata, service manifests and an in-memory service lifecycle coordinator are implemented; guest service execution is not implemented.**
+**Status: environment metadata, validated service manifests, an in-memory lifecycle coordinator and a Linux rootless service-process adapter are implemented. Persistent service management and CLI lifecycle commands remain pending.**
 
-This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. It does not boot guests or provide an SSH daemon, service manager, port forwarding, or a production server sandbox.
+This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. The library can now launch and supervise a manifest service in a rootless guest, but no persistent service daemon or service lifecycle CLI exists yet. SSH setup, port forwarding and production server operation remain unavailable.
 
 ## Goals
 
@@ -50,6 +50,27 @@ working_directory = "/srv/site"
 restart = "on_failure"
 ```
 
+## Service manager and isolated process adapter
+
+The service manager in `src/core/service_manager.rs` now has two layers:
+
+- `ServiceManager` is the deterministic in-memory lifecycle/state model.
+- On Linux, `ServiceRuntime` connects that model to `runtime::spawn_rootless_image_with_env` and owns the returned `RootlessProcess` handles.
+
+A service start resolves the registered image, validates the manifest and starts the configured absolute guest executable through NELRoot's rootless launcher. The launcher creates private user, mount, PID and network namespaces, uses a read-only image rootfs, applies its configured resource limits and starts the service under a dedicated host process group. Manifest environment variables are passed to the guest after validation.
+
+The runtime adapter supports start, poll/status, stop/reap, and explicit restart of a failed service when the manifest policy permits it. Dropping the in-process `ServiceRuntime` terminates and reaps processes it owns. Stop currently uses immediate process-group termination; graceful signal forwarding is not implemented.
+
+**Important boundaries:**
+
+- This is an in-process library API, not a persistent background daemon. The owner must keep `ServiceRuntime` alive; dropping it stops its services.
+- The existing `nelroot service ...` CLI commands are not implemented yet. A CLI that exits immediately cannot own long-running services safely.
+- Service stdout/stderr are still inherited from the parent; the bounded log buffer is not yet wired to real process output.
+- Readiness probes, durable state/recovery and automatic restart scheduling are not implemented.
+- The guest receives a private network namespace with no automatic host port publishing. This stage does not expose services to the public network.
+- The runtime adapter only supports Linux hosts where all required namespace and mount operations are permitted. It fails closed when setup fails.
+
+
 ## Planned CLI: runtime and services
 
 The following syntax remains a design proposal and is not part of the current CLI:
@@ -80,12 +101,12 @@ The server manager is planned as a control plane over the NELRoot runtime, not a
 
 1. **Environment registry** stores a named environment definition, image reference, rootfs path, architecture, creation time and metadata state. The initial registry is implemented in `src/core/server.rs`.
 2. **Runtime adapter** starts and stops the guest using a fully supervised NELRoot process/session.
-3. **Service supervisor** uses the initial lifecycle coordinator; guest process ownership, readiness, real output capture and restart execution remain pending.
+3. **Service supervisor** now owns rootless guest process handles and observes exit/stop; readiness, real output capture, persistent daemon ownership and automatic restart scheduling remain pending.
 4. **Network manager** owns opt-in network isolation and explicit port mappings.
 5. **Storage manager** provides explicit persistent data mounts and prevents accidental host-path exposure.
 6. **CLI/API** exposes typed operations and machine-readable status.
 
-The service supervisor must not pretend that a daemon is running merely because a command was spawned. It must retain process identity, observe exit, reap children, and recover stale state after an interrupted host session.
+The in-process service runtime retains process identity, observes exit and reaps children. Durable ownership and recovery after an interrupted host session still require a persistent daemon.
 
 ## SSH service model
 
@@ -135,7 +156,7 @@ Termux/PRoot can be useful for CLI development, image inspection and compatibili
 
 1. **Contract and initial environment registry:** implemented metadata definitions and CRUD CLI; a separate runtime capability report remains pending.
 2. **Supervised environment lifecycle:** implement start/stop/status and reliable process ownership.
-3. **Service management:** implemented the validated manifest and initial lifecycle coordinator; connect it to supervised guest processes, readiness, real logs and bounded restart execution.
+3. **Service management:** validated manifests, lifecycle state and a Linux rootless process adapter are implemented; add a persistent daemon, CLI controls, readiness, real logs and bounded automatic restart scheduling.
 4. **Network isolation:** add opt-in network namespaces and explicit local-only port forwarding.
 5. **Guest SSH:** add a tested SSH service workflow with per-guest keys and loopback-first exposure.
 6. **Persistent server environments:** add explicit data mounts, recovery and distribution integration tests.
