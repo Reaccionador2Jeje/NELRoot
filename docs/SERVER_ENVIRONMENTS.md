@@ -31,6 +31,25 @@ nelroot server remove <environment>
 
 Removing an environment definition never deletes its registered image or root filesystem.
 
+## Service manifest contract
+
+The first versioned service-manifest model is implemented in `src/core/service_manifest.rs`. It parses TOML and validates schema version 1, unique service identifiers, guest-absolute executable and working-directory paths, bounded argument/environment counts, and environment-variable names and values. Unknown TOML fields are rejected.
+
+This is a declarative contract only. It does not launch services, read credentials, open ports, or provide a running-state claim. Do not put passwords, private keys, API tokens or other secrets in a manifest; a future secret-injection interface must keep them outside version-controlled configuration.
+
+Example manifest:
+
+```toml
+schema_version = 1
+
+[[services]]
+name = "web"
+command = "/usr/bin/python3"
+args = ["-m", "http.server", "8080"]
+working_directory = "/srv/site"
+restart = "on_failure"
+```
+
 ## Planned CLI: runtime and services
 
 The following syntax remains a design proposal and is not part of the current CLI:
