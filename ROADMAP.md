@@ -93,7 +93,7 @@ The server-environment design and current implementation boundary are documented
 
 - [x] Add a persistent server-environment metadata catalog with safe names, registered-image lookup and rootfs validation.
 - [x] Add CLI commands to create, list, inspect and remove server-environment definitions (metadata only; no guest launch).
-- [ ] Define a versioned service manifest with strict validation.
+- [x] Define a versioned TOML service-manifest model with strict schema, path and environment validation (declarative only; no service execution).
 - [ ] Add server capability reporting that distinguishes command execution from supervised server support.
 - [ ] Implement supervised environment start/stop/status with child reaping and signal forwarding.
 - [ ] Add per-environment service lifecycle, readiness checks and bounded logs.
