@@ -117,7 +117,7 @@ Integration goals:
 
 The long-term product direction is for NEXORA users and developers to choose NELRoot rather than having to configure PRoot, QEMU or Docker. NELRoot must provide its own implementation; it must not disguise one of those tools as its backend.
 
-## 4. Native Linux package distribution
+## 5. Native Linux package distribution
 
 NELRoot should be installable using the package manager users already know. The initial distribution strategy is to publish signed packages in AtDev-maintained repositories, then pursue inclusion in official distribution repositories where maintainers and policies allow it.
 
