@@ -14,6 +14,8 @@ pub mod runtime;
 pub mod server;
 pub mod service_manifest;
 pub mod service_manager;
+#[cfg(target_os = "linux")]
+pub mod service_daemon;
 
 pub mod abi;
 pub mod address_space;
