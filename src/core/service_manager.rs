@@ -288,6 +288,18 @@ impl ServiceRuntime {
         Self::default()
     }
 
+    /// Register services against an existing named server environment.
+    pub fn register_server_manifest(
+        &mut self,
+        environment: &str,
+        manifest: &ServiceManifest,
+    ) -> Result<Vec<ServiceStatus>, String> {
+        let server = crate::core::server::inspect(environment)
+            .map_err(|error| format!("failed to inspect server environment: {error}"))?
+            .ok_or_else(|| format!("server environment '{environment}' does not exist"))?;
+        self.register_manifest(environment, &server.image, manifest)
+    }
+
     pub fn register_manifest(
         &mut self,
         environment: &str,
