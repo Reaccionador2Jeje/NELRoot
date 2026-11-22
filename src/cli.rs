@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::ui;
-use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, registry, runtime};
+use nelroot::core::{config, elf, host, hub, hub_signing, images, logging, registry, runtime, server};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use nelroot::core::{cpu, stack};
 #[cfg(target_os = "linux")]
@@ -149,6 +149,35 @@ enum Commands {
         /// Keep host root credentials inside the chroot (unsafe; only for trusted images).
         #[arg(long)]
         keep_root: bool,
+    },
+    /// Manage named server-environment definitions (does not start guest services).
+    Server {
+        #[command(subcommand)]
+        command: ServerCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ServerCommands {
+    /// Create a server-environment definition from a registered image.
+    Create {
+        /// Registered image name.
+        image: String,
+        /// Name for this server environment.
+        #[arg(long)]
+        name: String,
+    },
+    /// List server-environment definitions.
+    List,
+    /// Inspect a server-environment definition.
+    Inspect {
+        /// Server environment name.
+        name: String,
+    },
+    /// Remove a definition without deleting its image or root filesystem.
+    Remove {
+        /// Server environment name.
+        name: String,
     },
 }
 
@@ -974,6 +1003,55 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 ui::good(&format!("Removed {removed} stale temporary entries."));
                 ui::muted("Registered images and root filesystems were not modified.");
+            }
+        },
+        Commands::Server { command } => match command {
+            ServerCommands::Create { image, name } => {
+                let environment = server::create(&name, &image)?;
+                ui::banner("NELRoot server environment");
+                ui::good("Environment definition created.");
+                ui::key("Name", &environment.name);
+                ui::key("Image", &environment.image);
+                ui::key("Architecture", &environment.architecture);
+                ui::key("Root filesystem", environment.rootfs.display());
+                ui::key("State", &environment.state);
+                ui::warn("This creates metadata only; no guest process or network service has been started.");
+            }
+            ServerCommands::List => {
+                let environments = server::list()?;
+                ui::banner("NELRoot server environments");
+                if environments.is_empty() {
+                    ui::warn("No server environments defined.");
+                    ui::muted("Create one with: nelroot server create <image> --name <name>");
+                } else {
+                    ui::heading(&format!("Environments ({})", environments.len()));
+                    for environment in environments {
+                        ui::key(
+                            &environment.name,
+                            format!("{} · {} · {}", environment.image, environment.architecture, environment.state),
+                        );
+                    }
+                }
+            }
+            ServerCommands::Inspect { name } => {
+                let environment = server::inspect(&name)?
+                    .ok_or_else(|| format!("server environment '{name}' does not exist"))?;
+                ui::banner("Server environment details");
+                ui::key("Name", &environment.name);
+                ui::key("Image", &environment.image);
+                ui::key("Architecture", &environment.architecture);
+                ui::key("Root filesystem", environment.rootfs.display());
+                ui::key("Created (Unix)", environment.created_at_unix);
+                ui::key("State", &environment.state);
+                ui::warn("The environment is registered only; runtime start/stop is not implemented yet.");
+            }
+            ServerCommands::Remove { name } => {
+                if server::remove(&name)? {
+                    ui::good(&format!("Removed server environment definition '{name}'."));
+                    ui::muted("The registered image and its root filesystem were not deleted.");
+                } else {
+                    return Err(format!("server environment '{name}' does not exist").into());
+                }
             }
         },
         Commands::Elf { command } => match command {
