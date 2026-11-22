@@ -1,9 +1,9 @@
 //! In-memory service lifecycle coordinator.
 //!
-//! This module connects validated service definitions to a future guest
-//! runtime adapter. It never executes manifest commands on the host. A service
-//! becomes Running only after an execution backend reports a real process ID.
-//! State is intentionally in-memory until durable session recovery is designed.
+//! The pure lifecycle model and Linux runtime adapter for validated services.
+//! Manifest commands are launched only through NELRoot's isolated rootless
+//! runtime, never through a host shell. State and process ownership are
+//! intentionally in-memory until durable daemon/session recovery is designed.
 
 use std::collections::{BTreeMap, VecDeque};
 
