@@ -166,6 +166,8 @@ fn handle_connection(
     mut stream: UnixStream,
     runtime: &mut ServiceRuntime,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
     let cloned = stream.try_clone()?;
     let mut reader = BufReader::new(cloned).take(MAX_REQUEST_BYTES + 1);
     let mut line = String::new();
