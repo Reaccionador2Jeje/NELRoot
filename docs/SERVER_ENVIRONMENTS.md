@@ -59,7 +59,7 @@ The service manager in `src/core/service_manager.rs` now has two layers:
 
 A service start resolves the registered image, validates the manifest and starts the configured absolute guest executable through NELRoot's rootless launcher. The launcher creates private user, mount, PID and network namespaces, uses a read-only image rootfs, applies its configured resource limits and starts the service under a dedicated host process group. Manifest environment variables are passed to the guest after validation.
 
-The runtime adapter supports start, poll/status, stop/reap, and explicit restart of a failed service when the manifest policy permits it. Dropping the in-process `ServiceRuntime` terminates and reaps processes it owns. Stop currently uses immediate process-group termination; graceful signal forwarding is not implemented.
+The runtime adapter supports start, poll/status, stop/reap, and explicit restart of a failed service when the manifest policy permits it. Dropping the in-process `ServiceRuntime` terminates and reaps processes it owns. Stop currently uses immediate process-group termination; graceful signal forwarding is not implemented. Managed services currently inherit the standard 512 MiB address-space, 256-file and 64 MiB per-file limits, with a one-day cumulative CPU-time ceiling; configurable per-service resource profiles are still pending.
 
 ## Local service daemon and CLI
 
