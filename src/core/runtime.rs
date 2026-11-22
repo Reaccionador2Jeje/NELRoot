@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, process::ExitStatus};
+use std::{collections::BTreeMap, path::{Path, PathBuf}, process::ExitStatus};
 
 #[cfg(target_os = "linux")]
 use std::{ffi::CString, io, process::Command};
@@ -844,11 +844,12 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
 /// root, enables no_new_privs, and execs the guest program. The image is not
 /// modified. PID namespace isolation is not implemented yet; network isolation uses a private network namespace.
 #[cfg(target_os = "linux")]
-pub fn spawn_rootless_image(
+pub fn spawn_rootless_image_with_env(
     image_name: &str,
     program: &str,
     arguments: &[String],
     guest_cwd: &Path,
+    environment: &BTreeMap<String, String>,
     limits: ResourceLimits,
 ) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
@@ -898,12 +899,35 @@ pub fn spawn_rootless_image(
     let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|value| value.as_ptr()).collect();
     argv_ptrs.push(std::ptr::null());
 
-    let env = [
-        CString::new("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")?,
-        CString::new("HOME=/tmp")?,
-        CString::new("USER=root")?,
-        CString::new("LOGNAME=root")?,
-    ];
+    let mut guest_environment = BTreeMap::from([
+        ("PATH".to_owned(), "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_owned()),
+        ("HOME".to_owned(), "/tmp".to_owned()),
+        ("USER".to_owned(), "root".to_owned()),
+        ("LOGNAME".to_owned(), "root".to_owned()),
+    ]);
+    for (key, value) in environment {
+        if key.is_empty()
+            || key.len() > 128
+            || !key.chars().enumerate().all(|(index, character)| {
+                if index == 0 {
+                    character.is_ascii_alphabetic() || character == '_'
+                } else {
+                    character.is_ascii_alphanumeric() || character == '_'
+                }
+            })
+            || value.contains('\\0')
+            || value.contains('\\n')
+            || value.contains('\\r')
+        {
+            let _ = std::fs::remove_dir(&target);
+            return Err(format!("invalid guest environment variable '{key}'").into());
+        }
+        guest_environment.insert(key.clone(), value.clone());
+    }
+    let env: Vec<CString> = guest_environment
+        .iter()
+        .map(|(key, value)| CString::new(format!("{key}={value}")))
+        .collect::<Result<_, _>>()?;
     let mut env_ptrs: Vec<*const libc::c_char> = env.iter().map(|value| value.as_ptr()).collect();
     env_ptrs.push(std::ptr::null());
 
@@ -1265,6 +1289,37 @@ pub fn spawn_rootless_image(
     })
 }
 
+/// Spawn a rootless guest process with the standard minimal environment.
+#[cfg(target_os = "linux")]
+pub fn spawn_rootless_image(
+    image_name: &str,
+    program: &str,
+    arguments: &[String],
+    guest_cwd: &Path,
+    limits: ResourceLimits,
+) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
+    spawn_rootless_image_with_env(
+        image_name,
+        program,
+        arguments,
+        guest_cwd,
+        &BTreeMap::new(),
+        limits,
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn spawn_rootless_image_with_env(
+    _image_name: &str,
+    _program: &str,
+    _arguments: &[String],
+    _guest_cwd: &Path,
+    _environment: &BTreeMap<String, String>,
+    _limits: ResourceLimits,
+) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
+    Err("rootless guest processes are only supported on Linux hosts".into())
+}
+
 /// Run a rootless image command to completion. Long-running service callers
 /// should use spawn_rootless_image and retain the returned supervisor.
 #[cfg(target_os = "linux")]
@@ -1278,17 +1333,6 @@ pub fn run_rootless_image(
     spawn_rootless_image(image_name, program, arguments, guest_cwd, limits)?
         .wait()
         .map_err(Into::into)
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn spawn_rootless_image(
-    _image_name: &str,
-    _program: &str,
-    _arguments: &[String],
-    _guest_cwd: &Path,
-    _limits: ResourceLimits,
-) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
-    Err("rootless guest processes are only supported on Linux hosts".into())
 }
 
 /// Whether this build contains the native Linux chroot process backend.
