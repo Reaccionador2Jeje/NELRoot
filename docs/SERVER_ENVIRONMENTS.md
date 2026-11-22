@@ -1,8 +1,8 @@
 # NELRoot Server Environments
 
-**Status: environment metadata, validated service manifests, an in-memory lifecycle coordinator and a Linux rootless service-process adapter are implemented. Persistent service management and CLI lifecycle commands remain pending.**
+**Status: environment metadata, validated service manifests, a Linux rootless service-process adapter and a local Unix-socket service daemon with CLI controls are implemented. Durable state, readiness, output capture and automatic restart scheduling remain pending.**
 
-This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. The library can now launch and supervise a manifest service in a rootless guest, but no persistent service daemon or service lifecycle CLI exists yet. SSH setup, port forwarding and production server operation remain unavailable.
+This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. The Linux CLI can now start a foreground daemon that owns the service runtime and accepts local CLI control requests. SSH setup, port forwarding and production server operation remain unavailable. SSH setup, port forwarding and production server operation remain unavailable.
 
 ## Goals
 
@@ -61,13 +61,37 @@ A service start resolves the registered image, validates the manifest and starts
 
 The runtime adapter supports start, poll/status, stop/reap, and explicit restart of a failed service when the manifest policy permits it. Dropping the in-process `ServiceRuntime` terminates and reaps processes it owns. Stop currently uses immediate process-group termination; graceful signal forwarding is not implemented.
 
+## Local service daemon and CLI
+
+On Linux, `src/core/service_daemon.rs` adds a foreground daemon with one JSON request per Unix-domain-socket connection. The socket lives under NELRoot's runtime directory and is restricted to mode `0600`; no TCP control endpoint is opened. An exclusive kernel `flock` prevents multiple daemons from owning the same runtime, and the lock is released automatically if the daemon exits unexpectedly.
+
+Start the daemon in one terminal:
+
+```text
+nelroot service daemon
+```
+
+Then use another terminal:
+
+```text
+nelroot service register <environment> <manifest.toml>
+nelroot service start <environment> <service>
+nelroot service status <environment> <service>
+nelroot service list <environment>
+nelroot service logs <environment> <service>
+nelroot service stop <environment> <service>
+nelroot service restart <environment> <service>
+```
+
+The daemon owns the in-memory `ServiceRuntime`; the CLI is a local IPC client. It runs in the foreground and should be supervised by the host's service manager if unattended operation is needed.
+
 **Important boundaries:**
 
-- This is an in-process library API, not a persistent background daemon. The owner must keep `ServiceRuntime` alive; dropping it stops its services.
-- The existing `nelroot service ...` CLI commands are not implemented yet. A CLI that exits immediately cannot own long-running services safely.
-- Service stdout/stderr are still inherited from the parent; the bounded log buffer is not yet wired to real process output.
-- Readiness probes, durable state/recovery and automatic restart scheduling are not implemented.
-- The guest receives a private network namespace with no automatic host port publishing. This stage does not expose services to the public network.
+- The daemon keeps services alive while it remains running. If it exits or is terminated, its owned guest processes are stopped and reaped; no durable service recovery exists yet.
+- Registration and service state are in memory and must be registered again after daemon restart.
+- Service stdout/stderr are still inherited from the daemon; the bounded log buffer is not wired to real process output, so `logs` is currently an empty/manual buffer.
+- Readiness probes and automatic restart scheduling are not implemented. `restart` is an explicit request and only works for a failed service whose manifest policy is `on_failure`.
+- The guest receives a private network namespace with no automatic host port publishing. The daemon does not expose guest services to the public network.
 - The runtime adapter only supports Linux hosts where all required namespace and mount operations are permitted. It fails closed when setup fails.
 
 
