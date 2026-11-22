@@ -491,6 +491,19 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_registration_keeps_services_defined_until_start() {
+        let mut runtime = ServiceRuntime::new();
+        runtime
+            .register_manifest("demo", "ubuntu", &manifest())
+            .unwrap();
+        let statuses = runtime.list("demo").unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].state, ServiceState::Defined);
+        assert_eq!(statuses[0].process_id, None);
+    }
+
     #[test]
     fn registers_services_as_defined_without_claiming_running() {
         let mut manager = ServiceManager::new();
