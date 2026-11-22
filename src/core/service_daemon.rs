@@ -22,6 +22,8 @@ use std::{
         net::{UnixListener, UnixStream},
     },
     path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 #[cfg(target_os = "linux")]
