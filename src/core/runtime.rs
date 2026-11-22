@@ -1,4 +1,4 @@
-use std::{path::Path, process::ExitStatus};
+use std::{path::{Path, PathBuf}, process::ExitStatus};
 
 #[cfg(target_os = "linux")]
 use std::{ffi::CString, io, process::Command};
@@ -19,6 +19,99 @@ pub struct RootlessNamespaceInfo {
     pub unprivileged_userns_clone: Option<bool>,
     pub max_user_namespaces: Option<u64>,
 }
+
+/// Owns the host-side supervisor for one isolated rootless guest process.
+///
+/// The guest has private user, mount, PID and network namespaces. The process
+/// group is dedicated to this guest so termination can clean up its descendants.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct RootlessProcess {
+    pid: libc::pid_t,
+    runtime_mount: PathBuf,
+    running: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl RootlessProcess {
+    pub fn id(&self) -> u32 {
+        self.pid as u32
+    }
+
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        use std::os::unix::process::ExitStatusExt;
+
+        if !self.running {
+            return Ok(None);
+        }
+        let mut status = 0;
+        loop {
+            let result = unsafe { libc::waitpid(self.pid, &mut status, libc::WNOHANG) };
+            if result == 0 {
+                return Ok(None);
+            }
+            if result == self.pid {
+                self.running = false;
+                let _ = std::fs::remove_dir(&self.runtime_mount);
+                return Ok(Some(ExitStatus::from_raw(status)));
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+    }
+
+    pub fn wait(&mut self) -> io::Result<ExitStatus> {
+        use std::os::unix::process::ExitStatusExt;
+
+        if !self.running {
+            return Err(io::Error::other("rootless guest process was already reaped"));
+        }
+        let status = wait_for_child(self.pid)?;
+        self.running = false;
+        let _ = std::fs::remove_dir(&self.runtime_mount);
+        Ok(ExitStatus::from_raw(status))
+    }
+
+    /// Immediately terminate the isolated guest process group and reap its supervisor.
+    pub fn terminate(&mut self) -> io::Result<ExitStatus> {
+        if let Some(status) = self.try_wait()? {
+            return Ok(status);
+        }
+        unsafe {
+            // The child establishes this process group before entering namespaces.
+            if libc::kill(-self.pid, libc::SIGKILL) != 0 {
+                let group_error = io::Error::last_os_error();
+                if group_error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(group_error);
+                }
+                libc::kill(self.pid, libc::SIGKILL);
+            }
+        }
+        self.wait()
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for RootlessProcess {
+    fn drop(&mut self) {
+        if self.running {
+            unsafe {
+                libc::kill(-self.pid, libc::SIGKILL);
+                libc::kill(self.pid, libc::SIGKILL);
+            }
+            let _ = wait_for_child(self.pid);
+            self.running = false;
+        }
+        let _ = std::fs::remove_dir(&self.runtime_mount);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug)]
+pub struct RootlessProcess;
 
 /// Configurable resource limits for a rootless guest process.
 #[derive(Debug, Clone, Copy)]
@@ -210,6 +303,11 @@ pub fn probe_rootless_user_mount_and_pid_namespaces() -> io::Result<UserNamespac
 
     if pid == 0 {
         unsafe {
+            // Give the guest supervisor and its descendants a dedicated host
+            // process group so stop/drop can clean up the complete service tree.
+            if libc::setpgid(0, 0) != 0 {
+                libc::_exit(125);
+            }
             libc::close(ready_pipe[0]);
             libc::close(release_pipe[1]);
 
@@ -746,13 +844,13 @@ fn read_child_failure(fd: libc::c_int) -> io::Result<Option<RootlessChildFailure
 /// root, enables no_new_privs, and execs the guest program. The image is not
 /// modified. PID namespace isolation is not implemented yet; network isolation uses a private network namespace.
 #[cfg(target_os = "linux")]
-pub fn run_rootless_image(
+pub fn spawn_rootless_image(
     image_name: &str,
     program: &str,
     arguments: &[String],
     guest_cwd: &Path,
     limits: ResourceLimits,
-) -> Result<ExitStatus, Box<dyn std::error::Error>> {
+) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
     use std::os::unix::process::ExitStatusExt;
 
     let catalog = images::load_catalog()?;
@@ -1113,15 +1211,25 @@ pub fn run_rootless_image(
     unsafe {
         libc::close(error_pipe[0]);
     }
-    let status = match wait_for_child(pid) {
-        Ok(status) => status,
+    let child_failure = match child_failure {
+        Ok(failure) => failure,
         Err(error) => {
+            unsafe {
+                libc::kill(-pid, libc::SIGKILL);
+                libc::kill(pid, libc::SIGKILL);
+            }
+            let _ = wait_for_child(pid);
             let _ = std::fs::remove_dir(&target);
             return Err(error.into());
         }
     };
-    let _ = std::fs::remove_dir(&target);
-    if let Some(failure) = child_failure? {
+    if let Some(failure) = child_failure {
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+            libc::kill(pid, libc::SIGKILL);
+        }
+        let _ = wait_for_child(pid);
+        let _ = std::fs::remove_dir(&target);
         let stage = match failure.stage {
             1 => "create private mount namespace",
             2 => "make mount propagation private",
@@ -1149,7 +1257,38 @@ pub fn run_rootless_image(
         )
         .into());
     }
-    Ok(ExitStatus::from_raw(status))
+
+    Ok(RootlessProcess {
+        pid,
+        runtime_mount: target,
+        running: true,
+    })
+}
+
+/// Run a rootless image command to completion. Long-running service callers
+/// should use spawn_rootless_image and retain the returned supervisor.
+#[cfg(target_os = "linux")]
+pub fn run_rootless_image(
+    image_name: &str,
+    program: &str,
+    arguments: &[String],
+    guest_cwd: &Path,
+    limits: ResourceLimits,
+) -> Result<ExitStatus, Box<dyn std::error::Error>> {
+    spawn_rootless_image(image_name, program, arguments, guest_cwd, limits)?
+        .wait()
+        .map_err(Into::into)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn spawn_rootless_image(
+    _image_name: &str,
+    _program: &str,
+    _arguments: &[String],
+    _guest_cwd: &Path,
+    _limits: ResourceLimits,
+) -> Result<RootlessProcess, Box<dyn std::error::Error>> {
+    Err("rootless guest processes are only supported on Linux hosts".into())
 }
 
 /// Whether this build contains the native Linux chroot process backend.
