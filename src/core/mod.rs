@@ -13,6 +13,7 @@ pub mod registry;
 pub mod runtime;
 pub mod server;
 pub mod service_manifest;
+pub mod service_manager;
 
 pub mod abi;
 pub mod address_space;
