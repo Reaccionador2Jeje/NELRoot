@@ -89,9 +89,11 @@ The actual command syntax will be finalized as the runtime and security model ar
 
 ## 3. Managed Linux server environments
 
-The server-environment design is documented in [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md). These items are planned and are not currently available in the CLI.
+The server-environment design and current implementation boundary are documented in [docs/SERVER_ENVIRONMENTS.md](docs/SERVER_ENVIRONMENTS.md).
 
-- [ ] Define a versioned environment and service manifest with strict validation.
+- [x] Add a persistent server-environment metadata catalog with safe names, registered-image lookup and rootfs validation.
+- [x] Add CLI commands to create, list, inspect and remove server-environment definitions (metadata only; no guest launch).
+- [ ] Define a versioned service manifest with strict validation.
 - [ ] Add server capability reporting that distinguishes command execution from supervised server support.
 - [ ] Implement supervised environment start/stop/status with child reaping and signal forwarding.
 - [ ] Add per-environment service lifecycle, readiness checks and bounded logs.
