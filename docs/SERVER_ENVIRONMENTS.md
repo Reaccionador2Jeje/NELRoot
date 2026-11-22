@@ -1,6 +1,6 @@
 # NELRoot Server Environments
 
-**Status: initial metadata manager implemented; guest runtime and server services are not implemented.**
+**Status: environment metadata, service manifests and an in-memory service lifecycle coordinator are implemented; guest service execution is not implemented.**
 
 This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. It does not boot guests or provide an SSH daemon, service manager, port forwarding, or a production server sandbox.
 
@@ -80,7 +80,7 @@ The server manager is planned as a control plane over the NELRoot runtime, not a
 
 1. **Environment registry** stores a named environment definition, image reference, rootfs path, architecture, creation time and metadata state. The initial registry is implemented in `src/core/server.rs`.
 2. **Runtime adapter** starts and stops the guest using a fully supervised NELRoot process/session.
-3. **Service supervisor** tracks guest service processes, readiness, exit codes, logs and restart policy.
+3. **Service supervisor** uses the initial lifecycle coordinator; guest process ownership, readiness, real output capture and restart execution remain pending.
 4. **Network manager** owns opt-in network isolation and explicit port mappings.
 5. **Storage manager** provides explicit persistent data mounts and prevents accidental host-path exposure.
 6. **CLI/API** exposes typed operations and machine-readable status.
@@ -135,7 +135,7 @@ Termux/PRoot can be useful for CLI development, image inspection and compatibili
 
 1. **Contract and initial environment registry:** implemented metadata definitions and CRUD CLI; a separate runtime capability report remains pending.
 2. **Supervised environment lifecycle:** implement start/stop/status and reliable process ownership.
-3. **Service management:** implement service definitions, readiness, logs and bounded restart behavior.
+3. **Service management:** implemented the validated manifest and initial lifecycle coordinator; connect it to supervised guest processes, readiness, real logs and bounded restart execution.
 4. **Network isolation:** add opt-in network namespaces and explicit local-only port forwarding.
 5. **Guest SSH:** add a tested SSH service workflow with per-guest keys and loopback-first exposure.
 6. **Persistent server environments:** add explicit data mounts, recovery and distribution integration tests.
