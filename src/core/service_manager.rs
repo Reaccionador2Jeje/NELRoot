@@ -152,6 +152,27 @@ impl ServiceManager {
         Ok(())
     }
 
+    /// Record that the runtime could not spawn the requested guest process.
+    pub fn record_start_failure(
+        &mut self,
+        environment: &str,
+        service: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        if reason.len() > MAX_LOG_MESSAGE_BYTES || reason.contains('\\0') {
+            return Err("start failure reason is invalid or exceeds 4096 bytes".to_owned());
+        }
+        let managed = self.get_mut(environment, service)?;
+        if managed.state != ServiceState::StartRequested {
+            return Err("service has no pending start request".to_owned());
+        }
+        managed.process_id = None;
+        managed.exit_code = None;
+        managed.state = ServiceState::Failed;
+        append_log_entry(managed, reason);
+        Ok(())
+    }
+
     /// Record a stop request. The runtime adapter is responsible for stopping
     /// and reaping the owned process before calling confirm_stopped.
     pub fn request_stop(&mut self, environment: &str, service: &str) -> Result<(), String> {
@@ -217,15 +238,7 @@ impl ServiceManager {
             return Err("log message is invalid or exceeds 4096 bytes".to_owned());
         }
         let managed = self.get_mut(environment, service)?;
-        let entry = ServiceLogEntry {
-            sequence: managed.next_log_sequence,
-            message: message.to_owned(),
-        };
-        managed.next_log_sequence = managed.next_log_sequence.saturating_add(1);
-        if managed.logs.len() == MAX_LOG_ENTRIES_PER_SERVICE {
-            managed.logs.pop_front();
-        }
-        managed.logs.push_back(entry);
+        append_log_entry(managed, message);
         Ok(())
     }
 
@@ -248,6 +261,18 @@ impl ServiceManager {
             .get_mut(&(environment.to_owned(), service.to_owned()))
             .ok_or_else(|| format!("unknown service '{environment}/{service}'"))
     }
+}
+
+fn append_log_entry(service: &mut ManagedService, message: &str) {
+    let entry = ServiceLogEntry {
+        sequence: service.next_log_sequence,
+        message: message.to_owned(),
+    };
+    service.next_log_sequence = service.next_log_sequence.saturating_add(1);
+    if service.logs.len() == MAX_LOG_ENTRIES_PER_SERVICE {
+        service.logs.pop_front();
+    }
+    service.logs.push_back(entry);
 }
 
 fn status_for(environment: &str, service: &ManagedService) -> ServiceStatus {
@@ -317,6 +342,23 @@ mod tests {
         assert_eq!(
             manager.inspect("demo", "web").unwrap().state,
             ServiceState::Stopped
+        );
+    }
+
+    #[test]
+    fn failed_spawn_is_reported_without_a_process_id() {
+        let mut manager = ServiceManager::new();
+        manager.register_manifest("demo", &manifest()).unwrap();
+        manager.request_start("demo", "web").unwrap();
+        manager
+            .record_start_failure("demo", "web", "runtime unavailable")
+            .unwrap();
+        let status = manager.inspect("demo", "web").unwrap();
+        assert_eq!(status.state, ServiceState::Failed);
+        assert_eq!(status.process_id, None);
+        assert_eq!(
+            manager.logs("demo", "web").unwrap()[0].message,
+            "runtime unavailable"
         );
     }
 
