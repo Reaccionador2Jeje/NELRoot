@@ -2,7 +2,7 @@
 
 **Status: environment metadata, validated service manifests, a Linux rootless service-process adapter and a local Unix-socket service daemon with CLI controls are implemented. Durable state, readiness, output capture and automatic restart scheduling remain pending.**
 
-This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. The Linux CLI can now start a foreground daemon that owns the service runtime and accepts local CLI control requests. SSH setup, port forwarding and production server operation remain unavailable. SSH setup, port forwarding and production server operation remain unavailable.
+This document defines the direction for turning a registered NELRoot distribution into a managed Linux environment that can host long-running services. The current CLI can create, list, inspect and remove environment definitions backed by registered images. The Linux CLI can now start a foreground daemon that owns the service runtime and accepts local CLI control requests. SSH setup, port forwarding and production server operation remain unavailable.
 
 ## Goals
 
@@ -150,22 +150,26 @@ An SSH daemon package being present in a rootfs does not mean NELRoot has implem
 
 The first milestone stores server-environment definitions in `~/.nelroot/servers.toml`. It validates the name, requires an already registered image, validates the referenced rootfs, and writes the catalog atomically. `server remove` deletes only the definition. The `created` state means registered metadata, not a running guest.
 
-## Required runtime gates
+## Remaining production runtime gates
 
-The current rootless launcher is not yet a complete server runtime. Server mode must remain unavailable until these prerequisites are implemented and tested:
+The rootless launcher now creates private user, mount, PID and network namespaces; runs the guest command as PID 1 under a host-side supervisor; mounts a read-only rootfs, writable bounded `/tmp`, guest `/proc` and a private tmpfs at `/dev`; applies address-space, CPU-time, file-descriptor and file-size limits; and enables `no_new_privs`. The process handle owns a dedicated host process group and reaps the supervisor on exit.
 
-- [ ] PID namespace supervision with guest PID 1 lifecycle, child reaping and signal forwarding.
-- [ ] Per-environment process ownership and reliable start/stop/restart.
-- [ ] Resource limits for memory, CPU, process count, file descriptors and storage.
-- [ ] Guest `/proc`, minimal `/dev` and required runtime mounts.
-- [ ] Opt-in network namespace isolation; no silent host-network sharing.
-- [ ] Explicit, validated port forwarding with bind-address restrictions.
-- [ ] Persistent storage mounts with path validation and ownership rules.
-- [ ] Service health checks, bounded logs and stale-session recovery.
-- [ ] Integration tests for Debian, Ubuntu and Alpine root filesystems.
-- [ ] Security review before allowing untrusted images or remote users.
+The current service manager can start, inspect, stop and explicitly restart eligible guest processes. The local daemon keeps that manager alive while the daemon runs. These are real Linux runtime operations, but they do not yet make NELRoot a production multi-tenant server platform.
 
-A namespace capability probe is not proof that a guest server can be safely started. NELRoot must fail closed if any required isolation or supervision step is unavailable. It must not silently fall back to an ordinary chroot or PRoot while reporting server isolation.
+Remaining gates:
+
+- [ ] Graceful signal forwarding and complete PID-1 child supervision semantics.
+- [ ] Standard guest device nodes and a broader, distribution-tested `/dev` implementation.
+- [ ] Per-service configurable resource profiles, process-count limits and storage quotas.
+- [ ] Persistent host data mounts with strict path, ownership and lifecycle rules.
+- [x] Private network namespace isolation (guest networking is not published to the host).
+- [ ] Explicit, validated port forwarding with loopback-first bind-address restrictions.
+- [ ] Real stdout/stderr capture, durable logs, readiness probes and bounded automatic restart scheduling.
+- [ ] Durable daemon state and recovery after daemon or host interruption.
+- [ ] Integration tests across Debian, Ubuntu and Alpine root filesystems.
+- [ ] Security review before allowing untrusted images or remote workloads.
+
+The daemon's Unix socket is local to the host user and is not a remote control API. A namespace capability probe is not proof that every guest workload can start. NELRoot must fail closed if required namespace or mount setup is unavailable; it must never silently fall back to ordinary chroot or PRoot while reporting isolation.
 
 ## Android and Termux
 
@@ -180,7 +184,7 @@ Termux/PRoot can be useful for CLI development, image inspection and compatibili
 
 1. **Contract and initial environment registry:** implemented metadata definitions and CRUD CLI; a separate runtime capability report remains pending.
 2. **Supervised environment lifecycle:** implement start/stop/status and reliable process ownership.
-3. **Service management:** validated manifests, lifecycle state and a Linux rootless process adapter are implemented; add a persistent daemon, CLI controls, readiness, real logs and bounded automatic restart scheduling.
+3. **Service management:** validated manifests, a Linux rootless process adapter, a local persistent-while-running daemon and CLI lifecycle controls are implemented; add readiness, real logs, durable recovery and bounded automatic restart scheduling.
 4. **Network isolation:** add opt-in network namespaces and explicit local-only port forwarding.
 5. **Guest SSH:** add a tested SSH service workflow with per-guest keys and loopback-first exposure.
 6. **Persistent server environments:** add explicit data mounts, recovery and distribution integration tests.
