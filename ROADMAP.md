@@ -94,9 +94,10 @@ The server-environment design and current implementation boundary are documented
 - [x] Add a persistent server-environment metadata catalog with safe names, registered-image lookup and rootfs validation.
 - [x] Add CLI commands to create, list, inspect and remove server-environment definitions (metadata only; no guest launch).
 - [x] Define a versioned TOML service-manifest model with strict schema, path and environment validation (declarative only; no service execution).\n- [x] Add an in-memory service lifecycle coordinator with typed states, explicit runtime confirmations, exit-code tracking, restart-policy eligibility and bounded log storage (no process launch or automatic restart).
+- [x] Add a Linux in-process service runtime adapter that starts manifest commands through the rootless namespace launcher, owns guest process groups, polls exit status and stops/reaps owned processes (no persistent daemon, readiness probes, real log capture or automatic restart).
 - [ ] Add server capability reporting that distinguishes command execution from supervised server support.
 - [ ] Implement supervised environment start/stop/status with child reaping and signal forwarding.
-- [ ] Connect service lifecycle to supervised guest processes, readiness checks, real stdout/stderr capture, durable state and bounded restart execution.
+- [ ] Add a persistent service daemon and CLI lifecycle controls; implement readiness checks, real stdout/stderr capture, durable state/recovery and bounded automatic restart execution.
 - [ ] Implement resource limits and explicit persistent-data mounts.
 - [ ] Add opt-in network namespace isolation and loopback-first port publishing.
 - [ ] Implement per-guest SSH configuration and authorized-key management.
