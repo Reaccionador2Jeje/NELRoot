@@ -87,19 +87,20 @@ fn lock_path() -> PathBuf {
 pub fn run_foreground() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(config::runtime_dir())?;
     let lock = lock_path();
-    let _lock_file = fs::OpenOptions::new()
+    let lock_file = fs::OpenOptions::new()
+        .read(true)
         .write(true)
-        .create_new(true)
-        .open(&lock)
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                "NELRoot service daemon lock already exists; check whether the daemon is running"
-                    .to_owned()
-            } else {
-                format!("could not acquire service daemon lock: {error}")
-            }
-        })?;
-    let _lock_guard = LockGuard { path: lock };
+        .create(true)
+        .truncate(false)
+        .open(&lock)?;
+    fs::set_permissions(&lock, fs::Permissions::from_mode(0o600))?;
+    // flock is released by the kernel when the daemon exits or crashes, so a
+    // stale lock file never prevents the next daemon from starting.
+    let lock_result = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&lock_file), libc::LOCK_EX | libc::LOCK_NB) };
+    if lock_result != 0 {
+        return Err("another NELRoot service daemon already owns the runtime lock".into());
+    }
+    let _lock_guard = LockGuard { _file: lock_file };
 
     let socket = socket_path();
     if socket.exists() {
@@ -135,14 +136,7 @@ pub fn run_foreground() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(target_os = "linux")]
 struct LockGuard {
-    path: PathBuf,
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for LockGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
+    _file: fs::File,
 }
 
 #[cfg(target_os = "linux")]
