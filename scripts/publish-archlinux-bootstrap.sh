@@ -14,12 +14,11 @@ curl -fL --retry 3 "$BASE_URL/$NAME" -o "$WORK/$NAME"
 HASH="$(awk -v n="$NAME" '$2 == n || $2 == "*" n {print $1; exit}' "$WORK/sha256sums.txt")"
 [[ "$HASH" =~ ^[[:xdigit:]]{64}$ ]] || { echo "No valid Arch checksum for $NAME" >&2; exit 1; }
 printf '%s  %s\n' "$HASH" "$WORK/$NAME" | sha256sum -c --status
-tar --zstd -xf "$WORK/$NAME" -C "$WORK/extract"
+tar --zstd --no-same-owner --no-same-permissions --mode='u+rwX' -xf "$WORK/$NAME" -C "$WORK/extract"
 ROOT="$WORK/extract/root.x86_64"
 if [[ ! -d "$ROOT" ]]; then ROOT="$(find "$WORK/extract" -mindepth 2 -maxdepth 3 -type d -name root.x86_64 -print -quit)"; fi
 [[ -n "$ROOT" && -d "$ROOT" ]] || { echo "Arch bootstrap is missing root.x86_64" >&2; exit 1; }
-cp -a "$ROOT/." "$WORK/rootfs/"
-tar --numeric-owner -czf "$WORK/rootfs.tar.gz" -C "$WORK/rootfs" .
+tar --numeric-owner --owner=0 --group=0 -czf "$WORK/rootfs.tar.gz" -C "$ROOT" .
 ROOT_HASH="$(sha256sum "$WORK/rootfs.tar.gz" | awk '{print $1}')"
 export HUB_ARCHIVE_PATH="$WORK/rootfs.tar.gz" HUB_ARCHIVE_SHA256="$ROOT_HASH" HUB_ARCHIVE_URL="$BASE_URL/$NAME" HUB_MANIFEST_PATH="$WORK/manifest.json"
 python3 - <<'PY'
