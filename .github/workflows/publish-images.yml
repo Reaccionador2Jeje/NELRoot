@@ -1,0 +1,88 @@
+name: Publish official Linux images
+
+on:
+  workflow_dispatch:
+    inputs:
+      family:
+        description: Distribution family to publish to the NELRoot Image Hub
+        required: true
+        type: choice
+        default: arch
+        options:
+          - arch
+          - fedora
+          - ubuntu
+          - alpine
+          - void
+          - others
+          - all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nelroot-image-publishing
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build publisher and publish ${{ inputs.family }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check publishing credential
+        env:
+          HUB_TOKEN: ${{ secrets.NELROOT_HUB_PUBLISH_TOKEN }}
+        run: |
+          if [[ -z "$HUB_TOKEN" || ${#HUB_TOKEN} -lt 32 ]]; then
+            echo "::error::Missing repository secret NELROOT_HUB_PUBLISH_TOKEN (minimum 32 characters)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Install image publishing dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl python3 xz-utils zstd
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Validate publisher scripts
+        run: |
+          bash -n scripts/publish-all-images.sh
+          bash -n scripts/publish-archlinux-bootstrap.sh
+          bash -n scripts/publish-fedora-container.sh
+          bash scripts/publish-all-images.sh --list
+
+      - name: Build NELRoot CLI
+        run: cargo build --release --bin nelroot
+
+      - name: Publish selected distribution family
+        env:
+          NELROOT_HUB_PUBLISH_TOKEN: ${{ secrets.NELROOT_HUB_PUBLISH_TOKEN }}
+          NELROOT_HUB_URL: https://nelroot-image-hub-production.up.railway.app
+          FEDORA_VERSION: "45"
+          FEDORA_COMPOSE: "1.4"
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/release:$PATH"
+          bash scripts/publish-all-images.sh --only "${{ inputs.family }}"
+
+      - name: Verify public Hub catalog
+        run: |
+          curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' \
+            https://nelroot-image-hub-production.up.railway.app/v1/catalog \
+            -o "$RUNNER_TEMP/nelroot-catalog.json"
+          python3 - "$RUNNER_TEMP/nelroot-catalog.json" "${{ inputs.family }}" <<'PY'
+          import json, sys
+          catalog = json.load(open(sys.argv[1], encoding="utf-8"))
+          images = catalog.get("images", [])
+          family = sys.argv[2]
+          selected = [item for item in images if family in ("all", "others") or item.get("id", "").split("/")[-1].startswith(family)]
+          print(f"Hub catalog entries: {len(images)}")
+          for item in selected:
+              print(f"{item.get('id')} [{item.get('architecture')}]")
+          PY
