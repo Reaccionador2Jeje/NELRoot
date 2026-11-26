@@ -401,8 +401,8 @@ impl ServiceRuntime {
             .collect())
     }
 
-    /// Stop and reap a service process. This currently uses immediate
-    /// process-group termination; graceful guest signal forwarding is pending.
+    /// Stop and reap a service process. SIGTERM is delivered to the complete
+    /// guest process group, followed by SIGKILL after a five-second grace period.
     pub fn stop(&mut self, environment: &str, service: &str) -> Result<ServiceStatus, String> {
         self.manager.request_stop(environment, service)?;
         let key = (environment.to_owned(), service.to_owned());
@@ -411,8 +411,8 @@ impl ServiceRuntime {
             .get_mut(&key)
             .ok_or_else(|| "service has no owned runtime process".to_owned())?;
         process
-            .terminate()
-            .map_err(|error| format!("failed to terminate service '{service}': {error}"))?;
+            .terminate_gracefully(std::time::Duration::from_secs(5))
+            .map_err(|error| format!("failed to stop service '{service}': {error}"))?;
         self.processes.remove(&key);
         self.manager.confirm_stopped(environment, service)?;
         self.manager
