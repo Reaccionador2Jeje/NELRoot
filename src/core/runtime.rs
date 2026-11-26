@@ -92,6 +92,46 @@ impl RootlessProcess {
         }
         self.wait()
     }
+
+    /// Ask the guest process group to stop, then force termination after a bounded grace period.
+    ///
+    /// The supervisor remains owned and is always reaped before this method returns.
+    pub fn terminate_gracefully(&mut self, grace_period: std::time::Duration) -> io::Result<ExitStatus> {
+        if let Some(status) = self.try_wait()? {
+            return Ok(status);
+        }
+
+        let signal_result = unsafe { libc::kill(-self.pid, libc::SIGTERM) };
+        if signal_result != 0 {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(error);
+            }
+            if let Some(status) = self.try_wait()? {
+                return Ok(status);
+            }
+        }
+
+        let started = std::time::Instant::now();
+        while started.elapsed() < grace_period {
+            if let Some(status) = self.try_wait()? {
+                return Ok(status);
+            }
+            let remaining = grace_period.saturating_sub(started.elapsed());
+            std::thread::sleep(remaining.min(std::time::Duration::from_millis(25)));
+        }
+
+        // The grace period expired. Kill the complete guest process group and
+        // reap the supervisor so no child is left owned by the daemon.
+        let kill_result = unsafe { libc::kill(-self.pid, libc::SIGKILL) };
+        if kill_result != 0 {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(error);
+            }
+        }
+        self.wait()
+    }
 }
 
 #[cfg(target_os = "linux")]
